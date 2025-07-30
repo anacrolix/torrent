@@ -114,6 +114,13 @@ type PeerConn struct {
 	receivedHashPieces map[[32]byte][][32]byte
 
 	peerRequestServerRunning bool
+	// Set true after we've added our ConnStats generated during handshake to other ConnStat
+	// instances as determined when the *Torrent became known.
+	reconciledHandshakeStats bool
+}
+
+func (*PeerConn) allConnStatsImplField(stats *AllConnStats) *ConnStats {
+	return &stats.PeerConns
 }
 
 func (cn *PeerConn) lastWriteUploadRate() float64 {
@@ -584,11 +591,11 @@ func (cn *PeerConn) wroteMsg(msg *pp.Message) {
 			torrent.Add(fmt.Sprintf("Extended messages written for protocol %q", name), 1)
 		}
 	}
-	cn.allStats(func(cs *ConnStats) { cs.wroteMsg(msg) })
+	cn.modifyRelevantConnStats(func(cs *ConnStats) { cs.wroteMsg(msg) })
 }
 
 func (cn *PeerConn) wroteBytes(n int64) {
-	cn.allStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesWritten }))
+	cn.modifyRelevantConnStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesWritten }))
 }
 
 func (c *PeerConn) fastEnabled() bool {
@@ -1186,7 +1193,7 @@ func (c *PeerConn) setTorrent(t *Torrent) {
 	c.initClosedCtx()
 	c.logger.WithDefaultLevel(log.Debug).Printf("set torrent=%v", t)
 	c.setPeerLoggers(t.logger, t.slogger())
-	t.reconcileHandshakeStats(c.peerPtr())
+	c.reconcileHandshakeStats()
 }
 
 func (c *PeerConn) pexPeerFlags() pp.PexPeerFlags {
@@ -1869,4 +1876,24 @@ func (c *PeerConn) checkReceivedChunk(req RequestIndex, msg *pp.Message, ppReq R
 	}
 
 	return
+}
+
+// Reconcile bytes transferred before connection was associated with a torrent.
+func (c *PeerConn) reconcileHandshakeStats() {
+	panicif.True(c.reconciledHandshakeStats)
+	if c._stats != (ConnStats{
+		// Handshakes should only increment these fields:
+		BytesWritten: c._stats.BytesWritten,
+		BytesRead:    c._stats.BytesRead,
+	}) {
+		panic("bad stats")
+	}
+	// Add the stat data so far to relevant Torrent stats that were skipped before the handshake
+	// completed.
+	c.relevantConnStats(&c.t.connStats)(func(cs *ConnStats) bool {
+		cs.BytesRead.Add(c._stats.BytesRead.Int64())
+		cs.BytesWritten.Add(c._stats.BytesWritten.Int64())
+		return true
+	})
+	c.reconciledHandshakeStats = true
 }

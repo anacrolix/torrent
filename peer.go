@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"iter"
 	"log/slog"
 	"net"
 	"strings"
@@ -14,11 +15,9 @@ import (
 	"github.com/anacrolix/chansync"
 	. "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/multiless"
-
 	"github.com/anacrolix/torrent/internal/alloclim"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -31,7 +30,8 @@ type (
 		// First to ensure 64-bit alignment for atomics. See #262.
 		_stats ConnStats
 
-		t *Torrent
+		cl *Client
+		t  *Torrent
 
 		legacyPeerImpl
 		peerImpl  newHotPeerImpl
@@ -64,9 +64,6 @@ type (
 		// True if the connection is operating over MSE obfuscation.
 		headerEncrypted bool
 		cryptoMethod    mse.CryptoMethod
-		// Set true after we've added our ConnStats generated during handshake to
-		// other ConnStat instances as determined when the *Torrent became known.
-		reconciledHandshakeStats bool
 
 		lastMessageReceived time.Time
 		completedHandshake  time.Time
@@ -289,49 +286,31 @@ func (cn *Peer) totalExpectingTime() (ret time.Duration) {
 // are okay.
 type messageWriter func(pp.Message) bool
 
-// Emits the indices in the Bitmaps bms in order, never repeating any index.
-// skip is mutated during execution, and its initial values will never be
-// emitted.
-func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
-	return func(cb iter.Callback) {
-		for _, bm := range bms {
-			if !iter.All(
-				func(_i interface{}) bool {
-					i := _i.(int)
-					if skip.Contains(bitmap.BitIndex(i)) {
-						return true
-					}
-					skip.Add(bitmap.BitIndex(i))
-					return cb(i)
-				},
-				bm.Iter,
-			) {
-				return
-			}
-		}
-	}
-}
-
-// After handshake, we know what Torrent and Client stats to include for a
-// connection.
-func (cn *Peer) postHandshakeStats(f func(*ConnStats)) {
-	t := cn.t
-	f(&t.connStats)
-	f(&t.cl.connStats)
-}
-
-// All ConnStats that include this connection. Some objects are not known
-// until the handshake is complete, after which it's expected to reconcile the
-// differences.
-func (cn *Peer) allStats(f func(*ConnStats)) {
+// All ConnStats that include this connection. Some objects are not known until the handshake is
+// complete, after which it's expected to reconcile the differences.
+func (cn *Peer) modifyRelevantConnStats(f func(*ConnStats)) {
+	// Every peer has basic ConnStats for now.
 	f(&cn._stats)
-	if cn.reconciledHandshakeStats {
-		cn.postHandshakeStats(f)
+	incAll := func(stats *ConnStats) bool {
+		f(stats)
+		return true
+	}
+	cn.upstreamConnStats()(incAll)
+}
+
+// Yields relevant upstream ConnStats. Skips Torrent if it isn't set.
+func (cn *Peer) upstreamConnStats() iter.Seq[*ConnStats] {
+	return func(yield func(*ConnStats) bool) {
+		// PeerConn can be nil when it hasn't completed handshake.
+		if cn.t != nil {
+			cn.relevantConnStats(&cn.t.connStats)(yield)
+		}
+		cn.relevantConnStats(&cn.cl.connStats)(yield)
 	}
 }
 
 func (cn *Peer) readBytes(n int64) {
-	cn.allStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesRead }))
+	cn.modifyRelevantConnStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesRead }))
 }
 
 func (c *Peer) lastHelpful() (ret time.Time) {
@@ -363,7 +342,7 @@ func runSafeExtraneous(f func()) {
 }
 
 func (c *Peer) doChunkReadStats(size int64) {
-	c.allStats(func(cs *ConnStats) { cs.receivedChunk(size) })
+	c.modifyRelevantConnStats(func(cs *ConnStats) { cs.receivedChunk(size) })
 }
 
 // Handle a received chunk from a peer. TODO: Break this out into non-wire protocol specific
@@ -403,16 +382,16 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	if t.haveChunk(ppReq) {
 		// panic(fmt.Sprintf("%+v", ppReq))
 		ChunksReceived.Add("redundant", 1)
-		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
+		c.modifyRelevantConnStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
 		return nil
 	}
 
 	piece := t.piece(ppReq.Index.Int())
 
-	c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
-	c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))
+	c.modifyRelevantConnStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
+	c.modifyRelevantConnStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))
 	if intended {
-		c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulIntendedData }))
+		c.modifyRelevantConnStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulIntendedData }))
 	}
 	for _, f := range c.t.cl.config.Callbacks.ReceivedUsefulData {
 		f(ReceivedUsefulDataEvent{c, msg})
@@ -548,10 +527,6 @@ func (cn *Peer) newPeerPieces() *roaring.Bitmap {
 	return ret
 }
 
-func (cn *Peer) stats() *ConnStats {
-	return &cn._stats
-}
-
 func (p *Peer) TryAsPeerConn() (*PeerConn, bool) {
 	pc, ok := p.legacyPeerImpl.(*PeerConn)
 	return pc, ok
@@ -578,4 +553,12 @@ func (p *Peer) recordBlockForSmartBan(req RequestIndex, blockData []byte) {
 func (p *Peer) initClosedCtx() {
 	panicif.NotNil(p.closedCtx)
 	p.closedCtx, p.closedCtxCancel = context.WithCancel(p.t.closedCtx)
+}
+
+// Iterates base and peer-impl specific ConnStats from all.
+func (p *Peer) relevantConnStats(all *AllConnStats) iter.Seq[*ConnStats] {
+	return func(yield func(*ConnStats) bool) {
+		yield(&all.ConnStats)
+		yield(p.peerImpl.allConnStatsImplField(all))
+	}
 }

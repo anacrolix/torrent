@@ -32,6 +32,10 @@ type webseedPeer struct {
 	hostKey          webseedHostKeyHandle
 }
 
+func (*webseedPeer) allConnStatsImplField(stats *AllConnStats) *ConnStats {
+	return &stats.WebSeeds
+}
+
 func (me *webseedPeer) cancelAllRequests() {
 	// Is there any point to this? Won't we fail to receive a chunk and cancel anyway? Should we
 	// Close requests instead?

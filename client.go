@@ -59,7 +59,7 @@ const webseedRequestUpdateTimerInterval = time.Second
 type Client struct {
 	// An aggregate of stats over all connections. First in struct to ensure 64-bit alignment of
 	// fields. See #262.
-	connStats ConnStats
+	connStats AllConnStats
 	counters  TorrentStatCounters
 
 	_mu    lockWithDeferreds
@@ -1292,7 +1292,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 	piece := d.Piece
 	switch d.Type {
 	case pp.DataMetadataExtensionMsgType:
-		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.MetadataChunksRead }))
+		c.modifyRelevantConnStats(add(1, func(cs *ConnStats) *Count { return &cs.MetadataChunksRead }))
 		if !c.requestedMetadataPiece(piece) {
 			return fmt.Errorf("got unexpected piece %d", piece)
 		}
@@ -1706,6 +1706,7 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 	}
 	c = &PeerConn{
 		Peer: Peer{
+			cl:          cl,
 			outgoing:    opts.outgoing,
 			choking:     true,
 			peerChoking: true,
@@ -1917,9 +1918,9 @@ func (cl *Client) ICEServers() []webrtc.ICEServer {
 }
 
 // Returns connection-level aggregate connStats at the Client level. See the comment on
-// TorrentStats.ConnStats.
+// TorrentStats.ConnStats. You probably want Client.Stats() instead.
 func (cl *Client) ConnStats() ConnStats {
-	return cl.connStats.Copy()
+	return cl.connStats.ConnStats.Copy()
 }
 
 func (cl *Client) Stats() ClientStats {

@@ -67,7 +67,7 @@ var errTorrentClosed = errors.New("torrent closed")
 type Torrent struct {
 	// Torrent-level aggregate statistics. First in struct to ensure 64-bit
 	// alignment. See #262.
-	connStats ConnStats
+	connStats AllConnStats
 	counters  TorrentStatCounters
 
 	cl       *Client
@@ -2322,7 +2322,7 @@ func (t *Torrent) gauges() (ret TorrentGauges) {
 }
 
 func (t *Torrent) statsLocked() (ret TorrentStats) {
-	ret.ConnStats = copyCountFields(&t.connStats)
+	ret.AllConnStats = t.connStats.Copy()
 	ret.TorrentStatCounters = copyCountFields(&t.counters)
 	ret.TorrentGauges = t.gauges()
 	return
@@ -2346,23 +2346,6 @@ func (t *Torrent) numTotalPeers() int {
 		peers[peer.Addr.String()] = struct{}{}
 	})
 	return len(peers)
-}
-
-// Reconcile bytes transferred before connection was associated with a
-// torrent.
-func (t *Torrent) reconcileHandshakeStats(c *Peer) {
-	if c._stats != (ConnStats{
-		// Handshakes should only increment these fields:
-		BytesWritten: c._stats.BytesWritten,
-		BytesRead:    c._stats.BytesRead,
-	}) {
-		panic("bad stats")
-	}
-	c.postHandshakeStats(func(cs *ConnStats) {
-		cs.BytesRead.Add(c._stats.BytesRead.Int64())
-		cs.BytesWritten.Add(c._stats.BytesWritten.Int64())
-	})
-	c.reconciledHandshakeStats = true
 }
 
 // Returns true if the connection is added.
@@ -2518,13 +2501,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	}()
 
 	if passed {
-		if len(p.dirtiers) != 0 {
-			// Don't increment stats above connection-level for every involved connection.
-			t.allStats((*ConnStats).incrementPiecesDirtiedGood)
-		}
-		for c := range p.dirtiers {
-			c._stats.incrementPiecesDirtiedGood()
-		}
+		t.incrementPiecesDirtiedStats(p, (*ConnStats).incrementPiecesDirtiedGood)
 		t.clearPieceTouchers(piece)
 		hasDirty := p.hasDirtyChunks()
 		t.cl.unlock()
@@ -2546,13 +2523,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		if len(p.dirtiers) != 0 && p.allChunksDirty() && hashIoErr == nil {
 			// Peers contributed to all the data for this piece hash failure, and the failure was
 			// not due to errors in the storage (such as data being dropped in a cache).
-
-			// Increment Torrent and above stats, and then specific connections.
-			t.allStats((*ConnStats).incrementPiecesDirtiedBad)
-			for c := range p.dirtiers {
-				// Y u do dis peer?!
-				c.stats().incrementPiecesDirtiedBad()
-			}
+			t.incrementPiecesDirtiedStats(p, (*ConnStats).incrementPiecesDirtiedBad)
 
 			bannableTouchers := make([]*Peer, 0, len(p.dirtiers))
 			for c := range p.dirtiers {
@@ -2919,13 +2890,6 @@ func (t *Torrent) AddClientPeer(cl *Client) int {
 	}())
 }
 
-// All stats that include this Torrent. Useful when we want to increment ConnStats but not for every
-// connection.
-func (t *Torrent) allStats(f func(*ConnStats)) {
-	f(&t.connStats)
-	f(&t.cl.connStats)
-}
-
 func (t *Torrent) hashingPiece(i pieceIndex) bool {
 	return t.pieces[i].hashing
 }
@@ -3066,10 +3030,10 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	const defaultMaxRequests = 2
 	ws := webseedPeer{
 		peer: Peer{
-			t:                        t,
-			outgoing:                 true,
-			Network:                  "http",
-			reconciledHandshakeStats: true,
+			cl:       t.cl,
+			t:        t,
+			outgoing: true,
+			Network:  "http",
 			// TODO: Set ban prefix?
 			RemoteAddr: remoteAddrFromUrl(url),
 			callbacks:  t.callbacks(),
@@ -3617,4 +3581,30 @@ func (t *Torrent) hasActiveWebseedRequests() bool {
 		}
 	}
 	return false
+}
+
+// Increment pieces dirtied for conns and aggregate upstreams.
+func (t *Torrent) incrementPiecesDirtiedStats(p *Piece, inc func(stats *ConnStats) bool) {
+	if len(p.dirtiers) == 0 {
+		// Avoid allocating map.
+		return
+	}
+	// 4 == 2 peerImpls (PeerConn and webseedPeer) and 1 base * one AllConnStats for each of Torrent
+	// and Client.
+	distinctUpstreamConnStats := make(map[*ConnStats]struct{}, 6)
+	for c := range p.dirtiers {
+		// Apply directly for each peer to avoid allocation.
+		inc(&c._stats)
+		// Collect distinct upstream connection stats.
+		count := 0
+		for cs := range c.upstreamConnStats() {
+			distinctUpstreamConnStats[cs] = struct{}{}
+			count++
+		}
+		// All dirtiers should have both Torrent and Client stats for both base and impl-ConnStats.
+		panicif.NotEq(count, 4)
+	}
+	// TODO: Have a debug assert/dev logging version of this.
+	panicif.GreaterThan(len(distinctUpstreamConnStats), 6)
+	maps.Keys(distinctUpstreamConnStats)(inc)
 }

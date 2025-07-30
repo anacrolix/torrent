@@ -53,4 +53,5 @@ type newHotPeerImpl interface {
 	// Whether we're expecting to receive chunks because we have outstanding requests. Used for
 	// example to calculate download rate.
 	expectingChunks() bool
+	allConnStatsImplField(*AllConnStats) *ConnStats
 }

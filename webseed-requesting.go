@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"iter"
 	"maps"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"unique"
@@ -18,7 +20,13 @@ import (
 	"github.com/anacrolix/torrent/webseed"
 )
 
-const defaultRequestsPerWebseedHost = 10
+var webseedHostRequestConcurrency int
+
+func init() {
+	i64, err := strconv.ParseInt(cmp.Or(os.Getenv("TORRENT_WEBSEED_HOST_REQUEST_CONCURRENCY"), "10"), 10, 0)
+	panicif.Err(err)
+	webseedHostRequestConcurrency = int(i64)
+}
 
 type (
 	webseedHostKey       string
@@ -128,7 +136,7 @@ func (cl *Client) updateWebseedRequests() {
 		// handling overhead. Need the value to avoid looking this up again.
 		costKey := elem.costKey
 		panicif.Zero(costKey)
-		if len(plan.byCost[costKey]) >= defaultRequestsPerWebseedHost {
+		if len(plan.byCost[costKey]) >= webseedHostRequestConcurrency {
 			continue
 		}
 		g.MakeMapIfNil(&plan.byCost)

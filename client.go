@@ -1931,7 +1931,7 @@ func (cl *Client) Stats() ClientStats {
 
 func (cl *Client) underWebSeedHttpRequestLimit(key webseedHostKeyHandle) bool {
 	panicif.Zero(key)
-	return cl.numWebSeedRequests[key] < defaultRequestsPerWebseedHost
+	return cl.numWebSeedRequests[key] < webseedHostRequestConcurrency
 }
 
 // Check for bad arrangements. This is a candidate for an error state check method.

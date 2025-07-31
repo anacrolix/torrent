@@ -86,7 +86,8 @@ type Client struct {
 	// All Torrents once.
 	torrents map[*Torrent]struct{}
 	// All Torrents by their short infohashes (v1 if valid, and truncated v2 if valid). Unless the
-	// info has been obtained, there's no knowing if an infohash belongs to v1 or v2.
+	// info has been obtained, there's no knowing if an infohash belongs to v1 or v2. TODO: Make
+	// this a weak pointer.
 	torrentsByShortHash map[InfoHash]*Torrent
 
 	// Piece request orderings grouped by storage. Value is value type because all fields are
@@ -507,11 +508,14 @@ func (cl *Client) Close() (errs []error) {
 	var closeGroup sync.WaitGroup // For concurrent cleanup to complete before returning
 	cl.lock()
 	for t := range cl.torrents {
-		err := t.close(&closeGroup)
+		// Can we not modify cl.torrents as we delete from it?
+		err := cl.dropTorrent(t, &closeGroup)
 		if err != nil {
 			errs = append(errs, err)
 		}
 	}
+	panicif.NotZero(len(cl.torrents))
+	panicif.NotZero(len(cl.torrentsByShortHash))
 	cl.clearPortMappings()
 	for i := range cl.onClose {
 		cl.onClose[len(cl.onClose)-1-i]()

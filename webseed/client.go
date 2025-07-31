@@ -104,7 +104,7 @@ func (ws *Client) UrlForFileIndex(fileIndex int) string {
 	return urlForFileIndex(ws.Url, fileIndex, ws.info, ws.PathEscaper)
 }
 
-func (ws *Client) StartNewRequest(r RequestSpec) Request {
+func (ws *Client) StartNewRequest(r RequestSpec, debugLogger *slog.Logger) Request {
 	ctx, cancel := context.WithCancel(context.TODO())
 	var requestParts []requestPart
 	if !ws.fileIndex.Locate(r, func(i int, e segments.Extent) bool {
@@ -123,12 +123,11 @@ func (ws *Client) StartNewRequest(r RequestSpec) Request {
 		}
 		part.do = func() (*http.Response, error) {
 			if PrintDebug {
-				fmt.Printf(
-					"doing request for %q (file size %v), Range: %q\n",
-					req.URL,
-					humanize.Bytes(uint64(ws.fileIndex.Index(i).Length)),
-					req.Header.Get("Range"),
-				)
+				debugLogger.Debug(
+					"doing request for part",
+					"url", req.URL,
+					"file size", humanize.Bytes(uint64(e.Length)),
+					"range", req.Header.Get("Range"))
 			}
 			return ws.HttpClient.Do(req)
 		}

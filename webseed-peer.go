@@ -25,6 +25,7 @@ import (
 type webseedPeer struct {
 	// First field for stats alignment.
 	peer             Peer
+	logger           *slog.Logger
 	client           webseed.Client
 	activeRequests   map[*webseedRequest]struct{}
 	locker           sync.Locker
@@ -40,7 +41,7 @@ func (me *webseedPeer) cancelAllRequests() {
 	// Is there any point to this? Won't we fail to receive a chunk and cancel anyway? Should we
 	// Close requests instead?
 	for req := range me.activeRequests {
-		req.Cancel()
+		req.Cancel("all requests cancelled")
 	}
 }
 
@@ -131,9 +132,10 @@ func (ws *webseedPeer) intoSpec(begin, end RequestIndex) webseed.RequestSpec {
 	return webseed.RequestSpec{start, endOff - start}
 }
 
-func (ws *webseedPeer) spawnRequest(begin, end RequestIndex) {
-	extWsReq := ws.client.StartNewRequest(ws.intoSpec(begin, end))
+func (ws *webseedPeer) spawnRequest(begin, end RequestIndex, logger *slog.Logger) {
+	extWsReq := ws.client.StartNewRequest(ws.intoSpec(begin, end), logger)
 	wsReq := webseedRequest{
+		logger:  logger,
 		request: extWsReq,
 		begin:   begin,
 		next:    begin,
@@ -141,7 +143,7 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex) {
 	}
 	if ws.hasOverlappingRequests(begin, end) {
 		if webseed.PrintDebug {
-			fmt.Printf("webseedPeer.spawnRequest: overlapping request for %v[%v-%v)\n", ws.peer.t.name(), begin, end)
+			logger.Warn("webseedPeer.spawnRequest: request overlaps existing")
 		}
 		ws.peer.t.cl.dumpCurrentWebseedRequests()
 	}
@@ -304,7 +306,7 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 		stop := err != nil || wr.next >= wr.end
 		if !stop {
 			if !ws.keepReading(wr) {
-				wr.Cancel()
+				wr.Cancel("finished or discarded")
 			}
 		}
 		ws.peer.locker().Unlock()

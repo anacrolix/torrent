@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"iter"
+	"log/slog"
 	"maps"
 	"os"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/missinggo/v2/panicif"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 
 	"github.com/anacrolix/torrent/internal/request-strategy"
 	"github.com/anacrolix/torrent/metainfo"
@@ -156,12 +158,8 @@ func (cl *Client) updateWebseedRequests() {
 	}
 
 	// Cancel any existing requests that are no longer wanted.
-	for key, value := range unwantedExistingRequests {
-		if webseed.PrintDebug {
-			fmt.Printf("cancelling deprioritized existing webseed request %v\n", key)
-		}
-		key.t.slogger().Debug("cancelling deprioritized existing webseed request", "webseedUrl", key.url, "fileIndex", key.fileIndex)
-		value.existingWebseedRequest.Cancel()
+	for _, value := range unwantedExistingRequests {
+		value.existingWebseedRequest.Cancel("deprioritized")
 	}
 
 	printPlan := sync.OnceFunc(func() {
@@ -197,16 +195,25 @@ func (cl *Client) updateWebseedRequests() {
 				}
 				last++
 			}
+			debugLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+				Level:     slog.LevelDebug,
+				AddSource: true,
+			})).With(
+				"webseedUrl", requestKey.url,
+				"fileIndex", requestKey.fileIndex)
 			// Request shouldn't exist if this occurs.
 			panicif.LessThan(last, begin)
 			// Hello C++ my old friend.
 			end := last + 1
 			if webseed.PrintDebug && end != fileEnd {
-				fmt.Printf("shortened webseed request for %v: [%v-%v) to [%v-%v)\n",
-					requestKey.filePath(), begin, fileEnd, begin, end)
+				debugLogger.Debug(
+					"shortened webseed request",
+					"first-file", requestKey.filePath(),
+					"from", endExclusiveString(begin, fileEnd),
+					"to", endExclusiveString(begin, end))
 			}
 			panicif.GreaterThan(end, fileEnd)
-			peer.spawnRequest(begin, end)
+			peer.spawnRequest(begin, end, debugLogger)
 		}
 	}
 }
@@ -389,4 +396,16 @@ func (cl *Client) updateWebseedRequestsAndResetTimer() {
 	// Timer should always be stopped before the last call.
 	panicif.True(cl.webseedRequestTimer.Reset(webseedRequestUpdateTimerInterval))
 
+}
+
+type endExclusive[T any] struct {
+	start, end T
+}
+
+func (me endExclusive[T]) String() string {
+	return fmt.Sprintf("[%v-%v)", me.start, me.end)
+}
+
+func endExclusiveString[T any](start, end T) string {
+	return endExclusive[T]{start, end}.String()
 }

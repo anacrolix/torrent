@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"fmt"
+	"log/slog"
 	"sync/atomic"
 
 	"github.com/anacrolix/torrent/webseed"
@@ -11,6 +12,7 @@ import (
 type webseedRequest struct {
 	// Fingers out.
 	request webseed.Request
+	logger  *slog.Logger
 	// First assigned in the range.
 	begin RequestIndex
 	// The next to be read.
@@ -25,11 +27,11 @@ func (me *webseedRequest) Close() {
 }
 
 // Record that it was exceptionally cancelled.
-func (me *webseedRequest) Cancel() {
+func (me *webseedRequest) Cancel(reason string) {
 	me.request.Cancel()
 	if !me.cancelled.Swap(true) {
 		if webseed.PrintDebug {
-			fmt.Printf("cancelled webseed request\n")
+			me.logger.Debug("cancelled", "reason", reason)
 		}
 	}
 }

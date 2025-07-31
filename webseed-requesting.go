@@ -205,6 +205,7 @@ func (cl *Client) updateWebseedRequests() {
 			panicif.LessThan(last, begin)
 			// Hello C++ my old friend.
 			end := last + 1
+			truncateEndToCacheBoundary(begin, &end, t.chunkSize)
 			if webseed.PrintDebug && end != fileEnd {
 				debugLogger.Debug(
 					"shortened webseed request",
@@ -216,6 +217,16 @@ func (cl *Client) updateWebseedRequests() {
 			peer.spawnRequest(begin, end, debugLogger)
 		}
 	}
+}
+
+// Limit a webseed request end request index so that the required response body size fits within
+// cache limits for a WebSeed provider.
+func truncateEndToCacheBoundary(start RequestIndex, end *RequestIndex, chunkSize pp.Integer) {
+	// Cloudflare caches up to 512 MB responses by default.
+	const cacheResponseBodyLimit = 256 << 20
+	chunksPerAlignedResponse := RequestIndex(cacheResponseBodyLimit / chunkSize)
+	startIndex := start / chunksPerAlignedResponse
+	*end = min(*end, (startIndex+1)*chunksPerAlignedResponse)
 }
 
 func (cl *Client) dumpCurrentWebseedRequests() {

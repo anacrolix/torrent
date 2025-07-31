@@ -2406,20 +2406,14 @@ func (t *Torrent) newConnsAllowed() bool {
 	if t.closed.IsSet() {
 		return false
 	}
-	if !t.needData() && (!t.seeding() || !t.haveAnyPieces()) {
-		return false
+	if t.needData() {
+		return true
 	}
-	return true
+	return t.seeding() && t.haveAnyPieces()
 }
 
 func (t *Torrent) wantAnyConns() bool {
-	if !t.networkingEnabled.Bool() {
-		return false
-	}
-	if t.closed.IsSet() {
-		return false
-	}
-	if !t.needData() && (!t.seeding() || !t.haveAnyPieces()) {
+	if !t.newConnsAllowed() {
 		return false
 	}
 	return len(t.conns) < t.maxEstablishedConns
@@ -2430,6 +2424,7 @@ func (t *Torrent) wantOutgoingConns() bool {
 		return false
 	}
 	if len(t.conns) < t.maxEstablishedConns {
+		// Shortcut: We can take any connection direction right now.
 		return true
 	}
 	numIncomingConns := len(t.conns) - t.numOutgoingConns()
@@ -2444,6 +2439,7 @@ func (t *Torrent) wantIncomingConns() bool {
 		return false
 	}
 	if len(t.conns) < t.maxEstablishedConns {
+		// Shortcut: We can take any connection direction right now.
 		return true
 	}
 	numIncomingConns := len(t.conns) - t.numOutgoingConns()

@@ -68,8 +68,8 @@ func GetRequestablePieces(
 	)
 	pro.tree.Scan(func(item PieceRequestOrderItem) bool {
 		ih := item.Key.InfoHash
-		var t = input.Torrent(ih)
-		var piece = t.Piece(item.Key.Index)
+		t := input.Torrent(ih)
+		piece := t.Piece(item.Key.Index)
 		pieceLength := t.PieceLength()
 		// Storage limits will always apply against requestable pieces, since we need to keep the
 		// highest priority pieces, even if they're complete or in an undesirable state.

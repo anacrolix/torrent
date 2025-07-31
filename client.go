@@ -100,7 +100,8 @@ type Client struct {
 	numWebSeedRequests map[webseedHostKeyHandle]int
 
 	activeAnnounceLimiter limiter.Instance
-	httpClient            *http.Client
+	// TODO: Move this onto ClientConfig.
+	httpClient *http.Client
 
 	clientHolepunchAddrSets
 
@@ -243,6 +244,7 @@ func (cl *Client) announceKey() int32 {
 // Initializes a bare minimum Client. *Client and *ClientConfig must not be nil.
 func (cl *Client) init(cfg *ClientConfig) {
 	cl.config = cfg
+	cfg.setRateLimiterBursts()
 	g.MakeMap(&cl.dopplegangerAddrs)
 	g.MakeMap(&cl.torrentsByShortHash)
 	g.MakeMap(&cl.torrents)
@@ -262,6 +264,7 @@ func (cl *Client) init(cfg *ClientConfig) {
 			MaxConnsPerHost: 10,
 		}
 	}
+	cfg.MetainfoSourcesClient = cmp.Or(cfg.MetainfoSourcesClient, cl.httpClient)
 	cl.defaultLocalLtepProtocolMap = makeBuiltinLtepProtocols(!cfg.DisablePEX)
 	g.MakeMap(&cl.numWebSeedRequests)
 }
@@ -273,7 +276,6 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		cfg = NewDefaultClientConfig()
 		cfg.ListenPort = 0
 	}
-	cfg.setRateLimiterBursts()
 	cl = &Client{}
 	cl.init(cfg)
 	go cl.acceptLimitClearer()

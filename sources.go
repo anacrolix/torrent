@@ -56,7 +56,7 @@ func (t *Torrent) trySource(source string) (retry g.Option[time.Duration], err e
 		return
 	}
 	var mi metainfo.MetaInfo
-	mi, err = getTorrentSource(ctx, source, t.cl.httpClient)
+	mi, err = getTorrentSource(ctx, source, t.cl.config.MetainfoSourcesClient)
 	if ctx.Err() != nil {
 		return
 	}

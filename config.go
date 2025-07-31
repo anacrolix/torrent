@@ -46,7 +46,7 @@ type ClientDhtConfig struct {
 	DHTOnQuery func(query *krpc.Msg, source net.Addr) (propagate bool)
 }
 
-// Probably not safe to modify this after it's given to a Client.
+// Probably not safe to modify this after it's given to a Client, or to pass it to multiple Clients.
 type ClientConfig struct {
 	ClientTrackerConfig
 	ClientDhtConfig
@@ -109,6 +109,9 @@ type ClientConfig struct {
 	Logger  log.Logger
 	Slogger *slog.Logger
 
+	// Used for torrent metainfo sources only. Falls back to the http.Client created to wrap
+	// WebTransport.
+	MetainfoSourcesClient *http.Client
 	// Used for torrent sources and webseeding if set.
 	WebTransport http.RoundTripper
 	// Defines proxy for HTTP requests, such as for trackers. It's commonly set from the result of

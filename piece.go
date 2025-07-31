@@ -292,7 +292,7 @@ func (p *Piece) purePriority() (ret PiecePriority) {
 }
 
 func (p *Piece) ignoreForRequests() bool {
-	return p.hashing || p.marking || !p.haveHash() || p.t.pieceComplete(p.index) || p.queuedForHash()
+	return p.hashing || p.marking || !p.haveHash() || p.t.pieceComplete(p.index) || p.queuedForHash() || p.t.dataDownloadDisallowed.IsSet()
 }
 
 // This is the priority adjusted for piece state like completion, hashing etc.

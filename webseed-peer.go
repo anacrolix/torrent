@@ -52,7 +52,9 @@ func (me *webseedPeer) isLowOnRequests() bool {
 }
 
 // Webseed requests are issued globally so per-connection reasons or handling make no sense.
-func (me *webseedPeer) onNeedUpdateRequests(updateRequestReason) {}
+func (me *webseedPeer) onNeedUpdateRequests(updateRequestReason) {
+	me.peer.cl.scheduleImmediateWebseedRequestUpdate()
+}
 
 func (me *webseedPeer) expectingChunks() bool {
 	return len(me.activeRequests) > 0

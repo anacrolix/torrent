@@ -102,6 +102,10 @@ func (cl *Client) updateWebseedRequests() {
 	}
 	// Add remaining existing requests.
 	for key := range unusedExistingRequests {
+		// Don't reconsider existing requests that aren't wanted anymore.
+		if key.t.dataDownloadDisallowed.IsSet() {
+			continue
+		}
 		heapSlice = append(heapSlice, heapElem{key, existingRequests[key]})
 	}
 	aprioriHeap := heap.InterfaceForSlice(
@@ -136,6 +140,12 @@ func (cl *Client) updateWebseedRequests() {
 		// handling overhead. Need the value to avoid looking this up again.
 		costKey := elem.costKey
 		panicif.Zero(costKey)
+		if elem.existingWebseedRequest == nil {
+			// Existing requests might be within the allowed discard range.
+			panicif.Eq(elem.priority, PiecePriorityNone)
+		}
+		panicif.True(elem.t.dataDownloadDisallowed.IsSet())
+		panicif.True(elem.t.closed.IsSet())
 		if len(plan.byCost[costKey]) >= webseedHostRequestConcurrency {
 			continue
 		}
@@ -363,7 +373,8 @@ func (cl *Client) scheduleImmediateWebseedRequestUpdate() {
 	}
 	// Set the timer to fire right away (this will coalesce consecutive updates without forcing an
 	// update on every call to this method). Since we're holding the Client lock, and we cancelled
-	// the timer, and it wasn't active, nobody else should have reset it before us.
+	// the timer, and it wasn't active, nobody else should have reset it before us. Do we need to
+	// introduce a "reason" field here, (albeit Client-level?).
 	panicif.True(cl.webseedRequestTimer.Reset(0))
 }
 

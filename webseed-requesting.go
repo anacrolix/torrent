@@ -15,10 +15,11 @@ import (
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/missinggo/v2/panicif"
-	pp "github.com/anacrolix/torrent/peer_protocol"
 
 	"github.com/anacrolix/torrent/internal/request-strategy"
 	"github.com/anacrolix/torrent/metainfo"
+	pp "github.com/anacrolix/torrent/peer_protocol"
+
 	"github.com/anacrolix/torrent/webseed"
 )
 

@@ -1,22 +1,14 @@
 package segments
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/go-quicktest/qt"
 )
 
 func LengthIterFromSlice(ls []Length) LengthIter {
-	return func() (Length, bool) {
-		switch len(ls) {
-		case 0:
-			return -1, false
-		default:
-			l := ls[0]
-			ls = ls[1:]
-			return l, true
-		}
-	}
+	return slices.Values(ls)
 }
 
 type ScanCallbackValue struct {
@@ -104,16 +96,33 @@ func testLocater(t *testing.T, newLocater newLocater) {
 			{0, 0},
 			{0, 2},
 		})
-}
-
-func TestScan(t *testing.T) {
-	testLocater(t, LocaterFromLengthIter)
-}
-
-func TestIndex(t *testing.T) {
-	testLocater(t, func(li LengthIter) Locater {
-		return NewIndex(li).Locate
-	})
+	checkContiguous(t, newLocater,
+		[]Length{2, 0, 1, 0, 0, 1},
+		Extent{3, 2},
+		5,
+		[]Extent{
+			{0, 1},
+		})
+	checkContiguous(t, newLocater,
+		[]Length{2, 0, 1, 0, 0, 1},
+		Extent{2, 2},
+		2,
+		[]Extent{
+			{0, 1},
+			{0, 0},
+			{0, 0},
+			{0, 1},
+		})
+	checkContiguous(t, newLocater,
+		[]Length{},
+		Extent{1, 1},
+		0,
+		[]Extent{})
+	checkContiguous(t, newLocater,
+		[]Length{0},
+		Extent{1, 1},
+		0,
+		[]Extent{})
 }
 
 func TestIndexLocateIter(t *testing.T) {

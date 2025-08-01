@@ -7,6 +7,7 @@ import (
 	"iter"
 	"sync"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/chansync"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/bitmap"
@@ -157,7 +158,8 @@ func (p *Piece) chunkIndexDirty(chunk chunkIndexType) bool {
 
 func (p *Piece) iterCleanChunks() iter.Seq[chunkIndexType] {
 	return func(yield func(chunkIndexType) bool) {
-		it := p.t.dirtyChunks.Iterator()
+		var it roaring.IntIterator
+		it.Initialize(&p.t.dirtyChunks.Bitmap)
 		begin := uint32(p.requestIndexBegin())
 		end := uint32(p.requestIndexMaxEnd())
 		it.AdvanceIfNeeded(begin)

@@ -17,9 +17,7 @@ func TestHashPieceAfterStorageClosed(t *testing.T) {
 	defer cs.Close()
 	tt := cl.newTorrent(metainfo.Hash{1}, cs)
 	mi := testutil.GreetingMetaInfo()
-	info, err := mi.UnmarshalInfo()
-	require.NoError(t, err)
-	require.NoError(t, tt.setInfo(&info))
+	require.NoError(t, tt.SetInfoBytes(mi.InfoBytes))
+	go tt.piece(0).VerifyDataContext(t.Context())
 	require.NoError(t, tt.storage.Close())
-	tt.hashPiece(0)
 }

@@ -228,6 +228,9 @@ func (p *Piece) VerifyData() error {
 func (p *Piece) VerifyDataContext(ctx context.Context) error {
 	locker := p.t.cl.locker()
 	locker.Lock()
+	if p.t.closed.IsSet() {
+		return errTorrentClosed
+	}
 	target, err := p.t.queuePieceCheck(p.index)
 	locker.Unlock()
 	if err != nil {

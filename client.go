@@ -279,39 +279,81 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 	}
 	cl = &Client{}
 	cl.init(cfg)
-	go cl.acceptLimitClearer()
-	cl.initLogger()
-	//cl.logger.Levelf(log.Critical, "test after init")
+	// Belongs after infallible init
 	defer func() {
 		if err != nil {
 			cl.Close()
 			cl = nil
 		}
 	}()
+	// Infallible init. Belongs in separate function.
+	{
+		go cl.acceptLimitClearer()
+		cl.initLogger()
+		//cl.logger.Levelf(log.Critical, "test after init")
 
-	storageImpl := cfg.DefaultStorage
-	if storageImpl == nil {
-		// We'd use mmap by default but HFS+ doesn't support sparse files.
-		storageImplCloser := storage.NewFile(cfg.DataDir)
-		cl.onClose = append(cl.onClose, func() {
-			if err := storageImplCloser.Close(); err != nil {
-				cl.logger.Printf("error closing default storage: %s", err)
-			}
-		})
-		storageImpl = storageImplCloser
-	}
-	cl.defaultStorage = storage.NewClient(storageImpl)
-
-	if cfg.PeerID != "" {
-		missinggo.CopyExact(&cl.peerID, cfg.PeerID)
-	} else {
-		o := copy(cl.peerID[:], cfg.Bep20)
-		_, err = rand.Read(cl.peerID[o:])
-		if err != nil {
-			panic("error generating peer id")
+		storageImpl := cfg.DefaultStorage
+		if storageImpl == nil {
+			// We'd use mmap by default but HFS+ doesn't support sparse files.
+			storageImplCloser := storage.NewFile(cfg.DataDir)
+			cl.onClose = append(cl.onClose, func() {
+				if err := storageImplCloser.Close(); err != nil {
+					cl.logger.Printf("error closing default storage: %s", err)
+				}
+			})
+			storageImpl = storageImplCloser
 		}
-	}
+		cl.defaultStorage = storage.NewClient(storageImpl)
 
+		if cfg.PeerID != "" {
+			missinggo.CopyExact(&cl.peerID, cfg.PeerID)
+		} else {
+			o := copy(cl.peerID[:], cfg.Bep20)
+			_, err = rand.Read(cl.peerID[o:])
+			if err != nil {
+				panic("error generating peer id")
+			}
+		}
+
+		cl.websocketTrackers = websocketTrackers{
+			PeerId: cl.peerID,
+			Logger: cl.logger.WithNames("websocketTrackers"),
+			GetAnnounceRequest: func(
+				event tracker.AnnounceEvent, infoHash [20]byte,
+			) (
+				tracker.AnnounceRequest, error,
+			) {
+				cl.lock()
+				defer cl.unlock()
+				t, ok := cl.torrentsByShortHash[infoHash]
+				if !ok {
+					return tracker.AnnounceRequest{}, errors.New("torrent not tracked by client")
+				}
+				return t.announceRequest(event, infoHash), nil
+			},
+			Proxy:                      cl.config.HTTPProxy,
+			WebsocketTrackerHttpHeader: cl.config.WebsocketTrackerHttpHeader,
+			ICEServers:                 cl.ICEServers(),
+			DialContext:                cl.config.TrackerDialContext,
+			callbacks:                  &cl.config.Callbacks,
+			OnConn: func(dc webtorrent.DataChannelConn, dcc webtorrent.DataChannelContext) {
+				cl.lock()
+				defer cl.unlock()
+				t, ok := cl.torrentsByShortHash[dcc.InfoHash]
+				if !ok {
+					cl.logger.WithDefaultLevel(log.Warning).Printf(
+						"got webrtc conn for unloaded torrent with infohash %x",
+						dcc.InfoHash,
+					)
+					dc.Close()
+					return
+				}
+				go t.onWebRtcConn(dc, dcc)
+			},
+		}
+
+		cl.webseedRequestTimer = time.AfterFunc(webseedRequestUpdateTimerInterval, cl.updateWebseedRequestsTimerFunc)
+	}
 	builtinListenNetworks := cl.listenNetworks()
 	sockets, err := listenAll(
 		builtinListenNetworks,
@@ -357,45 +399,6 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 			}
 		}
 	}
-
-	cl.websocketTrackers = websocketTrackers{
-		PeerId: cl.peerID,
-		Logger: cl.logger.WithNames("websocketTrackers"),
-		GetAnnounceRequest: func(
-			event tracker.AnnounceEvent, infoHash [20]byte,
-		) (
-			tracker.AnnounceRequest, error,
-		) {
-			cl.lock()
-			defer cl.unlock()
-			t, ok := cl.torrentsByShortHash[infoHash]
-			if !ok {
-				return tracker.AnnounceRequest{}, errors.New("torrent not tracked by client")
-			}
-			return t.announceRequest(event, infoHash), nil
-		},
-		Proxy:                      cl.config.HTTPProxy,
-		WebsocketTrackerHttpHeader: cl.config.WebsocketTrackerHttpHeader,
-		ICEServers:                 cl.ICEServers(),
-		DialContext:                cl.config.TrackerDialContext,
-		callbacks:                  &cl.config.Callbacks,
-		OnConn: func(dc webtorrent.DataChannelConn, dcc webtorrent.DataChannelContext) {
-			cl.lock()
-			defer cl.unlock()
-			t, ok := cl.torrentsByShortHash[dcc.InfoHash]
-			if !ok {
-				cl.logger.WithDefaultLevel(log.Warning).Printf(
-					"got webrtc conn for unloaded torrent with infohash %x",
-					dcc.InfoHash,
-				)
-				dc.Close()
-				return
-			}
-			go t.onWebRtcConn(dc, dcc)
-		},
-	}
-
-	cl.webseedRequestTimer = time.AfterFunc(webseedRequestUpdateTimerInterval, cl.updateWebseedRequestsTimerFunc)
 
 	err = cl.checkConfig()
 	return
@@ -505,6 +508,9 @@ func (cl *Client) eachDhtServer(f func(DhtServer)) {
 
 // Stops the client. All connections to peers are closed and all activity will come to a halt.
 func (cl *Client) Close() (errs []error) {
+	// Close atomically, allow systems to break early if we're contended on the Client lock.
+	cl.closed.Set()
+	cl.webseedRequestTimer.Stop()
 	var closeGroup sync.WaitGroup // For concurrent cleanup to complete before returning
 	cl.lock()
 	for t := range cl.torrents {
@@ -520,7 +526,6 @@ func (cl *Client) Close() (errs []error) {
 	for i := range cl.onClose {
 		cl.onClose[len(cl.onClose)-1-i]()
 	}
-	cl.closed.Set()
 	cl.unlock()
 	cl.event.Broadcast()
 	closeGroup.Wait() // defer is LIFO. We want to Wait() after cl.unlock()

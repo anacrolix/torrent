@@ -51,7 +51,7 @@ type ClientConfig struct {
 	ClientTrackerConfig
 	ClientDhtConfig
 
-	// Store torrent file data in this directory unless .DefaultStorage is
+	// Store torrent file data in this directory unless DefaultStorage is
 	// specified.
 	DataDir string `long:"data-dir" description:"directory to store downloaded torrent data"`
 	// The address to listen for new uTP and TCP BitTorrent protocol connections. DHT shares a UDP

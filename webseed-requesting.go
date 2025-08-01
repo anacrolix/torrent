@@ -398,6 +398,9 @@ func (cl *Client) scheduleImmediateWebseedRequestUpdate() {
 }
 
 func (cl *Client) updateWebseedRequestsTimerFunc() {
+	if cl.closed.IsSet() {
+		return
+	}
 	cl.lock()
 	defer cl.unlock()
 	cl.updateWebseedRequestsAndResetTimer()

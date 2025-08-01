@@ -659,6 +659,18 @@ func (t *Torrent) setInfoBytesLocked(b []byte) (err error) {
 	return nil
 }
 
+// Used in tests.
+func (t *Torrent) setInfoUnlocked(info *metainfo.Info) (err error) {
+	t.cl.lock()
+	defer t.cl.unlock()
+	err = t.setInfo(info)
+	if err != nil {
+		return
+	}
+	t.onSetInfo()
+	return
+}
+
 func (t *Torrent) haveAllMetadataPieces() bool {
 	if t.haveInfo() {
 		return true
@@ -1700,9 +1712,12 @@ func (t *Torrent) openNewConns() (initiated int) {
 func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 	p := t.piece(piece)
 	uncached := t.pieceCompleteUncached(piece)
-	// This isn't being handled. Here we should probably be storing Option[bool] for completion and
-	// filtering out errors. Also, errors should probably disable downloading here too.
-	panicif.Err(uncached.Err)
+	if uncached.Err != nil {
+		t.slogger().Error("error getting piece completion", "err", uncached.Err)
+		t.disallowDataDownloadLocked()
+	}
+	// TODO: Here we should probably be storing Option[bool] for completion and filtering out
+	// errors.
 	cached := p.completion()
 	changed := cached != uncached
 	complete := uncached.Ok && uncached.Complete

@@ -13,7 +13,7 @@ import (
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
-	qt "github.com/go-quicktest/qt"
+	"github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -227,7 +227,7 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	var err error
 	cl := newTestingClient(t)
-	mi, info := testutil.Greeting.Generate(5)
+	mi, _ := testutil.Greeting.Generate(5)
 	tt := cl.newTorrentOpt(AddTorrentOpts{InfoHash: mi.HashInfoBytes()})
 	tt.setChunkSize(2)
 	g.MakeMapIfNil(&tt.conns)
@@ -236,13 +236,16 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	pc.legacyPeerImpl = &pc
 	pc.initRequestState()
 	g.InitNew(&pc.callbacks)
+	tt.cl.lock()
 	tt.conns[&pc] = struct{}{}
 	err = pc.peerSentHave(0)
+	tt.cl.unlock()
 	qt.Assert(t, qt.IsNil(err))
-	err = tt.setInfo(&info)
+	err = tt.SetInfoBytes(mi.InfoBytes)
 	qt.Assert(t, qt.IsNil(err))
-	tt.onSetInfo()
+	tt.cl.lock()
 	err = pc.peerSentHaveNone()
+	tt.cl.unlock()
 	qt.Assert(t, qt.IsNil(err))
 	var wg sync.WaitGroup
 	tt.close(&wg)

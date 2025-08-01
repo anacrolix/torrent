@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	g "github.com/anacrolix/generics"
-	qt "github.com/go-quicktest/qt"
+	"github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
@@ -279,11 +279,12 @@ func TestHaveAllThenBitfield(t *testing.T) {
 	pc.peerSentBitfield([]bool{false, false, true, false, true, true, false, false})
 	qt.Check(t, qt.Equals(pc.peerMinPieces, 6))
 	qt.Check(t, qt.HasLen(pc.t.connsWithAllPieces, 0))
-	qt.Assert(t, qt.IsNil(pc.t.setInfo(&metainfo.Info{
-		PieceLength: 0,
+	qt.Assert(t, qt.IsNil(pc.t.setInfoUnlocked(&metainfo.Info{
+		Name:        "herp",
+		Length:      7,
+		PieceLength: 1,
 		Pieces:      make([]byte, pieceHash.Size()*7),
 	})))
-	pc.t.onSetInfo()
 	qt.Check(t, qt.Equals(tt.numPieces(), 7))
 	qt.Check(t, qt.DeepEquals(tt.pieceAvailabilityRuns(), []pieceAvailabilityRun{
 		// The last element of the bitfield is irrelevant, as the Torrent actually only has 7

@@ -75,16 +75,15 @@ func (me *filePieceImpl) Completion() (c Completion) {
 
 func (me *filePieceImpl) iterFileSegments() iter.Seq2[int, segments.Extent] {
 	return func(yield func(int, segments.Extent) bool) {
+		pieceExtent := me.extent()
 		noFiles := true
-		for i, extent := range me.t.segmentLocater.LocateIter(me.extent()) {
+		for i, extent := range me.t.segmentLocater.LocateIter(pieceExtent) {
 			noFiles = false
 			if !yield(i, extent) {
 				return
 			}
 		}
-		if noFiles {
-			panic("files do not cover piece extent")
-		}
+		panicif.NotEq(noFiles, pieceExtent.Length == 0)
 	}
 }
 

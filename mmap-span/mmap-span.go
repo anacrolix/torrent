@@ -2,11 +2,11 @@ package mmapSpan
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"sync"
 
+	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/torrent/segments"
 )
 
@@ -78,21 +78,14 @@ func (ms *MMapSpan) locateCopy(
 	p []byte,
 	off int64,
 ) (n int) {
-	ms.segmentLocater.Locate(
-		segments.Extent{off, int64(len(p))},
-		func(i int, e segments.Extent) bool {
-			mMapBytes := ms.mMaps[i].Bytes()[e.Start:]
-			// log.Printf("got segment %v: %v, copying %v, %v", i, e, len(p), len(mMapBytes))
-			_n := copyBytes(copyArgs(p, mMapBytes))
-			p = p[_n:]
-			n += _n
-
-			if segments.Int(_n) != e.Length {
-				panic(fmt.Sprintf("did %d bytes, expected to do %d", _n, e.Length))
-			}
-			return true
-		},
-	)
+	for i, e := range ms.segmentLocater.LocateIter(segments.Extent{off, int64(len(p))}) {
+		mMapBytes := ms.mMaps[i].Bytes()[e.Start:]
+		// log.Printf("got segment %v: %v, copying %v, %v", i, e, len(p), len(mMapBytes))
+		_n := copyBytes(copyArgs(p, mMapBytes))
+		p = p[_n:]
+		n += _n
+		panicif.NotEq(segments.Int(_n), e.Length)
+	}
 	return
 }
 

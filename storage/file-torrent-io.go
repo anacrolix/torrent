@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/torrent/segments"
 )
 
@@ -48,14 +49,28 @@ func (fst fileTorrentImplIO) readFileAt(file file, b []byte, off int64) (n int, 
 
 // Only returns EOF at the end of the torrent. Premature EOF is ErrUnexpectedEOF.
 func (fst fileTorrentImplIO) ReadAt(b []byte, off int64) (n int, err error) {
-	fst.fts.segmentLocater.Locate(segments.Extent{off, int64(len(b))}, func(i int, e segments.Extent) bool {
+	for i, e := range fst.fts.segmentLocater.LocateIter(
+		segments.Extent{off, int64(len(b))},
+	) {
 		n1, err1 := fst.readFileAt(fst.fts.file(i), b[:e.Length], e.Start)
 		n += n1
 		b = b[n1:]
-		err = err1
-		return err == nil // && int64(n1) == e.Length
-	})
-	if len(b) != 0 && err == nil {
+		if segments.Int(n1) == e.Length {
+			switch err1 {
+			// ReaderAt.ReadAt contract.
+			case nil, io.EOF:
+			default:
+				err = err1
+				return
+			}
+		} else {
+			panicif.Nil(err1)
+			err = err1
+			return
+		}
+	}
+	if len(b) != 0 {
+		// We're at the end of the torrent.
 		err = io.EOF
 	}
 	return
@@ -85,28 +100,28 @@ func (fst fileTorrentImplIO) openForWrite(file file) (f *os.File, err error) {
 }
 
 func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
-	// log.Printf("write at %v: %v bytes", off, len(p))
-	fst.fts.segmentLocater.Locate(
+	for i, e := range fst.fts.segmentLocater.LocateIter(
 		segments.Extent{off, int64(len(p))},
-		func(i int, e segments.Extent) bool {
-			var f *os.File
-			f, err = fst.openForWrite(fst.fts.file(i))
-			if err != nil {
-				return false
-			}
-			var n1 int
-			n1, err = f.WriteAt(p[:e.Length], e.Start)
-			// log.Printf("%v %v wrote %v: %v", i, e, n1, err)
-			closeErr := f.Close()
-			n += n1
-			p = p[n1:]
-			if err == nil {
-				err = closeErr
-			}
-			if err == nil && int64(n1) != e.Length {
-				err = io.ErrShortWrite
-			}
-			return err == nil
-		})
+	) {
+		var f *os.File
+		f, err = fst.openForWrite(fst.fts.file(i))
+		if err != nil {
+			return
+		}
+		var n1 int
+		n1, err = f.WriteAt(p[:e.Length], e.Start)
+		closeErr := f.Close()
+		n += n1
+		p = p[n1:]
+		if err == nil {
+			err = closeErr
+		}
+		if err == nil && int64(n1) != e.Length {
+			err = io.ErrShortWrite
+		}
+		if err != nil {
+			return
+		}
+	}
 	return
 }

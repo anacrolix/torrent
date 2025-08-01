@@ -107,15 +107,13 @@ func (ws *Client) UrlForFileIndex(fileIndex int) string {
 func (ws *Client) StartNewRequest(r RequestSpec, debugLogger *slog.Logger) Request {
 	ctx, cancel := context.WithCancel(context.TODO())
 	var requestParts []requestPart
-	if !ws.fileIndex.Locate(r, func(i int, e segments.Extent) bool {
+	for i, e := range ws.fileIndex.LocateIter(r) {
 		req, err := newRequest(
 			ctx,
 			ws.Url, i, ws.info, e.Start, e.Length,
 			ws.PathEscaper,
 		)
-		if err != nil {
-			panic(err)
-		}
+		panicif.Err(err)
 		part := requestPart{
 			req:                 req,
 			e:                   e,
@@ -132,10 +130,11 @@ func (ws *Client) StartNewRequest(r RequestSpec, debugLogger *slog.Logger) Reque
 			return ws.HttpClient.Do(req)
 		}
 		requestParts = append(requestParts, part)
-		return true
-	}) {
-		panic("request out of file bounds")
 	}
+	// Technically what we want to ensure is that all parts exist consecutively. If the file data
+	// isn't consecutive, then it is piece aligned and we wouoldn't need to be doing multiple
+	// requests. TODO: Assert this.
+	panicif.Zero(len(requestParts))
 	body, w := io.Pipe()
 	req := Request{
 		cancel:   cancel,

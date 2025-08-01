@@ -18,13 +18,15 @@ func minFileLengthsForTorrentExtent(
 	fileSegmentsIndex segments.Index,
 	off, n int64,
 	each func(fileIndex int, length int64) bool,
-) bool {
-	return fileSegmentsIndex.Locate(segments.Extent{
+) {
+	for fileIndex, segmentBounds := range fileSegmentsIndex.LocateIter(segments.Extent{
 		Start:  off,
 		Length: n,
-	}, func(fileIndex int, segmentBounds segments.Extent) bool {
-		return each(fileIndex, segmentBounds.Start+segmentBounds.Length)
-	})
+	}) {
+		if !each(fileIndex, segmentBounds.Start+segmentBounds.Length) {
+			return
+		}
+	}
 }
 
 func fsync(filePath string) (err error) {

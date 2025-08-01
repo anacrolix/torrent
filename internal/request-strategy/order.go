@@ -36,10 +36,9 @@ func pieceOrderLess(i, j *PieceRequestOrderItem) multiless.Computation {
 	).Int(
 		i.Key.Index, j.Key.Index,
 	).Lazy(func() multiless.Computation {
-		return multiless.New().Cmp(bytes.Compare(
-			i.Key.InfoHash[:],
-			j.Key.InfoHash[:],
-		))
+		a := i.Key.InfoHash.Value()
+		b := j.Key.InfoHash.Value()
+		return multiless.New().Cmp(bytes.Compare(a[:], b[:]))
 	})
 }
 
@@ -67,7 +66,7 @@ func GetRequestablePieces(
 		maxUnverifiedBytes         = input.MaxUnverifiedBytes()
 	)
 	pro.tree.Scan(func(item PieceRequestOrderItem) bool {
-		ih := item.Key.InfoHash
+		ih := item.Key.InfoHash.Value()
 		t := input.Torrent(ih)
 		piece := t.Piece(item.Key.Index)
 		pieceLength := t.PieceLength()

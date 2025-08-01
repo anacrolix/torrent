@@ -558,7 +558,7 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 
 func (t *Torrent) pieceRequestOrderKey(i int) request_strategy.PieceRequestOrderKey {
 	return request_strategy.PieceRequestOrderKey{
-		InfoHash: *t.canonicalShortInfohash(),
+		InfoHash: unique.Make(*t.canonicalShortInfohash()),
 		Index:    i,
 	}
 }

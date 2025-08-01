@@ -2,6 +2,7 @@ package requestStrategy
 
 import (
 	"iter"
+	"unique"
 
 	g "github.com/anacrolix/generics"
 
@@ -27,8 +28,8 @@ type PieceRequestOrder struct {
 }
 
 type PieceRequestOrderKey struct {
+	InfoHash unique.Handle[metainfo.Hash]
 	Index    int
-	InfoHash metainfo.Hash
 }
 
 type PieceRequestOrderState struct {

@@ -866,6 +866,8 @@ func (t *Torrent) writeStatus(w io.Writer) {
 		}
 		fmt.Fprintln(w)
 	}
+	// Note this might be shared with other torrents.
+	fmt.Fprintf(w, "Piece request order length: %v\n", t.getPieceRequestOrder().Len())
 	fmt.Fprintf(w, "Piece length: %s\n",
 		func() string {
 			if t.haveInfo() {
@@ -1161,7 +1163,7 @@ func (t *Torrent) bitfield() (bf []bool) {
 }
 
 func (t *Torrent) pieceNumChunks(piece pieceIndex) chunkIndexType {
-	return chunkIndexType((t.pieceLength(piece) + t.chunkSize - 1) / t.chunkSize)
+	return chunkIndexType(intCeilDiv(t.pieceLength(piece), t.chunkSize))
 }
 
 func (t *Torrent) chunksPerRegularPiece() chunkIndexType {
@@ -3552,8 +3554,27 @@ func (t *Torrent) getFile(fileIndex int) *File {
 
 func (t *Torrent) fileMightBePartial(fileIndex int) bool {
 	f := t.getFile(fileIndex)
-	beginPieceIndex := f.BeginPieceIndex()
-	endPieceIndex := f.EndPieceIndex()
+	return t.piecesMightBePartial(f.BeginPieceIndex(), f.EndPieceIndex())
+}
+
+func (t *Torrent) expandPieceRangeToFullFiles(beginPieceIndex, endPieceIndex pieceIndex) (expandedBegin, expandedEnd pieceIndex) {
+	// Expand the piece range to include all pieces of the files in the original range.
+	firstFile := t.getFile(t.piece(beginPieceIndex).beginFile)
+	lastFile := t.getFile(t.piece(endPieceIndex-1).endFile - 1)
+	expandedBegin = firstFile.BeginPieceIndex()
+	expandedEnd = lastFile.EndPieceIndex()
+	return
+}
+
+// Pieces in the range [begin, end) may have partially complete files. Note we only check for dirty chunks and either all or no pieces being complete.
+func (t *Torrent) filesInPieceRangeMightBePartial(begin, end pieceIndex) bool {
+	begin, end = t.expandPieceRangeToFullFiles(begin, end)
+	return t.piecesMightBePartial(begin, end)
+}
+
+// Pieces in the range [begin, end) are dirty, or in a mixed completion state.
+func (t *Torrent) piecesMightBePartial(beginPieceIndex, endPieceIndex int) bool {
+	// Check for dirtied chunks.
 	if t.dirtyChunks.IntersectsWithInterval(
 		uint64(t.pieceRequestIndexBegin(beginPieceIndex)),
 		uint64(t.pieceRequestIndexBegin(endPieceIndex)),
@@ -3562,6 +3583,7 @@ func (t *Torrent) fileMightBePartial(fileIndex int) bool {
 		// been started.
 		return true
 	}
+	// Check for mixed completion.
 	var r roaring.Bitmap
 	r.AddRange(uint64(beginPieceIndex), uint64(endPieceIndex))
 	switch t._completedPieces.AndCardinality(&r) {
@@ -3618,4 +3640,10 @@ func (t *Torrent) incrementPiecesDirtiedStats(p *Piece, inc func(stats *ConnStat
 	// TODO: Have a debug assert/dev logging version of this.
 	panicif.GreaterThan(len(distinctUpstreamConnStats), 6)
 	maps.Keys(distinctUpstreamConnStats)(inc)
+}
+
+// Maximum end request index for the torrent (one past the last). There might be other requests that
+// don't make sense if padding files and v2 are in use.
+func (t *Torrent) maxEndRequest() RequestIndex {
+	return RequestIndex(intCeilDiv(uint64(t.length()), t.chunkSize.Uint64()))
 }

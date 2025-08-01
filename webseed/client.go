@@ -10,8 +10,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/RoaringBitmap/roaring"
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/dustin/go-humanize"
 	"golang.org/x/time/rate"
@@ -175,6 +177,10 @@ func (me *Client) checkContentLength(resp *http.Response, part requestPart, expe
 	}
 }
 
+var bufPool = &sync.Pool{New: func() any {
+	return g.PtrTo(make([]byte, 128<<10)) // 128 KiB. 4x the default.
+}}
+
 // Reads the part in full. All expected bytes must be returned or there will an error returned.
 func (me *Client) recvPartResult(ctx context.Context, w io.Writer, part requestPart, resp *http.Response) error {
 	defer resp.Body.Close()
@@ -191,7 +197,9 @@ func (me *Client) recvPartResult(ctx context.Context, w io.Writer, part requestP
 	case http.StatusPartialContent:
 		// The response should be just as long as we requested.
 		me.checkContentLength(resp, part, part.e.Length)
-		copied, err := io.Copy(w, body)
+		buf := bufPool.Get().(*[]byte)
+		defer bufPool.Put(buf)
+		copied, err := io.CopyBuffer(w, body, *buf)
 		if err != nil {
 			return err
 		}

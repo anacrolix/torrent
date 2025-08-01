@@ -108,7 +108,8 @@ func (p *Piece) numDirtyChunks() chunkIndexType {
 	return chunkIndexType(roaringBitmapRangeCardinality[RequestIndex](
 		&p.t.dirtyChunks,
 		p.requestIndexBegin(),
-		p.requestIndexMaxEnd()))
+		p.t.pieceRequestIndexBegin(p.index+1),
+	))
 }
 
 func (p *Piece) unpendChunkIndex(i chunkIndexType) {
@@ -156,9 +157,8 @@ func (p *Piece) chunkIndexDirty(chunk chunkIndexType) bool {
 	return p.t.dirtyChunks.Contains(p.requestIndexBegin() + chunk)
 }
 
-func (p *Piece) iterCleanChunks() iter.Seq[chunkIndexType] {
+func (p *Piece) iterCleanChunks(it *roaring.IntIterator) iter.Seq[chunkIndexType] {
 	return func(yield func(chunkIndexType) bool) {
-		var it roaring.IntIterator
 		it.Initialize(&p.t.dirtyChunks.Bitmap)
 		begin := uint32(p.requestIndexBegin())
 		end := uint32(p.requestIndexMaxEnd())
@@ -175,7 +175,7 @@ func (p *Piece) iterCleanChunks() iter.Seq[chunkIndexType] {
 }
 
 func (p *Piece) firstCleanChunk() (_ g.Option[chunkIndexType]) {
-	for some := range p.iterCleanChunks() {
+	for some := range p.iterCleanChunks(&p.t.cl.roaringIntIterator) {
 		return g.Some(some)
 	}
 	return
@@ -342,7 +342,12 @@ func (p *Piece) requestIndexBegin() RequestIndex {
 // The maximum end request index for the piece. Some of the requests might not be valid, it's for
 // cleaning up arrays and bitmaps in broad strokes.
 func (p *Piece) requestIndexMaxEnd() RequestIndex {
-	return p.t.pieceRequestIndexBegin(p.index + 1)
+	new := min(p.t.pieceRequestIndexBegin(p.index+1), p.t.maxEndRequest())
+	if false {
+		old := p.t.pieceRequestIndexBegin(p.index + 1)
+		panicif.NotEq(new, old)
+	}
+	return new
 }
 
 func (p *Piece) availability() int {

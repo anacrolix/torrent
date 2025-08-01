@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
@@ -52,7 +53,7 @@ import (
 	"github.com/anacrolix/torrent/webtorrent"
 )
 
-const webseedRequestUpdateTimerInterval = time.Second
+const webseedRequestUpdateTimerInterval = 5 * time.Second
 
 // Clients contain zero or more Torrents. A Client manages a blocklist, the
 // TCP/UDP protocol ports, and DHT as desired.
@@ -62,9 +63,11 @@ type Client struct {
 	connStats AllConnStats
 	counters  TorrentStatCounters
 
-	_mu    lockWithDeferreds
-	event  sync.Cond
-	closed chansync.SetOnce
+	_mu lockWithDeferreds
+	// Used in constrained situations when the lock is held.
+	roaringIntIterator roaring.IntIterator
+	event              sync.Cond
+	closed             chansync.SetOnce
 
 	config  *ClientConfig
 	logger  log.Logger
@@ -111,6 +114,7 @@ type Client struct {
 	upnpMappings []*upnpMapping
 
 	webseedRequestTimer *time.Timer
+	webseedUpdateReason updateRequestReason
 
 	activePieceHashers int
 }

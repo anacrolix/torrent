@@ -4,8 +4,13 @@ check:
 act:
     act -j test --matrix go-version:'1.24' --env-file .empty.env
 
+GOPPROF := env("GOPPROF", "http")
+
+test-short: build-possum
+    GOPPROF='{{GOPPROF}}' go test -race -failfast -short ./...
+
 test *args: build-possum
-    CGO_LDFLAGS="-L$(realpath storage/possum/lib/target/debug)" go test -race -failfast {{ args }} ./...
+    GOPPROF='{{GOPPROF}}' go test -race -failfast {{ args }} ./...
 
 build-possum:
     cd storage/possum/lib && cargo build

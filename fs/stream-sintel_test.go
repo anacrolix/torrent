@@ -76,7 +76,10 @@ func TestStreamSintelMagnet(t *testing.T) {
 	panicif.Err(err)
 	err = os.WriteFile(filepath.Join(metainfoDir, "sintel.magnet"), []byte(m.String()), 0600)
 	panicif.Err(err)
-	cl, err := torrent.NewClient(nil)
+	cfg := torrent.NewDefaultClientConfig()
+	//cfg.Debug = true
+	cfg.ListenPort = 0
+	cl, err := torrent.NewClient(cfg)
 	panicif.Err(err)
 	testutil.ExportStatusWriter(cl, "", t)
 	defer cl.Close()

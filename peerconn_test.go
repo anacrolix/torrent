@@ -365,15 +365,15 @@ func TestReceiveLargeRequest(t *testing.T) {
 	req.Length = defaultChunkSize
 	qt.Assert(t, qt.IsTrue(pc.fastEnabled()))
 	qt.Check(t, qt.IsNil(pc.onReadRequest(req, false)))
-	qt.Check(t, qt.HasLen(pc.peerRequests, 1))
+	qt.Check(t, qt.HasLen(pc.unreadPeerRequests, 1))
 	req.Length = 2 << 20
 	qt.Check(t, qt.IsNil(pc.onReadRequest(req, false)))
-	qt.Check(t, qt.HasLen(pc.peerRequests, 2))
-	pc.peerRequests = nil
+	qt.Check(t, qt.HasLen(pc.unreadPeerRequests, 2))
+	pc.unreadPeerRequests = nil
 	pc.t.cl.config.UploadRateLimiter = rate.NewLimiter(1, defaultChunkSize)
 	req.Length = defaultChunkSize
 	qt.Check(t, qt.IsNil(pc.onReadRequest(req, false)))
-	qt.Check(t, qt.HasLen(pc.peerRequests, 1))
+	qt.Check(t, qt.HasLen(pc.unreadPeerRequests, 1))
 	req.Length = 2 << 20
 	qt.Check(t, qt.IsNil(pc.onReadRequest(req, false)))
 	qt.Check(t, qt.Equals(pc.messageWriter.writeBuffer.Len(), 17))

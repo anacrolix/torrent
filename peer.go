@@ -19,7 +19,6 @@ import (
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/multiless"
 
-	"github.com/anacrolix/torrent/internal/alloclim"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
@@ -83,7 +82,6 @@ type (
 		// Stuff controlled by the remote peer.
 		peerInterested        bool
 		peerChoking           bool
-		peerRequests          map[Request]*peerRequestState
 		PeerPrefersEncryption bool // as indicated by 'e' field in extension handshake
 		// The highest possible number of pieces the torrent could have based on
 		// communication with the peer. Generally only useful until we have the
@@ -94,11 +92,6 @@ type (
 	}
 
 	PeerSource string
-
-	peerRequestState struct {
-		data             []byte
-		allocReservation *alloclim.Reservation
-	}
 
 	PeerRemoteAddr interface {
 		String() string
@@ -231,9 +224,6 @@ func (p *Peer) close() {
 	}
 	if p.updateRequestsTimer != nil {
 		p.updateRequestsTimer.Stop()
-	}
-	for _, prs := range p.peerRequests {
-		prs.allocReservation.Drop()
 	}
 	p.legacyPeerImpl.onClose()
 	if p.t != nil {

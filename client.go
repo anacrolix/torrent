@@ -1735,7 +1735,6 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 		connString:      opts.connString,
 		conn:            nc,
 	}
-	c.peerRequestDataAllocLimiter.Max = int64(cl.config.MaxAllocPeerRequestDataPerConn)
 	c.initRequestState()
 	// TODO: Need to be much more explicit about this, including allowing non-IP bannable addresses.
 	if opts.remoteAddr != nil {

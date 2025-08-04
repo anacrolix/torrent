@@ -1005,7 +1005,7 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 		UrlList: func() []string {
 			ret := make([]string, 0, len(t.webSeeds))
 			for url := range t.webSeeds {
-				ret = append(ret, string(url))
+				ret = append(ret, unique.Handle[string](url).Value())
 			}
 			return ret
 		}(),
@@ -3030,7 +3030,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	if t.cl.config.DisableWebseeds {
 		return false
 	}
-	if _, ok := t.webSeeds[webseedUrlKey(url)]; ok {
+	if _, ok := t.webSeeds[webseedUrlKey(unique.Make(url))]; ok {
 		return false
 	}
 	// I don't think Go http supports pipelining requests. However, we can have more ready to go
@@ -3084,7 +3084,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	if t.haveInfo() {
 		ws.onGotInfo(t.info)
 	}
-	t.webSeeds[webseedUrlKey(url)] = &ws
+	t.webSeeds[webseedUrlKey(unique.Make(url))] = &ws
 	ws.peer.onNeedUpdateRequests("Torrent.addWebSeed")
 	return true
 }

@@ -35,7 +35,7 @@ func init() {
 type (
 	webseedHostKey       string
 	webseedHostKeyHandle = unique.Handle[webseedHostKey]
-	webseedUrlKey        string
+	webseedUrlKey        unique.Handle[string]
 )
 
 /*
@@ -263,9 +263,9 @@ func (me webseedRequestPlan) String() string {
 
 // Distinct webseed request data when different offsets are not allowed.
 type aprioriWebseedRequestKey struct {
+	url        webseedUrlKey
 	t          *Torrent
 	sliceIndex RequestIndex
-	url        webseedUrlKey
 }
 
 func (me *aprioriWebseedRequestKey) String() string {

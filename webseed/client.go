@@ -121,15 +121,20 @@ func (ws *Client) StartNewRequest(r RequestSpec, debugLogger *slog.Logger) Reque
 			e:                   e,
 			responseBodyWrapper: ws.ResponseBodyWrapper,
 		}
-		part.do = func() (*http.Response, error) {
+		part.do = func() (resp *http.Response, err error) {
+			resp, err = ws.HttpClient.Do(req)
 			if PrintDebug {
-				debugLogger.Debug(
-					"doing request for part",
-					"url", req.URL,
-					"file size", humanize.Bytes(uint64(e.Length)),
-					"range", req.Header.Get("Range"))
+				if err == nil {
+					debugLogger.Debug(
+						"request for part",
+						"url", req.URL,
+						"file size", humanize.Bytes(uint64(e.Length)),
+						"range", req.Header.Get("Range"),
+						"CF-Cache-Status", resp.Header.Get("CF-Cache-Status"),
+					)
+				}
 			}
-			return ws.HttpClient.Do(req)
+			return
 		}
 		requestParts = append(requestParts, part)
 	}
@@ -249,6 +254,7 @@ func (me *Client) readRequestPartResponses(ctx context.Context, w io.Writer, par
 	for _, part := range parts {
 		var resp *http.Response
 		resp, err = part.do()
+		// TODO: Does debugging caching belong here?
 		if err == nil {
 			err = me.recvPartResult(ctx, w, part, resp)
 		}

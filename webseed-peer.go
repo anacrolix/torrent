@@ -54,7 +54,8 @@ func (me *webseedPeer) isLowOnRequests() bool {
 
 // Webseed requests are issued globally so per-connection reasons or handling make no sense.
 func (me *webseedPeer) onNeedUpdateRequests(reason updateRequestReason) {
-	me.peer.cl.scheduleImmediateWebseedRequestUpdate(reason)
+	// Too many reasons here: Can't predictably determine when we need to rerun updates.
+	//me.peer.cl.scheduleImmediateWebseedRequestUpdate(reason)
 }
 
 func (me *webseedPeer) expectingChunks() bool {
@@ -215,7 +216,7 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 	// Delete this entry after waiting above on an error, to prevent more requests.
 	ws.deleteActiveRequest(webseedRequest)
 	cl := ws.peer.cl
-	if err == nil && cl.numWebSeedRequests[ws.hostKey] <= webseedHostRequestConcurrency/2 {
+	if err == nil && cl.numWebSeedRequests[ws.hostKey] == webseedHostRequestConcurrency/2 {
 		cl.updateWebseedRequestsWithReason("webseedPeer request completed")
 	}
 	locker.Unlock()

@@ -45,13 +45,6 @@ type (
 - Initiate missing requests that fit into the available limits.
 */
 func (cl *Client) updateWebseedRequests() {
-	if webseed.PrintDebug {
-		started := time.Now()
-		defer func() {
-			now := time.Now()
-			fmt.Printf("%v: updateWebseedRequests took %v\n", time.Now(), now.Sub(started))
-		}()
-	}
 	type aprioriMapValue struct {
 		startIndex RequestIndex
 		webseedRequestOrderValue
@@ -454,8 +447,15 @@ func (cl *Client) updateWebseedRequestsAndResetTimer() {
 	pprof.Do(context.Background(), pprof.Labels(
 		"reason", string(cl.webseedUpdateReason),
 	), func(_ context.Context) {
-		cl.updateWebseedRequests()
+		started := time.Now()
+		reason := cl.webseedUpdateReason
 		cl.webseedUpdateReason = ""
+		cl.updateWebseedRequests()
+		panicif.NotZero(cl.webseedUpdateReason)
+		if webseed.PrintDebug {
+			now := time.Now()
+			fmt.Printf("%v: updateWebseedRequests took %v (reason: %v)\n", now, now.Sub(started), reason)
+		}
 	})
 	// Timer should always be stopped before the last call. TODO: Don't reset timer if there's
 	// nothing to do (no possible requests in update).

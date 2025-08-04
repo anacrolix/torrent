@@ -220,6 +220,11 @@ func (me *Client) recvPartResult(ctx context.Context, w io.Writer, part requestP
 			return ErrBadResponse{"resp status ok but requested range", resp}
 		}
 		if discard != 0 {
+			if PrintDebug {
+				fmt.Printf("resp status ok but requested range [url=%q, range=%q]",
+					part.req.URL,
+					part.req.Header.Get("Range"))
+			}
 			log.Printf("resp status ok but requested range [url=%q, range=%q]",
 				part.req.URL,
 				part.req.Header.Get("Range"))

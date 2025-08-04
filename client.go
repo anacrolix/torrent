@@ -101,6 +101,7 @@ type Client struct {
 	numHalfOpen   int
 
 	websocketTrackers  websocketTrackers
+	regularTrackers    map[clientTrackerKey]*trackerAnnouncer
 	numWebSeedRequests map[webseedHostKeyHandle]int
 
 	activeAnnounceLimiter limiter.Instance

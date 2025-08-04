@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"bytes"
+	"cmp"
 	"container/heap"
 	"context"
 	"crypto/sha1"
@@ -110,8 +111,7 @@ type Torrent struct {
 	// Read-locked for using storage, and write-locked for Closing.
 	storageLock sync.RWMutex
 
-	// TODO: Only announce stuff is used?
-	metainfo metainfo.MetaInfo
+	announceList metainfo.AnnounceList
 
 	// The info dict. nil if we don't have it (yet).
 	info *metainfo.Info
@@ -140,9 +140,8 @@ type Torrent struct {
 	// the swarm.
 	peers prioritizedPeers
 	// Whether we want to know more peers.
-	wantPeersEvent missinggo.Event
-	// An announcer for each tracker URL.
-	trackerAnnouncers map[torrentTrackerAnnouncerKey]torrentTrackerAnnouncer
+	wantPeersEvent      missinggo.Event
+	lastTrackerAnnounce map[trackerAnnounceKey]lastTrackerAnnounce
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
 	numDHTAnnounces int
 
@@ -208,6 +207,11 @@ type Torrent struct {
 	initialPieceCheckDisabled bool
 	// See AddTorrentOpts.IgnoreUnverifiedPieceCompletion
 	ignoreUnverifiedPieceCompletion bool
+}
+
+type trackerAnnounceKey struct {
+	announceKey
+	clientTrackerKey
 }
 
 type torrentTrackerAnnouncerKey struct {
@@ -919,26 +923,6 @@ func (t *Torrent) writeStatus(w io.Writer) {
 
 	fmt.Fprintf(w, "Enabled trackers:\n")
 	{
-		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-		fmt.Fprintf(tw, "    URL\tExtra\n")
-		sortedTrackerAnnouncers := slices.SortedFunc(
-			maps.Values(t.trackerAnnouncers),
-			func(l, r torrentTrackerAnnouncer) int {
-				lu := l.URL()
-				ru := r.URL()
-				var luns, runs url.URL = *lu, *ru
-				luns.Scheme = ""
-				runs.Scheme = ""
-				var ml multiless.Computation
-				ml = multiless.EagerOrdered(ml, luns.String(), runs.String())
-				ml = multiless.EagerOrdered(ml, lu.String(), ru.String())
-				return ml.OrderingInt()
-			},
-		)
-		for _, ta := range sortedTrackerAnnouncers {
-			fmt.Fprintf(tw, "    %q\t%v\n", ta.URL(), ta.statusLine())
-		}
-		tw.Flush()
 	}
 
 	fmt.Fprintf(w, "DHT Announces: %d\n", t.numDHTAnnounces)
@@ -977,6 +961,41 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	t.writePeerStatuses(w, peerIter)
 }
 
+func (t *Torrent) writeTrackerStatus(w io.Writer) {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(tw, "    URL\tExtra\n")
+	announceKeys := slices.Collect(t.allAnnouncerKeys())
+	// TODO: Include lastAnnounce items that aren't in the announce list.
+	slices.SortFunc(announceKeys, func(l, r trackerAnnounceKey) int {
+		return cmp.Or(
+			bytes.Compare(l.infoHash[:], r.infoHash[:]),
+			cmp.Compare(l.Url, r.Url),
+			cmp.Compare(l.Network, r.Network),
+		)
+	})
+	for _, key := range announceKeys {
+		fmt.Fprintf(tw, "    %q\t%v\n", key, t.lastTrackerAnnounce[key].statusLine())
+	}
+	tw.Flush()
+}
+
+func (t *Torrent) allAnnouncerKeys() iter.Seq[trackerAnnounceKey] {
+	return func(yield func(trackerAnnounceKey) bool) {
+		for _, url := range t.announceList.DistinctValues() {
+			for clientKey := range t.cl.trackerUrlKeys(url) {
+				for ih := range t.shortInfohashes() {
+					if !yield(trackerAnnounceKey{
+						announceKey:      announceKey{ih},
+						clientTrackerKey: clientKey,
+					}) {
+						return
+					}
+				}
+			}
+		}
+	}
+}
+
 func (t *Torrent) writePeerStatuses(w io.Writer, peers iter.Seq[*Peer]) {
 	var buf bytes.Buffer
 	for c := range peers {
@@ -1000,7 +1019,7 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 		CreationDate: time.Now().Unix(),
 		Comment:      "dynamic metainfo from client",
 		CreatedBy:    "https://github.com/anacrolix/torrent",
-		AnnounceList: t.metainfo.UpvertedAnnounceList().Clone(),
+		AnnounceList: t.announceList.Clone(),
 		InfoBytes: func() []byte {
 			if t.haveInfo() {
 				return t.metadataBytes
@@ -1869,26 +1888,16 @@ func appendMissingTrackerTiers(existing [][]string, minNumTiers int) (ret [][]st
 }
 
 func (t *Torrent) addTrackers(announceList [][]string) {
-	fullAnnounceList := &t.metainfo.AnnounceList
-	t.metainfo.AnnounceList = appendMissingTrackerTiers(*fullAnnounceList, len(announceList))
+	fullAnnounceList := &t.announceList
+	t.announceList = appendMissingTrackerTiers(*fullAnnounceList, len(announceList))
 	for tierIndex, trackerURLs := range announceList {
 		(*fullAnnounceList)[tierIndex] = appendMissingStrings((*fullAnnounceList)[tierIndex], trackerURLs)
 	}
 	t.startMissingTrackerScrapers()
-	t.updateWantPeersEvent()
 }
 
 func (t *Torrent) modifyTrackers(announceList [][]string) {
-	var workers errgroup.Group
-	for _, v := range t.trackerAnnouncers {
-		workers.Go(func() error {
-			v.Stop()
-			return nil
-		})
-	}
-	workers.Wait()
-
-	clear(t.metainfo.AnnounceList)
+	t.announceList = nil
 	t.addTrackers(announceList)
 }
 
@@ -2105,87 +2114,22 @@ func (t *Torrent) startWebsocketAnnouncer(u url.URL, shortInfohash [20]byte) tor
 	return wst
 }
 
-func (t *Torrent) startScrapingTracker(_url string) {
-	if _url == "" {
-		return
-	}
-	u, err := url.Parse(_url)
-	if err != nil {
-		// URLs with a leading '*' appear to be a uTorrent convention to disable trackers.
-		if _url[0] != '*' {
-			t.logger.Levelf(log.Warning, "error parsing tracker url: %v", err)
-		}
-		return
-	}
-	if u.Scheme == "udp" {
-		u.Scheme = "udp4"
-		t.startScrapingTracker(u.String())
-		u.Scheme = "udp6"
-		t.startScrapingTracker(u.String())
-		return
-	}
-	if t.infoHash.Ok {
-		t.startScrapingTrackerWithInfohash(u, _url, t.infoHash.Value)
-	}
-	if t.infoHashV2.Ok {
-		t.startScrapingTrackerWithInfohash(u, _url, *t.infoHashV2.Value.ToShort())
-	}
-}
-
-func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr string, shortInfohash [20]byte) {
-	announcerKey := torrentTrackerAnnouncerKey{
-		shortInfohash: shortInfohash,
-		url:           urlStr,
-	}
-	if _, ok := t.trackerAnnouncers[announcerKey]; ok {
-		return
-	}
-	sl := func() torrentTrackerAnnouncer {
-		switch u.Scheme {
-		case "ws", "wss":
-			if t.cl.config.DisableWebtorrent {
-				return nil
-			}
-			return t.startWebsocketAnnouncer(*u, shortInfohash)
-		case "udp4":
-			if t.cl.config.DisableIPv4Peers || t.cl.config.DisableIPv4 {
-				return nil
-			}
-		case "udp6":
-			if t.cl.config.DisableIPv6 {
-				return nil
-			}
-		}
-		newAnnouncer := &trackerScraper{
-			shortInfohash:   shortInfohash,
-			u:               *u,
-			t:               t,
-			lookupTrackerIp: t.cl.config.LookupTrackerIp,
-			stopCh:          make(chan struct{}),
-			logger:          t.slogger().With("name", "tracker", "urlKey", u.String()),
-		}
-		go newAnnouncer.Run()
-		return newAnnouncer
-	}()
-	if sl == nil {
-		return
-	}
-	g.MakeMapIfNil(&t.trackerAnnouncers)
-	if g.MapInsert(t.trackerAnnouncers, announcerKey, sl).Ok {
-		panic("tracker announcer already exists")
+func (t *Torrent) startAnnouncingUrl(_url string) {
+	for key := range t.cl.trackerUrlKeys(_url) {
+		t.cl.startRegularTrackerAnnouncer(key)
 	}
 }
 
 // Adds and starts tracker scrapers for tracker URLs that aren't already
 // running.
 func (t *Torrent) startMissingTrackerScrapers() {
-	if t.cl.config.DisableTrackers {
-		return
-	}
-	t.startScrapingTracker(t.metainfo.Announce)
-	for _, tier := range t.metainfo.AnnounceList {
+	for _, tier := range t.announceList {
 		for _, url := range tier {
-			t.startScrapingTracker(url)
+			// Some i
+			if url == "" {
+				continue
+			}
+			t.startAnnouncingUrl(url)
 		}
 	}
 }
@@ -3498,18 +3442,27 @@ func (t *Torrent) canonicalShortInfohash() *infohash.T {
 	return t.infoHashV2.UnwrapPtr().ToShort()
 }
 
+// Deprecated: Use shortInfohashes instead.
 func (t *Torrent) eachShortInfohash(each func(short [20]byte)) {
-	if t.infoHash.Value == *t.infoHashV2.Value.ToShort() {
-		// This includes zero values, since they both should not be zero. Plus Option should not
-		// allow non-zero values for None.
-		panic("v1 and v2 info hashes should not be the same")
+	for short := range t.shortInfohashes() {
+		each(short)
 	}
-	if t.infoHash.Ok {
-		each(t.infoHash.Value)
-	}
-	if t.infoHashV2.Ok {
-		v2Short := *t.infoHashV2.Value.ToShort()
-		each(v2Short)
+}
+
+func (t *Torrent) shortInfohashes() iter.Seq[[20]byte] {
+	return func(yield func([20]byte) bool) {
+		if t.infoHash.Value == *t.infoHashV2.Value.ToShort() {
+			// This includes zero values, since they both should not be zero. Plus Option should not
+			// allow non-zero values for None.
+			panic("v1 and v2 info hashes should not be the same")
+		}
+		if t.infoHash.Ok {
+			yield(t.infoHash.Value)
+		}
+		if t.infoHashV2.Ok {
+			v2Short := *t.infoHashV2.Value.ToShort()
+			yield(v2Short)
+		}
 	}
 }
 
@@ -3727,4 +3680,86 @@ func (t *Torrent) incrementPiecesDirtiedStats(p *Piece, inc func(stats *ConnStat
 // don't make sense if padding files and v2 are in use.
 func (t *Torrent) maxEndRequest() RequestIndex {
 	return RequestIndex(intCeilDiv(uint64(t.length()), t.chunkSize.Uint64()))
+}
+
+type lastTrackerAnnounce struct {
+	// Some if we have sent an event before.
+	event  g.Option[tracker.AnnounceEvent]
+	result trackerAnnounceResult
+}
+
+func (ts lastTrackerAnnounce) statusLine() string {
+	// TODO: StringBuilder?
+	var w bytes.Buffer
+	fmt.Fprintf(&w, "next ann: %v, last ann: %v",
+		func() string {
+			na := time.Until(ts.result.Completed.Add(ts.result.Interval))
+			if na > 0 {
+				na /= time.Second
+				na *= time.Second
+				return na.String()
+			} else {
+				return "anytime"
+			}
+		}(),
+		func() string {
+			if ts.result.Err != nil {
+				return ts.result.Err.Error()
+			}
+			if ts.result.Completed.IsZero() {
+				return "never"
+			}
+			return fmt.Sprintf("%d peers", ts.result.NumPeers)
+		}(),
+	)
+	return w.String()
+}
+
+type torrentNextAnnounce struct {
+	// Zero value means announce immediately.
+	when  time.Time
+	event tracker.AnnounceEvent
+}
+
+func (t *Torrent) hasTrackerUrl(url string) bool {
+	for _, tier := range t.announceList {
+		for _, trackerUrl := range tier {
+			if trackerUrl == url {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (t *Torrent) nextAnnounce(key trackerAnnounceKey) (_ g.Option[torrentNextAnnounce]) {
+	last := t.lastTrackerAnnounce[key]
+	if !t.hasTrackerUrl(key.Url) {
+		// Only announce to signal stopped if our last event announced wasn't stopped.
+		if last.event.Ok && last.event.Value != tracker.Stopped && last.result.Err == nil {
+			return g.Some(torrentNextAnnounce{
+				event: tracker.Stopped,
+			})
+		}
+		return
+	}
+	if !last.event.Ok {
+		return g.Some(torrentNextAnnounce{
+			event: tracker.Started,
+		})
+	}
+	// TODO: Handle completion toggling.
+	switch last.event.Value {
+	case tracker.Stopped:
+		return g.Some(torrentNextAnnounce{
+			event: tracker.Started,
+		})
+	case tracker.Started, tracker.None:
+		return g.Some(torrentNextAnnounce{
+			when:  last.result.Completed.Add(last.result.Interval),
+			event: tracker.None,
+		})
+	default:
+		panic(last.event.Value)
+	}
 }

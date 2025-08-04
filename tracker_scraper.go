@@ -1,7 +1,6 @@
 package torrent
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -40,32 +39,6 @@ type torrentTrackerAnnouncer interface {
 
 func (me *trackerScraper) URL() *url.URL {
 	return &me.u
-}
-
-func (ts *trackerScraper) statusLine() string {
-	var w bytes.Buffer
-	fmt.Fprintf(&w, "next ann: %v, last ann: %v",
-		func() string {
-			na := time.Until(ts.lastAnnounce.Completed.Add(ts.lastAnnounce.Interval))
-			if na > 0 {
-				na /= time.Second
-				na *= time.Second
-				return na.String()
-			} else {
-				return "anytime"
-			}
-		}(),
-		func() string {
-			if ts.lastAnnounce.Err != nil {
-				return ts.lastAnnounce.Err.Error()
-			}
-			if ts.lastAnnounce.Completed.IsZero() {
-				return "never"
-			}
-			return fmt.Sprintf("%d peers", ts.lastAnnounce.NumPeers)
-		}(),
-	)
-	return w.String()
 }
 
 type trackerAnnounceResult struct {

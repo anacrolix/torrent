@@ -223,10 +223,10 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 	t.getRequestablePieces(
 		func(ih metainfo.Hash, pieceIndex int, pieceExtra requestStrategy.PieceRequestOrderState) bool {
 			if ih != *t.canonicalShortInfohash() {
-				return false
+				return true
 			}
 			if !p.peerHasPiece(pieceIndex) {
-				return false
+				return true
 			}
 			requestHeap.pieceStates[pieceIndex].Set(pieceExtra)
 			allowedFast := p.peerAllowedFast.Contains(pieceIndex)

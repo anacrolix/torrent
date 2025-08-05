@@ -25,7 +25,7 @@ type (
 func pieceOrderLess(i, j *PieceRequestOrderItem) multiless.Computation {
 	return multiless.New().Int(
 		int(j.State.Priority), int(i.State.Priority),
-		// TODO: Should we match on complete here to prevent churn when availability changes?
+		// TODO: Should we match on complete here to prevent churn when availability changes? (Answer: Yes).
 	).Bool(
 		j.State.Partial, i.State.Partial,
 	).Int(
@@ -42,17 +42,16 @@ func pieceOrderLess(i, j *PieceRequestOrderItem) multiless.Computation {
 	})
 }
 
-// Returns true if the piece should be considered against the unverified bytes limit. This is
-// based on whether the callee intends to request from the piece. Pieces submitted to this
-// callback passed Piece.Request and so are ready for immediate download.
+// This did return true if the piece should be considered against the unverified bytes limit. But
+// that would cause thrashing on completion: The order should be stable. This is now a 3-tuple
+// iterator.
 type RequestPieceFunc func(ih metainfo.Hash, pieceIndex int, orderState PieceRequestOrderState) bool
 
 // Calls f with requestable pieces in order.
 func GetRequestablePieces(
 	input Input, pro *PieceRequestOrder,
-	// Returns true if the piece should be considered against the unverified bytes limit. This is
-	// based on whether the callee intends to request from the piece. Pieces submitted to this
-	// callback passed Piece.Request and so are ready for immediate download.
+	// Pieces submitted to this callback passed Piece.Request and so are ready for immediate
+	// download.
 	requestPiece RequestPieceFunc,
 ) {
 	// Storage capacity left for this run, keyed by the storage capacity pointer on the storage
@@ -82,7 +81,7 @@ func GetRequestablePieces(
 			if !requestPiece(ih, item.Key.Index, item.State) {
 				// No blocks are being considered from this piece, so it won't result in unverified
 				// bytes.
-				return true
+				return false
 			}
 		} else if !piece.CountUnverified() {
 			// The piece is pristine, and we're not considering it for requests.

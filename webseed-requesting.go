@@ -340,13 +340,12 @@ func (cl *Client) iterPossibleWebseedRequests() iter.Seq2[webseedUniqueRequestKe
 				func(ih metainfo.Hash, pieceIndex int, orderState requestStrategy.PieceRequestOrderState) bool {
 					t := cl.torrentsByShortHash[ih]
 					if len(t.webSeeds) == 0 {
-						return false
+						return true
 					}
 					p := t.piece(pieceIndex)
 					cleanOpt := p.firstCleanChunk()
 					if !cleanOpt.Ok {
-						// Could almost return true here, as clearly something is going on with the piece.
-						return false
+						return true
 					}
 					// Pretty sure we want this and not the order state priority. That one is for
 					// client piece request order and ignores other states like hashing, marking
@@ -357,7 +356,7 @@ func (cl *Client) iterPossibleWebseedRequests() iter.Seq2[webseedUniqueRequestKe
 					for url, ws := range t.webSeeds {
 						// Return value from this function (RequestPieceFunc) doesn't terminate
 						// iteration, so propagate that to not handling the yield return value.
-						yield(
+						if !yield(
 							webseedUniqueRequestKey{
 								aprioriWebseedRequestKey{
 									t:          t,
@@ -370,7 +369,9 @@ func (cl *Client) iterPossibleWebseedRequests() iter.Seq2[webseedUniqueRequestKe
 								priority: priority,
 								costKey:  ws.hostKey,
 							},
-						)
+						) {
+							return false
+						}
 					}
 					// Pieces iterated here are only to select webseed requests. There's no guarantee they're chosen.
 					return false

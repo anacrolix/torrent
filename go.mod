@@ -7,7 +7,7 @@ require (
 	github.com/ajwerner/btree v0.0.0-20211221152037-f427b3e689c0
 	github.com/alexflint/go-arg v1.4.3
 	github.com/anacrolix/bargle v0.0.0-20221014000746-4f2739072e9d
-	github.com/anacrolix/chansync v0.6.0
+	github.com/anacrolix/chansync v0.6.1-0.20250805140455-89f141559964
 	github.com/anacrolix/dht/v2 v2.22.2-0.20250623060212-d7b7d8a52b01
 	github.com/anacrolix/envpprof v1.3.0
 	github.com/anacrolix/fuse v0.3.2-0.20250603105216-aeb550c91d7a

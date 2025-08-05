@@ -384,8 +384,7 @@ func (cl *Client) iterPossibleWebseedRequests() iter.Seq2[webseedUniqueRequestKe
 							return false
 						}
 					}
-					// Pieces iterated here are only to select webseed requests. There's no guarantee they're chosen.
-					return false
+					return true
 				},
 			)
 		}

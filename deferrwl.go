@@ -34,7 +34,7 @@ func (me *lockWithDeferreds) Unlock() {
 		panic(fmt.Sprintf("num deferred changed while running: %v -> %v", startLen, len(me.unlockActions)))
 	}
 	me.unlockActions = me.unlockActions[:0]
-	clear(me.uniqueActions)
+	me.uniqueActions = nil
 	me.unlocking = false
 	me.internal.Unlock()
 }

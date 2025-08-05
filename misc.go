@@ -6,6 +6,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/missinggo/v2"
+	"github.com/anacrolix/missinggo/v2/panicif"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -105,11 +106,12 @@ func validateInfo(info *metainfo.Info) error {
 }
 
 func chunkIndexSpec(index, pieceLength, chunkSize pp.Integer) ChunkSpec {
-	ret := ChunkSpec{index * chunkSize, chunkSize}
-	if ret.Begin+ret.Length > pieceLength {
-		ret.Length = pieceLength - ret.Begin
+	begin := index * chunkSize
+	panicif.GreaterThanOrEqual(begin, pieceLength)
+	return ChunkSpec{
+		Begin:  begin,
+		Length: min(chunkSize, pieceLength-begin),
 	}
-	return ret
 }
 
 func comparePeerTrust(l, r *Peer) int {

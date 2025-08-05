@@ -233,8 +233,9 @@ func (t *Torrent) getWebseedRequestEnd(begin RequestIndex, debugLogger *slog.Log
 	return end
 }
 
-// Cloudflare caches up to 512 MB responses by default. This is also an alignment.
-var webseedRequestChunkSize uint64 = 256 << 20
+// Cloudflare caches up to 512 MB responses by default. This is also an alignment. Making this
+// smaller will allow requests to complete a smaller set of files faster.
+var webseedRequestChunkSize = initUIntFromEnv[uint64]("TORRENT_WEBSEED_REQUEST_CHUNK_SIZE", 64<<20, 64)
 
 func (t *Torrent) endRequestForAlignedWebseedResponse(start RequestIndex) RequestIndex {
 	end := min(t.maxEndRequest(), nextMultiple(start, t.chunksPerAlignedWebseedResponse()))

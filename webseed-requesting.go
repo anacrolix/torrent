@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"fmt"
@@ -72,6 +73,7 @@ func (cl *Client) updateWebseedRequests() {
 		}
 		aprioriMap[uniqueKey.aprioriWebseedRequestKey] = aprioriMapValue{uniqueKey.startRequest, value}
 	}
+	// TODO: This should not be keyed on startRequest but only on sliceIndex.
 	existingRequests := maps.Collect(cl.iterCurrentWebseedRequests())
 	// We don't need the value but maybe cloning is just faster anyway?
 	unusedExistingRequests := maps.Clone(existingRequests)
@@ -117,7 +119,7 @@ func (cl *Client) updateWebseedRequests() {
 		&heapSlice,
 		func(l heapElem, r heapElem) bool {
 			// Not stable ordering but being sticky to existing webseeds should be enough.
-			return cmp.Or(
+			ret := cmp.Or(
 				// Prefer highest priority
 				-cmp.Compare(l.priority, r.priority),
 				// Then existing requests
@@ -129,7 +131,16 @@ func (cl *Client) updateWebseedRequests() {
 				// No need to prefer longer files anymore now that we're using slices?
 				//// Longer files first.
 				//-cmp.Compare(l.longestFile().Unwrap(), r.longestFile().Unwrap()),
-			) < 0
+				// Easier to debug than infohashes...
+				cmp.Compare(l.t.info.Name, r.t.info.Name),
+				bytes.Compare(l.t.canonicalShortInfohash()[:], r.t.canonicalShortInfohash()[:]),
+				// It's possible for 2 heap elements to have the same slice index from the same
+				// torrent, but they'll differ in existingWebseedRequest and be sorted before this.
+				// Doing earlier chunks first means more compact files for partial file hashing.
+				cmp.Compare(l.sliceIndex, r.sliceIndex),
+			)
+			panicif.Zero(ret)
+			return ret < 0
 		},
 	)
 

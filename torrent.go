@@ -2994,7 +2994,11 @@ func (t *Torrent) disallowDataDownloadLocked() {
 func (t *Torrent) AllowDataDownload() {
 	t.cl.lock()
 	defer t.cl.unlock()
-	t.dataDownloadDisallowed.Clear()
+	// Can't move this outside the lock because other users require it to be unchanged while the
+	// Client lock is held?
+	if !t.dataDownloadDisallowed.Clear() {
+		return
+	}
 	t.iterPeers(func(p *Peer) {
 		p.onNeedUpdateRequests("allow data download")
 	})
@@ -3004,6 +3008,9 @@ func (t *Torrent) AllowDataDownload() {
 func (t *Torrent) AllowDataUpload() {
 	t.cl.lock()
 	defer t.cl.unlock()
+	if !t.dataUploadDisallowed {
+		return
+	}
 	t.dataUploadDisallowed = false
 	t.iterPeers(func(p *Peer) {
 		p.onNeedUpdateRequests("allow data upload")

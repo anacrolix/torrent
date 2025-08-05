@@ -94,6 +94,8 @@ func (fst fileTorrentImplIO) openForWrite(file file) (f *os.File, err error) {
 		if err != nil {
 			return
 		}
+	} else {
+		return
 	}
 	f, err = os.OpenFile(p, os.O_WRONLY|os.O_CREATE, filePerm)
 	return

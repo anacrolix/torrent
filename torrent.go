@@ -577,6 +577,8 @@ func (t *Torrent) onSetInfo() {
 		}
 		p.relativeAvailability = t.selectivePieceAvailabilityFromPeers(i)
 		t.addRequestOrderPiece(i)
+		t.setPieceCompletionFromStorage(i)
+		t.afterSetPieceCompletion(i, true)
 		t.updatePieceCompletion(i)
 		t.queueInitialPieceCheck(i)
 	}
@@ -1716,8 +1718,8 @@ func (t *Torrent) openNewConns() (initiated int) {
 	return
 }
 
-// Pulls piece completion state from storage and performs any state updates if it changes.
-func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
+// Sets the cached piece completion directly from storage.
+func (t *Torrent) setPieceCompletionFromStorage(piece pieceIndex) bool {
 	p := t.piece(piece)
 	uncached := t.pieceCompleteUncached(piece)
 	if uncached.Err != nil {
@@ -1728,14 +1730,30 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 	// errors.
 	cached := p.completion()
 	changed := cached != uncached
-	complete := uncached.Ok && uncached.Complete
 	p.storageCompletionOk = uncached.Ok
 	x := uint32(piece)
-	if complete {
+	if uncached.Complete {
 		t._completedPieces.Add(x)
-		t.openNewConns()
 	} else {
 		t._completedPieces.Remove(x)
+	}
+	return changed
+}
+
+// Pulls piece completion state from storage and performs any state updates if it changes.
+func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
+	changed := t.setPieceCompletionFromStorage(piece)
+	t.afterSetPieceCompletion(piece, changed)
+	return changed
+}
+
+// Pulls piece completion state from storage and performs any state updates if it changes.
+func (t *Torrent) afterSetPieceCompletion(piece pieceIndex, changed bool) {
+	p := t.piece(piece)
+	cmpl := p.completion()
+	complete := cmpl.Ok && cmpl.Complete
+	if complete {
+		t.openNewConns()
 	}
 	p.t.updatePieceRequestOrderPiece(piece)
 	t.updateComplete()
@@ -1743,14 +1761,8 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 		t.logger.Printf("marked piece %v complete but still has dirtiers", piece)
 	}
 	if changed {
-		//slog.Debug(
-		//	"piece completion changed",
-		//	slog.Int("piece", piece),
-		//	slog.Any("from", cached),
-		//	slog.Any("to", uncached))
 		t.pieceCompletionChanged(piece, "Torrent.updatePieceCompletion")
 	}
-	return changed
 }
 
 // Non-blocking read. Client lock is not required.

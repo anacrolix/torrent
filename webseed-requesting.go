@@ -187,41 +187,50 @@ func (cl *Client) updateWebseedRequests() {
 			peer := t.webSeeds[requestKey.url]
 			panicif.NotEq(peer.hostKey, costKey)
 			printPlan()
-			begin := requestKey.startRequest
-			chunkEnd := t.endRequestForAlignedWebseedResponse(requestKey.startRequest)
-			last := begin
-			for {
-				if !t.wantReceiveChunk(last) {
-					break
-				}
-				if last >= chunkEnd-1 {
-					break
-				}
-				last++
-			}
+
 			debugLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 				Level:     slog.LevelDebug,
 				AddSource: true,
 			})).With(
 				"webseedUrl", requestKey.url,
 				"webseedChunkIndex", requestKey.sliceIndex)
-			// Request shouldn't exist if this occurs.
-			panicif.LessThan(last, begin)
-			// Hello darkness (C++) my old friend...
-			end := last + 1
-			end = min(end, t.endRequestForAlignedWebseedResponse(begin))
+
+			begin := requestKey.startRequest
+			end := t.getWebseedRequestEnd(begin, debugLogger)
 			panicif.LessThanOrEqual(end, begin)
-			if webseed.PrintDebug && end != chunkEnd {
-				debugLogger.Debug(
-					"shortened webseed request",
-					"request key", requestKey,
-					"from", endExclusiveString(begin, chunkEnd),
-					"to", endExclusiveString(begin, end))
-			}
-			panicif.GreaterThan(end, chunkEnd)
+
 			peer.spawnRequest(begin, end, debugLogger)
 		}
 	}
+}
+
+func (t *Torrent) getWebseedRequestEnd(begin RequestIndex, debugLogger *slog.Logger) RequestIndex {
+	chunkEnd := t.endRequestForAlignedWebseedResponse(begin)
+	panicif.False(t.wantReceiveChunk(begin))
+	if true {
+		// Pending fix to pendingPieces matching piece request order due to missing initial pieces
+		// checks?
+		return chunkEnd
+	}
+	last := begin
+	for {
+		if !t.wantReceiveChunk(last) {
+			break
+		}
+		if last >= chunkEnd-1 {
+			break
+		}
+		last++
+	}
+	end := last + 1
+	panicif.GreaterThan(end, chunkEnd)
+	if webseed.PrintDebug && end != chunkEnd {
+		debugLogger.Debug(
+			"shortened webseed request",
+			"from", endExclusiveString(begin, chunkEnd),
+			"to", endExclusiveString(begin, end))
+	}
+	return end
 }
 
 // Cloudflare caches up to 512 MB responses by default. This is also an alignment.

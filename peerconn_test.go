@@ -267,13 +267,14 @@ func TestConnPexEvent(t *testing.T) {
 func TestHaveAllThenBitfield(t *testing.T) {
 	cl := newTestingClient(t)
 	tt := cl.newTorrentForTesting()
-	// cl.newConnection()
+	//pc := cl.newConnection(nil, newConnectionOpts{})
 	pc := PeerConn{
 		Peer: Peer{t: tt},
 	}
 	pc.initRequestState()
 	pc.legacyPeerImpl = &pc
 	tt.conns[&pc] = struct{}{}
+	g.InitNew(&pc.callbacks)
 	qt.Assert(t, qt.IsNil(pc.onPeerSentHaveAll()))
 	qt.Check(t, qt.DeepEquals(pc.t.connsWithAllPieces, map[*Peer]struct{}{&pc.Peer: {}}))
 	pc.peerSentBitfield([]bool{false, false, true, false, true, true, false, false})

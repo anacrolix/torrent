@@ -518,12 +518,9 @@ func (cl *Client) Close() (errs []error) {
 	var closeGroup sync.WaitGroup // For concurrent cleanup to complete before returning
 	cl.lock()
 	for t := range cl.torrents {
-		// Can we not modify cl.torrents as we delete from it?
-		err := cl.dropTorrent(t, &closeGroup)
-		if err != nil {
-			errs = append(errs, err)
-		}
+		cl.dropTorrent(t, &closeGroup)
 	}
+	// Can we not modify cl.torrents as we delete from it?
 	panicif.NotZero(len(cl.torrents))
 	panicif.NotZero(len(cl.torrentsByShortHash))
 	cl.clearPortMappings()
@@ -1440,6 +1437,7 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 		opts.ChunkSize = defaultChunkSize
 	}
 	t.setChunkSize(opts.ChunkSize)
+	cl.torrents[t] = struct{}{}
 	return
 }
 
@@ -1510,7 +1508,6 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 		}
 	})
 	cl.torrentsByShortHash[infoHash] = t
-	cl.torrents[t] = struct{}{}
 	t.setInfoBytesLocked(opts.InfoBytes)
 	cl.clearAcceptLimits()
 	t.updateWantPeersEvent()
@@ -1589,13 +1586,8 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	return errors.Join(t.addPieceLayersLocked(spec.PieceLayers)...)
 }
 
-func (cl *Client) dropTorrent(t *Torrent, wg *sync.WaitGroup) (err error) {
-	t.eachShortInfohash(func(short [20]byte) {
-		delete(cl.torrentsByShortHash, short)
-	})
-	err = t.close(wg)
-	delete(cl.torrents, t)
-	return
+func (cl *Client) dropTorrent(t *Torrent, wg *sync.WaitGroup) {
+	t.close(wg)
 }
 
 func (cl *Client) allTorrentsCompleted() bool {

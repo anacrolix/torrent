@@ -1080,11 +1080,12 @@ func (t *Torrent) numPiecesCompleted() (num pieceIndex) {
 	return pieceIndex(t._completedPieces.GetCardinality())
 }
 
-func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
-	if !t.closed.Set() {
-		err = errors.New("already closed")
-		return
-	}
+func (t *Torrent) close(wg *sync.WaitGroup) {
+	// Should only be called from the Client.
+	panicif.False(t.closed.Set())
+	t.eachShortInfohash(func(short [20]byte) {
+		delete(t.cl.torrentsByShortHash, short)
+	})
 	t.closedCtxCancel(errTorrentClosed)
 	t.getInfoCtxCancel(errTorrentClosed)
 	for _, f := range t.onClose {
@@ -1115,6 +1116,7 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 	t.cl.event.Broadcast()
 	t.pieceStateChanges.Close()
 	t.updateWantPeersEvent()
+	g.MustDelete(t.cl.torrents, t)
 	return
 }
 

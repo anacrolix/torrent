@@ -134,7 +134,7 @@ func (ws *webseedPeer) intoSpec(begin, end RequestIndex) webseed.RequestSpec {
 }
 
 func (ws *webseedPeer) spawnRequest(begin, end RequestIndex, logger *slog.Logger) {
-	extWsReq := ws.client.StartNewRequest(ws.intoSpec(begin, end), logger)
+	extWsReq := ws.client.StartNewRequest(ws.peer.closedCtx, ws.intoSpec(begin, end), logger)
 	wsReq := webseedRequest{
 		logger:  logger,
 		request: extWsReq,
@@ -263,7 +263,9 @@ func (ws *webseedPeer) maxChunkDiscard() RequestIndex {
 	return RequestIndex(int(intCeilDiv(webseed.MaxDiscardBytes, ws.peer.t.chunkSize)))
 }
 
-func (ws *webseedPeer) keepReading(wr *webseedRequest) bool {
+func (ws *webseedPeer) wantedChunksInDiscardWindow(wr *webseedRequest) bool {
+	// Shouldn't call this if request is at the end already.
+	panicif.GreaterThanOrEqual(wr.next, wr.end)
 	for ri := wr.next; ri < wr.end && ri <= wr.next+ws.maxChunkDiscard(); ri++ {
 		if ws.wantChunk(ri) {
 			return true
@@ -306,8 +308,10 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 		err = ws.peer.receiveChunk(&msg)
 		stop := err != nil || wr.next >= wr.end
 		if !stop {
-			if !ws.keepReading(wr) {
-				wr.Cancel("finished or discarded")
+			if !ws.wantedChunksInDiscardWindow(wr) {
+				// This cancels the stream, but we don't stop su--reading to make the most of the
+				// buffered body.
+				wr.Cancel("no wanted chunks in discard window")
 			}
 		}
 		ws.peer.locker().Unlock()

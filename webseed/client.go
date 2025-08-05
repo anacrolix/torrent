@@ -46,14 +46,14 @@ type requestPart struct {
 }
 
 type Request struct {
-	cancel func()
+	cancel context.CancelCauseFunc
 	Body   io.Reader
 	// Closed with error to unstick copy routine when context isn't checked.
 	bodyPipe *io.PipeReader
 }
 
-func (r Request) Cancel() {
-	r.cancel()
+func (r Request) Cancel(cause error) {
+	r.cancel(cause)
 }
 
 func (r Request) Close() {
@@ -106,8 +106,8 @@ func (ws *Client) UrlForFileIndex(fileIndex int) string {
 	return urlForFileIndex(ws.Url, fileIndex, ws.info, ws.PathEscaper)
 }
 
-func (ws *Client) StartNewRequest(r RequestSpec, debugLogger *slog.Logger) Request {
-	ctx, cancel := context.WithCancel(context.TODO())
+func (ws *Client) StartNewRequest(ctx context.Context, r RequestSpec, debugLogger *slog.Logger) Request {
+	ctx, cancel := context.WithCancelCause(ctx)
 	var requestParts []requestPart
 	for i, e := range ws.fileIndex.LocateIter(r) {
 		req, err := newRequest(

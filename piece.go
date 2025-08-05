@@ -62,7 +62,7 @@ type Piece struct {
 	hashing bool
 	// The piece state may have changed, and is being synchronized with storage.
 	marking bool
-	// The Completion.Ok field from the storage layer.
+	// The Completion.Ok field cached from the storage layer.
 	storageCompletionOk bool
 }
 
@@ -297,7 +297,24 @@ func (p *Piece) purePriority() (ret PiecePriority) {
 }
 
 func (p *Piece) ignoreForRequests() bool {
-	return p.hashing || p.marking || !p.haveHash() || p.t.pieceComplete(p.index) || p.queuedForHash() || p.t.dataDownloadDisallowed.IsSet()
+	// Ordered by cheapest checks and most likely to persist first.
+
+	// There's a method that gets this with complete, but that requires a bitmap lookup. Defer that.
+	if !p.storageCompletionOk {
+		// Piece completion unknown.
+		return true
+	}
+	if p.hashing || p.marking || !p.haveHash() || p.t.dataDownloadDisallowed.IsSet() {
+		return true
+	}
+	// This is valid after we know that storage completion has been cached.
+	if p.t.pieceComplete(p.index) {
+		return true
+	}
+	if p.queuedForHash() {
+		return true
+	}
+	return false
 }
 
 // This is the priority adjusted for piece state like completion, hashing etc.

@@ -577,9 +577,7 @@ func (t *Torrent) onSetInfo() {
 		}
 		p.relativeAvailability = t.selectivePieceAvailabilityFromPeers(i)
 		t.addRequestOrderPiece(i)
-		t.setPieceCompletionFromStorage(i)
-		t.afterSetPieceCompletion(i, true)
-		t.updatePieceCompletion(i)
+		t.setInitialPieceCompletionFromStorage(i)
 		t.queueInitialPieceCheck(i)
 	}
 	t.cl.event.Broadcast()
@@ -1720,33 +1718,54 @@ func (t *Torrent) openNewConns() (initiated int) {
 	return
 }
 
-// Sets the cached piece completion directly from storage.
+func (t *Torrent) setPieceCompletion(piece pieceIndex, uncached g.Option[bool]) {
+	changed := t.setCachedPieceCompletion(piece, uncached)
+	t.afterSetPieceCompletion(piece, changed)
+}
+
 func (t *Torrent) setPieceCompletionFromStorage(piece pieceIndex) bool {
-	p := t.piece(piece)
+	changed := t.setCachedPieceCompletionFromStorage(piece)
+	t.afterSetPieceCompletion(piece, changed)
+	return changed
+}
+
+func (t *Torrent) setInitialPieceCompletionFromStorage(piece pieceIndex) {
+	t.setCachedPieceCompletionFromStorage(piece)
+	t.afterSetPieceCompletion(piece, true)
+}
+
+// Sets the cached piece completion directly from storage.
+func (t *Torrent) setCachedPieceCompletionFromStorage(piece pieceIndex) bool {
 	uncached := t.pieceCompleteUncached(piece)
 	if uncached.Err != nil {
 		t.slogger().Error("error getting piece completion", "err", uncached.Err)
 		t.disallowDataDownloadLocked()
 	}
+	return t.setCachedPieceCompletion(piece, g.OptionFromTuple(uncached.Complete, uncached.Ok))
+}
+
+// Returns true if the value was changed.
+func (t *Torrent) setCachedPieceCompletion(piece int, uncached g.Option[bool]) bool {
+	p := t.piece(piece)
 	// TODO: Here we should probably be storing Option[bool] for completion and filtering out
 	// errors.
 	cached := p.completion()
-	changed := cached != uncached
+	cachedOpt := g.OptionFromTuple(cached.Complete, cached.Ok)
+	changed := cachedOpt != uncached
 	p.storageCompletionOk = uncached.Ok
 	x := uint32(piece)
-	if uncached.Complete {
+	if uncached.Ok && uncached.Value {
 		t._completedPieces.Add(x)
 	} else {
 		t._completedPieces.Remove(x)
 	}
 	return changed
+
 }
 
 // Pulls piece completion state from storage and performs any state updates if it changes.
 func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
-	changed := t.setPieceCompletionFromStorage(piece)
-	t.afterSetPieceCompletion(piece, changed)
-	return changed
+	return t.setPieceCompletionFromStorage(piece)
 }
 
 // Pulls piece completion state from storage and performs any state updates if it changes.
@@ -2552,6 +2571,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 			return
 		}
 		t.pendAllChunkSpecs(piece)
+		t.setPieceCompletion(piece, g.Some(true))
 	} else {
 		if len(p.dirtiers) != 0 && p.allChunksDirty() && hashIoErr == nil {
 			// Peers contributed to all the data for this piece hash failure, and the failure was
@@ -2610,10 +2630,12 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		if t.closed.IsSet() {
 			return
 		}
-
 		t.onIncompletePiece(piece)
+		// Set it directly without querying storage again. It makes no difference if the lock is
+		// held since it can be clobbered right after again anyway. This comes after inCompletePiece
+		// because that's how it was before.
+		t.setPieceCompletion(p.index, g.Some(false))
 	}
-	t.updatePieceCompletion(piece)
 }
 
 func (t *Torrent) cancelRequestsForPiece(piece pieceIndex) {

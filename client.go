@@ -1962,8 +1962,10 @@ func (cl *Client) checkConfig() error {
 	return nil
 }
 
+var maxActivePieceHashers = initIntFromEnv("TORRENT_MAX_ACTIVE_PIECE_HASHERS", runtime.NumCPU(), 0)
+
 func (cl *Client) maxActivePieceHashers() int {
-	return runtime.NumCPU()
+	return maxActivePieceHashers
 }
 
 func (cl *Client) belowMaxActivePieceHashers() bool {

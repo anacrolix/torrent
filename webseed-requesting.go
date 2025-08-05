@@ -9,7 +9,6 @@ import (
 	"maps"
 	"os"
 	"runtime/pprof"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,13 +23,7 @@ import (
 	"github.com/anacrolix/torrent/webseed"
 )
 
-var webseedHostRequestConcurrency int
-
-func init() {
-	i64, err := strconv.ParseInt(cmp.Or(os.Getenv("TORRENT_WEBSEED_HOST_REQUEST_CONCURRENCY"), "10"), 10, 0)
-	panicif.Err(err)
-	webseedHostRequestConcurrency = int(i64)
-}
+var webseedHostRequestConcurrency = initIntFromEnv("TORRENT_WEBSEED_HOST_REQUEST_CONCURRENCY", 10, 0)
 
 type (
 	webseedHostKey       string

@@ -5,6 +5,7 @@ import (
 	"unique"
 
 	g "github.com/anacrolix/generics"
+	"github.com/anacrolix/missinggo/v2/panicif"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -12,7 +13,9 @@ import (
 type Btree interface {
 	Delete(PieceRequestOrderItem)
 	Add(PieceRequestOrderItem)
+	// TODO: Add an iterator variant of this and benchmark.
 	Scan(func(PieceRequestOrderItem) bool)
+	Contains(PieceRequestOrderItem) bool
 }
 
 func NewPieceOrder(btree Btree, cap int) *PieceRequestOrder {
@@ -94,4 +97,10 @@ func (me *PieceRequestOrder) Iter() iter.Seq[PieceRequestOrderItem] {
 			return yield(item)
 		})
 	}
+}
+
+func (me *PieceRequestOrder) Get(key PieceRequestOrderKey) (ret g.Option[PieceRequestOrderState]) {
+	ret.Value, ret.Ok = me.keys[key]
+	panicif.NotEq(ret.Ok, me.tree.Contains(PieceRequestOrderItem{key, ret.Value}))
+	return
 }

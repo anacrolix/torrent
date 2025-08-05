@@ -35,3 +35,8 @@ func (me *tidwallBtree) Delete(item PieceRequestOrderItem) {
 	_, deleted := me.tree.DeleteHint(item, me.PathHint)
 	mustValue(deleted, item)
 }
+
+func (me *tidwallBtree) Contains(item PieceRequestOrderItem) bool {
+	_, ok := me.tree.Get(item)
+	return ok
+}

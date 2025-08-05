@@ -1565,7 +1565,7 @@ func (t *Torrent) updatePiecePriorityNoRequests(piece pieceIndex) (updateRequest
 }
 
 func (t *Torrent) updatePiecePriority(piece pieceIndex, reason updateRequestReason) {
-	t.logger.Slogger().Debug("updatePiecePriority", "piece", piece, "reason", reason)
+	//t.logger.Slogger().Debug("updatePiecePriority", "piece", piece, "reason", reason)
 	if t.updatePiecePriorityNoRequests(piece) && !t.disableTriggers {
 		t.updatePeerRequestsForPiece(piece, reason)
 	}

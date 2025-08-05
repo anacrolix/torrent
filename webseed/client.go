@@ -46,17 +46,23 @@ type requestPart struct {
 }
 
 type Request struct {
+	// So you can view it from externally.
+	ctx    context.Context
 	cancel context.CancelCauseFunc
 	Body   io.Reader
 	// Closed with error to unstick copy routine when context isn't checked.
 	bodyPipe *io.PipeReader
 }
 
-func (r Request) Cancel(cause error) {
+func (r *Request) Context() context.Context {
+	return r.ctx
+}
+
+func (r *Request) Cancel(cause error) {
 	r.cancel(cause)
 }
 
-func (r Request) Close() {
+func (r *Request) Close() {
 	// We aren't cancelling because we want to know if we can keep receiving buffered data after
 	// cancellation. PipeReader.Close always returns nil.
 	_ = r.bodyPipe.Close()
@@ -144,6 +150,7 @@ func (ws *Client) StartNewRequest(ctx context.Context, r RequestSpec, debugLogge
 	panicif.Zero(len(requestParts))
 	body, w := io.Pipe()
 	req := Request{
+		ctx:      ctx,
 		cancel:   cancel,
 		Body:     body,
 		bodyPipe: body,

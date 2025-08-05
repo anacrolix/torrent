@@ -288,6 +288,10 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 		var n int
 		n, err = io.ReadFull(wr.request.Body, buf)
 		ws.peer.readBytes(int64(n))
+		reqCtxErr := context.Cause(wr.request.Context())
+		if errors.Is(err, reqCtxErr) {
+			err = reqCtxErr
+		}
 		if webseed.PrintDebug && wr.cancelled.Load() {
 			fmt.Printf("webseed read %v after cancellation: %v\n", n, err)
 		}

@@ -31,6 +31,14 @@ type (
 	webseedUrlKey        unique.Handle[string]
 )
 
+func (me webseedUrlKey) Value() string {
+	return unique.Handle[string](me).Value()
+}
+
+func (me webseedUrlKey) String() string {
+	return me.Value()
+}
+
 /*
 - Go through all the requestable pieces in order of priority, availability, whether there are peer requests, partial, infohash.
 - For each piece calculate files involved. Record each file not seen before and the piece index.

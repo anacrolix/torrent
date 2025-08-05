@@ -1013,7 +1013,7 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 		UrlList: func() []string {
 			ret := make([]string, 0, len(t.webSeeds))
 			for url := range t.webSeeds {
-				ret = append(ret, unique.Handle[string](url).Value())
+				ret = append(ret, url.Value())
 			}
 			return ret
 		}(),

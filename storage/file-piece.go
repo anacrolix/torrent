@@ -215,105 +215,51 @@ func (me *filePieceImpl) MarkNotComplete() (err error) {
 }
 
 func (me *filePieceImpl) promotePartFile(f file) (err error) {
+	if !me.partFiles() {
+		return nil
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.race++
-	if me.partFiles() {
-		err = me.exclRenameIfExists(f.partFilePath(), f.safeOsPath)
-		if err != nil {
-			return
-		}
-	}
-	info, err := os.Stat(f.safeOsPath)
+	renamed, err := me.exclRenameIfExists(f.partFilePath(), f.safeOsPath)
 	if err != nil {
-		err = fmt.Errorf("statting file: %w", err)
 		return
 	}
-	// Clear writability for the file.
-	err = os.Chmod(f.safeOsPath, info.Mode().Perm()&^0o222)
-	if err != nil {
-		err = fmt.Errorf("setting file to read-only: %w", err)
+	if !renamed {
 		return
+	}
+	err = os.Chmod(f.safeOsPath, filePerm&^0o222)
+	if err != nil {
+		me.logger().Info("error setting promoted file to read-only", "file", f.safeOsPath, "err", err)
+		err = nil
 	}
 	return
 }
 
 // Rename from if exists, and if so, to must not exist.
-func (me *filePieceImpl) exclRenameIfExists(from, to string) error {
-	if true {
-		// Might be cheaper to check source exists than to create destination regardless.
-		_, err := os.Stat(from)
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-	}
-	panicif.Eq(from, to)
-	// We don't want anyone reading or writing to this until the rename completes. The file is
-	// created with zero permissions to prevent this.
-	f, err := os.OpenFile(to, os.O_CREATE|os.O_EXCL, 0)
-	if err == nil {
-		f.Close()
-	}
-	if errors.Is(err, fs.ErrExist) {
-		_, err = os.Stat(from)
-		if errors.Is(err, fs.ErrNotExist) {
-			// Source file went missing. Assume rename occurred.
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		me.logger().Warn("source and destination files both exist",
-			"src", from,
-			"dst", to)
-		// Continue to attempt rename as this will result in a single file.
-	} else if err != nil {
-		return fmt.Errorf("exclusively creating destination file: %w", err)
-	}
+func (me *filePieceImpl) exclRenameIfExists(from, to string) (renamed bool, err error) {
 	err = os.Rename(from, to)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			// Someone else has moved it already.
-			return nil
+			err = nil
 		}
-		// If we can't rename it, remove the blocking destination file we made. Failing to remove
-		// this will put the storage in a bad state.
-		removeErr := os.Remove(to)
-		if removeErr != nil && !errors.Is(removeErr, fs.ErrNotExist) {
-			me.logger().Error("error removing destination file after failed rename", "name", to)
-		}
-		return err
+		return
 	}
+	renamed = true
 	me.logger().Debug("renamed file", "from", from, "to", to)
-	return nil
+	return
 }
 
 func (me *filePieceImpl) onFileNotComplete(f file) (err error) {
+	if !me.partFiles() {
+		return
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.race++
-	if me.partFiles() {
-		err = me.exclRenameIfExists(f.safeOsPath, f.partFilePath())
-		if err != nil {
-			err = fmt.Errorf("restoring part file: %w", err)
-			return
-		}
-	}
-	info, err := os.Stat(me.pathForWrite(&f))
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
+	_, err = me.exclRenameIfExists(f.safeOsPath, f.partFilePath())
 	if err != nil {
-		err = fmt.Errorf("statting file: %w", err)
-		return
-	}
-	// Ensure the file is writable
-	err = os.Chmod(me.pathForWrite(&f), info.Mode().Perm()|(filePerm&0o222))
-	if err != nil {
-		err = fmt.Errorf("setting file writable: %w", err)
+		err = fmt.Errorf("restoring part file: %w", err)
 		return
 	}
 	return

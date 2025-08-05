@@ -867,7 +867,13 @@ func (t *Torrent) writeStatus(w io.Writer) {
 		fmt.Fprintln(w)
 	}
 	// Note this might be shared with other torrents.
-	fmt.Fprintf(w, "Piece request order length: %v\n", t.getPieceRequestOrder().Len())
+	fmt.Fprintf(w, "Piece request order length: %v\n", func() any {
+		pro := t.getPieceRequestOrder()
+		if pro == nil {
+			return nil
+		}
+		return pro.Len()
+	}())
 	fmt.Fprintf(w, "Piece length: %s\n",
 		func() string {
 			if t.haveInfo() {

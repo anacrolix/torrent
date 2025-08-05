@@ -335,6 +335,7 @@ func (p *Piece) UpdateCompletion() {
 	p.t.updatePieceCompletion(p.index)
 }
 
+// TODO: Probably don't include Completion.Err?
 func (p *Piece) completion() (ret storage.Completion) {
 	ret.Ok = p.storageCompletionOk
 	if ret.Ok {

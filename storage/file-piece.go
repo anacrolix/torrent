@@ -288,6 +288,10 @@ func (me *filePieceImpl) WriteTo(w io.Writer) (n int64, err error) {
 		if err != nil {
 			return
 		}
+		panicif.GreaterThan(n1, extent.Length)
+		if n1 < extent.Length {
+			return
+		}
 		panicif.NotEq(n1, extent.Length)
 	}
 	return
@@ -305,6 +309,9 @@ func (me *filePieceImpl) writeFileTo(w io.Writer, fileIndex int, extent segments
 	var f *os.File
 	f, err = me.t.openFile(file)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			err = nil
+		}
 		return
 	}
 	defer f.Close()

@@ -1323,9 +1323,7 @@ func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash) (
 	storagePiece := p.Storage()
 	var written int64
 	written, err = storagePiece.WriteTo(w)
-	if err == nil && written != int64(p.length()) {
-		err = fmt.Errorf("wrote %v bytes from storage, piece has length %v", written, p.length())
-	}
+	// TODO: Require the correct number of bytes were written to pass hash.
 	t.countBytesHashed(written)
 	return
 }

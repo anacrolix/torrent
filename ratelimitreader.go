@@ -24,7 +24,12 @@ type rateLimitedReader struct {
 	r io.Reader
 }
 
-func (me *rateLimitedReader) Read(b []byte) (n int, err error) {
+func (me rateLimitedReader) Read(b []byte) (n int, err error) {
+	// Avoid truncating the read if everything is permitted anyway.
+	if me.l.Limit() == rate.Inf {
+		return me.r.Read(b)
+	}
+	// If the burst is zero, let the limiter method handle errors.
 	if me.l.Burst() != 0 {
 		b = b[:min(len(b), me.l.Burst())]
 	}

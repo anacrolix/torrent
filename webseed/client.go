@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"runtime/pprof"
 	"strings"
 	"sync"
 
@@ -156,6 +157,7 @@ func (ws *Client) StartNewRequest(ctx context.Context, r RequestSpec, debugLogge
 		bodyPipe: body,
 	}
 	go func() {
+		pprof.SetGoroutineLabels(context.Background())
 		err := ws.readRequestPartResponses(ctx, w, requestParts)
 		panicif.Err(w.CloseWithError(err))
 	}()

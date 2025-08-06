@@ -90,9 +90,7 @@ func (me *torrentStorage) WriteAt(b []byte, _ int64) (int, error) {
 
 func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	var cl Client
-	cl.init(&ClientConfig{
-		DownloadRateLimiter: unlimited,
-	})
+	cl.init(&ClientConfig{})
 	cl.initLogger()
 	ts := &torrentStorage{}
 	t := cl.newTorrentForTesting()

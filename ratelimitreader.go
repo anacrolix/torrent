@@ -8,6 +8,17 @@ import (
 	"golang.org/x/time/rate"
 )
 
+func newRateLimitedReader(r io.Reader, l *rate.Limiter) io.Reader {
+	if l == nil {
+		// Avoids taking Limiter lock to check limit, and allows type assertions to bypass Read.
+		return r
+	}
+	return rateLimitedReader{
+		l: l,
+		r: r,
+	}
+}
+
 type rateLimitedReader struct {
 	l *rate.Limiter
 	r io.Reader

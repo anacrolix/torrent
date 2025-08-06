@@ -79,6 +79,8 @@ type ClientConfig struct {
 	// rate-limiting io.Reader minus one. This is likely to be the larger of the main read loop
 	// buffer (~4096), and the requested chunk size (~16KiB, see TorrentSpec.ChunkSize). If limit is
 	// not Inf, and burst is left at 0, the implementation will choose a suitable burst.
+	//
+	// If the field is nil, no rate limiting is applied. And it can't be adjusted dynamically.
 	DownloadRateLimiter *rate.Limiter
 	// Maximum unverified bytes across all torrents. Not used if zero.
 	MaxUnverifiedBytes int64
@@ -233,7 +235,6 @@ func NewDefaultClientConfig() *ClientConfig {
 		MaxAllocPeerRequestDataPerConn: 1 << 20,
 		ListenHost:                     func(string) string { return "" },
 		UploadRateLimiter:              unlimited,
-		DownloadRateLimiter:            unlimited,
 		DisableAcceptRateLimiting:      true,
 		DropMutuallyCompletePeers:      true,
 		HeaderObfuscationPolicy: HeaderObfuscationPolicy{
@@ -264,10 +265,16 @@ type HeaderObfuscationPolicy struct {
 
 func (cfg *ClientConfig) setRateLimiterBursts() {
 	// What about chunk size?
-	setRateLimiterBurstIfZero(cfg.UploadRateLimiter, cfg.MaxAllocPeerRequestDataPerConn)
-	setRateLimiterBurstIfZero(
-		cfg.DownloadRateLimiter,
-		min(
-			int(cfg.DownloadRateLimiter.Limit()),
-			defaultDownloadRateLimiterBurst))
+	if cfg.UploadRateLimiter.Burst() == 0 {
+		cfg.UploadRateLimiter.SetBurst(cfg.MaxAllocPeerRequestDataPerConn)
+	}
+	setDefaultDownloadRateLimiterBurstIfZero(cfg.DownloadRateLimiter)
+}
+
+// Returns the download rate.Limit handling the special nil case.
+func EffectiveDownloadRateLimit(l *rate.Limiter) rate.Limit {
+	if l == nil {
+		return rate.Inf
+	}
+	return l.Limit()
 }

@@ -1740,10 +1740,7 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 	c.peerImpl = c
 	c.setPeerLoggers(cl.logger, cl.slogger)
 	c.setRW(connStatsReadWriter{nc, c})
-	c.r = &rateLimitedReader{
-		l: cl.config.DownloadRateLimiter,
-		r: c.r,
-	}
+	c.r = cl.newDownloadRateLimitedReader(c.r)
 	c.logger.Levelf(
 		log.Debug,
 		"inited with remoteAddr %v network %v outgoing %t",
@@ -1753,6 +1750,17 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 		f(&c.Peer)
 	}
 	return
+}
+
+func (cl *Client) newDownloadRateLimitedReader(r io.Reader) io.Reader {
+	if cl.config.DownloadRateLimiter == nil {
+		return r
+	}
+	// Why if the limit is Inf? Because it can be dynamically adjusted.
+	return rateLimitedReader{
+		l: cl.config.DownloadRateLimiter,
+		r: r,
+	}
 }
 
 func (cl *Client) onDHTAnnouncePeer(ih metainfo.Hash, ip net.IP, port int, portOk bool) {
@@ -1943,7 +1951,7 @@ func (cl *Client) underWebSeedHttpRequestLimit(key webseedHostKeyHandle) bool {
 
 // Check for bad arrangements. This is a candidate for an error state check method.
 func (cl *Client) checkConfig() error {
-	if cl.config.DownloadRateLimiter.Limit() == 0 {
+	if EffectiveDownloadRateLimit(cl.config.DownloadRateLimiter) == 0 {
 		if len(cl.dialers) != 0 {
 			return errors.New("download rate limit is zero, but dialers are set")
 		}

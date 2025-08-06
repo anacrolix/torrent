@@ -3149,7 +3149,7 @@ func (t *Torrent) deferUpdateComplete() {
 }
 
 func (t *Torrent) updateComplete() {
-	// TODO: Announce complete to trackers?
+	// Announce completed is called on the complete.On channel closed.
 	t.complete.SetBool(t.haveAllPieces())
 }
 

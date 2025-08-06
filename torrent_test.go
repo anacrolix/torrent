@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 
 	g "github.com/anacrolix/generics"
@@ -247,7 +246,6 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	err = pc.peerSentHaveNone()
 	tt.cl.unlock()
 	qt.Assert(t, qt.IsNil(err))
-	var wg sync.WaitGroup
-	tt.close(&wg)
+	tt.Drop()
 	tt.assertAllPiecesRelativeAvailabilityZero()
 }

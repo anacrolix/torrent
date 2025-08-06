@@ -173,8 +173,11 @@ func (me *webseedPeer) hasOverlappingRequests(begin, end RequestIndex) bool {
 	return false
 }
 
-func readChunksErrorLevel(err error, req *webseedRequest) slog.Level {
+func (ws *webseedPeer) readChunksErrorLevel(err error, req *webseedRequest) slog.Level {
 	if req.cancelled.Load() {
+		return slog.LevelDebug
+	}
+	if ws.peer.closedCtx.Err() != nil {
 		return slog.LevelDebug
 	}
 	var h2e http2.GoAwayError
@@ -200,7 +203,7 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 	// Ensure the body reader and response are closed.
 	webseedRequest.Close()
 	if err != nil {
-		level := readChunksErrorLevel(err, webseedRequest)
+		level := ws.readChunksErrorLevel(err, webseedRequest)
 		ws.slogger().Log(context.TODO(), level, "webseed request error", "err", err)
 		torrent.Add("webseed request error count", 1)
 		// This used to occur only on webseed.ErrTooFast but I think it makes sense to slow down any

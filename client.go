@@ -1491,7 +1491,12 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 			go t.dhtAnnouncer(s)
 		}
 	})
-	cl.torrentsByShortHash[infoHash] = t
+	if !infoHash.IsZero() {
+		cl.torrentsByShortHash[infoHash] = t
+	}
+	if opts.InfoHashV2.Ok {
+		cl.torrentsByShortHash[*opts.InfoHashV2.Value.ToShort()] = t
+	}
 	cl.torrents[t] = struct{}{}
 	t.setInfoBytesLocked(opts.InfoBytes)
 	cl.clearAcceptLimits()

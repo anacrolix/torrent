@@ -18,6 +18,7 @@ import (
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/missinggo/v2/panicif"
+	"github.com/davecgh/go-spew/spew"
 
 	"github.com/anacrolix/torrent/internal/request-strategy"
 	"github.com/anacrolix/torrent/metainfo"
@@ -139,7 +140,12 @@ func (cl *Client) updateWebseedRequests() {
 				// Doing earlier chunks first means more compact files for partial file hashing.
 				cmp.Compare(l.sliceIndex, r.sliceIndex),
 			)
-			panicif.Zero(ret)
+			if ret == 0 {
+				cfg := spew.NewDefaultConfig()
+				cfg.Dump(l)
+				cfg.Dump(r)
+				panic("webseed request heap ordering is not stable")
+			}
 			return ret < 0
 		},
 	)
@@ -415,6 +421,12 @@ func (cl *Client) iterCurrentWebseedRequests() iter.Seq2[webseedUniqueRequestKey
 				for ar := range ws.activeRequests {
 					if ar.next >= ar.end {
 						// This request is done, so don't yield it.
+						continue
+					}
+					if ar.cancelled.Load() {
+						cl.slogger.Debug("iter current webseed requests: skipped cancelled webseed request")
+						// This should prevent overlapping webseed requests that are just filling
+						// slots waiting to cancel from conflicting.
 						continue
 					}
 					p := t.piece(t.pieceIndexOfRequestIndex(ar.next))

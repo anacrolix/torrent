@@ -302,6 +302,8 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 			err = fmt.Errorf("reading chunk: %w", err)
 			return
 		}
+		// TODO: This happens outside Client lock, and stats can be written out of sync with each
+		// other. Why even bother with atomics?
 		ws.peer.doChunkReadStats(int64(n))
 		// TODO: Clean up the parameters for receiveChunk.
 		msg.Piece = buf

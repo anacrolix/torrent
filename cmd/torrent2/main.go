@@ -4,19 +4,17 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 
+	"github.com/anacrolix/bargle/v2"
 	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/torrent/merkle"
 	"github.com/anacrolix/torrent/metainfo"
 )
-
-type argError struct {
-	err error
-}
 
 func assertOk(err error) {
 	if err != nil {
@@ -29,12 +27,37 @@ func bail(str string) {
 }
 
 func main() {
-	args := os.Args[1:]
-	map[string]func(){
+	err := mainErr()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}
+
+func mainErr() error {
+	p := bargle.NewParser()
+	defer p.DoHelpIfHelping()
+	runMap := func(m map[string]func()) {
+		for key, value := range m {
+			if p.Parse(bargle.Keyword(key)) {
+				value()
+				return
+			}
+		}
+		p.Fail()
+	}
+	parseFileName := func() (ret string) {
+		if p.Parse(bargle.Positional("file", bargle.BuiltinUnmarshaler(&ret))) {
+			return
+		}
+		p.SetError(errors.New("file not specified"))
+		panic(p.Fail())
+	}
+	runMap(map[string]func(){
 		"metainfo": func() {
-			map[string]func(){
+			runMap(map[string]func(){
 				"validate-v2": func() {
-					mi, err := metainfo.LoadFromFile(args[2])
+					mi, err := metainfo.LoadFromFile(parseFileName())
 					assertOk(err)
 					info, err := mi.UnmarshalInfo()
 					assertOk(err)
@@ -45,7 +68,7 @@ func main() {
 					assertOk(err)
 				},
 				"pprint": func() {
-					mi, err := metainfo.LoadFromFile(args[2])
+					mi, err := metainfo.LoadFromFile(parseFileName())
 					assertOk(err)
 					info, err := mi.UnmarshalInfo()
 					assertOk(err)
@@ -54,9 +77,13 @@ func main() {
 					for _, f := range files {
 						numPieces := int((f.Length + info.PieceLength - 1) / info.PieceLength)
 						endIndex := pieceIndex + numPieces
+						hash := "no v2 pieces root"
+						for a := range f.PiecesRoot.Iter() {
+							hash = a.HexString()
+						}
 						fmt.Printf(
-							"%x: %q: pieces (%v-%v)\n",
-							f.PiecesRoot.Unwrap(),
+							"%s: %q: pieces (%v-%v)\n",
+							hash,
 							f.BestPath(),
 							pieceIndex,
 							endIndex-1,
@@ -64,7 +91,7 @@ func main() {
 						pieceIndex = endIndex
 					}
 				},
-			}[args[1]]()
+			})
 		},
 		"merkle": func() {
 			h := merkle.NewHash()
@@ -75,5 +102,7 @@ func main() {
 			}
 			fmt.Printf("%x\n", h.Sum(nil))
 		},
-	}[args[0]]()
+	})
+	p.FailIfArgsRemain()
+	return p.Err()
 }

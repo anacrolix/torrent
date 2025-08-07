@@ -80,12 +80,12 @@ github.com/anacrolix/envpprof v1.3.0/go.mod h1:7QIG4CaX1uexQ3tqd5+BRa/9e2D02Wcer
 github.com/anacrolix/fuse v0.3.2-0.20250603105216-aeb550c91d7a h1:bP+SxvpLAWXgpRvDKmB+d8n4XEWYHH5czGlcZ5Kw66Y=
 github.com/anacrolix/fuse v0.3.2-0.20250603105216-aeb550c91d7a/go.mod h1:vN3X/6E+uHNjg5F8Oy9FD9I+pYxeDWeB8mNjIoxL5ds=
 github.com/anacrolix/generics v0.0.0-20230113004304-d6428d516633/go.mod h1:ff2rHB/joTV03aMSSn/AZNnaIpUw0h3njetGsaXcMy8=
-github.com/anacrolix/generics v0.0.3-0.20250526144502-593be7092deb h1:0GzqbT+KzmrpXsqEp6O3t6qfydTQuqvgo3nTJEC1EGA=
-github.com/anacrolix/generics v0.0.3-0.20250526144502-593be7092deb/go.mod h1:MN3ve08Z3zSV/rTuX/ouI4lNdlfTxgdafQJiLzyNRB8=
+github.com/anacrolix/generics v0.0.4-0.20250708073025-68393b391647 h1:dDTY2j+pjY0EnF0TIuAxees1FeFpnFVE2dr7BxfWe24=
+github.com/anacrolix/generics v0.0.4-0.20250708073025-68393b391647/go.mod h1:MN3ve08Z3zSV/rTuX/ouI4lNdlfTxgdafQJiLzyNRB8=
 github.com/anacrolix/go-libutp v1.3.2 h1:WswiaxTIogchbkzNgGHuHRfbrYLpv4o290mlvcx+++M=
 github.com/anacrolix/go-libutp v1.3.2/go.mod h1:fCUiEnXJSe3jsPG554A200Qv+45ZzIIyGEvE56SHmyA=
-github.com/anacrolix/gostdapp v0.1.0 h1:sZC+gSLhA7Hdalak5rPCkhO0YSEl0tt/lsovxh6qka4=
-github.com/anacrolix/gostdapp v0.1.0/go.mod h1:2pstbgWcpBCY3rFUldM0NbDCrP86vWsh61wj8yY517E=
+github.com/anacrolix/gostdapp v0.2.0 h1:UNuF8oKKFIa2tzcXLTiVStCYSUfRith81EskV05gIfk=
+github.com/anacrolix/gostdapp v0.2.0/go.mod h1:2pstbgWcpBCY3rFUldM0NbDCrP86vWsh61wj8yY517E=
 github.com/anacrolix/log v0.3.0/go.mod h1:lWvLTqzAnCWPJA08T2HCstZi0L1y2Wyvm3FJgwU9jwU=
 github.com/anacrolix/log v0.6.0/go.mod h1:lWvLTqzAnCWPJA08T2HCstZi0L1y2Wyvm3FJgwU9jwU=
 github.com/anacrolix/log v0.13.1/go.mod h1:D4+CvN8SnruK6zIFS/xPoRJmtvtnxs+CSfDQ+BFxZ68=

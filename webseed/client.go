@@ -135,8 +135,8 @@ func (ws *Client) StartNewRequest(ctx context.Context, r RequestSpec, debugLogge
 					debugLogger.Debug(
 						"request for part",
 						"url", req.URL,
-						"file size", humanize.IBytes(uint64(e.Length)),
-						"range", req.Header.Get("Range"),
+						"part-length", humanize.IBytes(uint64(e.Length)),
+						"part-file-offset", humanize.IBytes(uint64(e.Start)),
 						"CF-Cache-Status", resp.Header.Get("CF-Cache-Status"),
 					)
 				}

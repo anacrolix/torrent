@@ -223,12 +223,12 @@ func (cl *Client) updateWebseedRequests() {
 
 func (t *Torrent) getWebseedRequestEnd(begin RequestIndex, debugLogger *slog.Logger) RequestIndex {
 	chunkEnd := t.endRequestForAlignedWebseedResponse(begin)
-	panicif.False(t.wantReceiveChunk(begin))
 	if true {
 		// Pending fix to pendingPieces matching piece request order due to missing initial pieces
 		// checks?
 		return chunkEnd
 	}
+	panicif.False(t.wantReceiveChunk(begin))
 	last := begin
 	for {
 		if !t.wantReceiveChunk(last) {

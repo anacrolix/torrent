@@ -12,8 +12,6 @@ import (
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
-	"golang.org/x/sys/unix"
-
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/segments"
 )
@@ -318,10 +316,8 @@ func (me *filePieceImpl) writeFileTo(w io.Writer, fileIndex int, extent segments
 	panicif.GreaterThan(extent.End(), file.FileInfo.Length)
 	extentRemaining := extent.Length
 	var dataOffset int64
-	dataOffset, err = unix.Seek(int(f.Fd()), extent.Start, unix.SEEK_DATA)
-	if err == unix.ENXIO {
-		// File has no more data. Treat as short write like io.CopyN.
-		err = io.EOF
+	dataOffset, err = seekData(f, extent.Start)
+	if err == io.EOF {
 		return
 	}
 	panicif.Err(err)

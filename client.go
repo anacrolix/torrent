@@ -1520,8 +1520,10 @@ type AddTorrentOpts struct {
 	InfoHash   infohash.T
 	InfoHashV2 g.Option[infohash_v2.T]
 	Storage    storage.ClientImpl
-	ChunkSize  pp.Integer
-	InfoBytes  []byte
+	// Only applied for new torrents (check Client.AddTorrent* method bool return value). If 0, the
+	// default chunk size is used (16 KiB in current modern BitTorrent clients).
+	ChunkSize pp.Integer
+	InfoBytes []byte
 	// Don't hash data if piece completion is missing. This is useful for very large torrents that
 	// are dropped in place from an external source and trigger a lot of initial piece checks.
 	DisableInitialPieceCheck bool
@@ -1535,11 +1537,8 @@ type AddTorrentOpts struct {
 func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
 	t, new = cl.AddTorrentOpt(spec.AddTorrentOpts)
 	modSpec := *spec
-	if new {
-		// ChunkSize was already applied by adding a new Torrent, and MergeSpec disallows changing
-		// it.
-		modSpec.ChunkSize = 0
-	}
+	// ChunkSize was already applied by adding a new Torrent, and MergeSpec disallows changing it.
+	modSpec.ChunkSize = 0
 	err = t.MergeSpec(&modSpec)
 	if err != nil && new {
 		t.Drop()

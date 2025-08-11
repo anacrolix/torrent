@@ -304,7 +304,8 @@ func (me *filePieceImpl) writeFileTo(w io.Writer, fileIndex int, extent segments
 		return
 	}
 	file := me.t.file(fileIndex)
-	var f *os.File
+	// Do we want io.WriterTo here, or are we happy to let that be type asserted in io.CopyN?
+	var f fileReader
 	f, err = me.t.openFile(file)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -316,7 +317,7 @@ func (me *filePieceImpl) writeFileTo(w io.Writer, fileIndex int, extent segments
 	panicif.GreaterThan(extent.End(), file.FileInfo.Length)
 	extentRemaining := extent.Length
 	var dataOffset int64
-	dataOffset, err = seekData(f, extent.Start)
+	dataOffset, err = f.seekData(extent.Start)
 	if err == io.EOF {
 		return
 	}

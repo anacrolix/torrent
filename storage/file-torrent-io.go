@@ -4,8 +4,6 @@ import (
 	"errors"
 	"io"
 	"io/fs"
-	"os"
-	"path/filepath"
 
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/torrent/segments"
@@ -76,37 +74,12 @@ func (fst fileTorrentImplIO) ReadAt(b []byte, off int64) (n int, err error) {
 	return
 }
 
-func (fst fileTorrentImplIO) openForWrite(file file) (f *os.File, err error) {
-	// It might be possible to have a writable handle shared files cache if we need it.
-	fst.fts.logger().Debug("openForWrite", "file.safeOsPath", file.safeOsPath)
-	p := fst.fts.pathForWrite(&file)
-	f, err = os.OpenFile(p, os.O_WRONLY|os.O_CREATE, filePerm)
-	if err == nil {
-		return
-	}
-	if errors.Is(err, fs.ErrNotExist) {
-		err = os.MkdirAll(filepath.Dir(p), dirPerm)
-		if err != nil {
-			return
-		}
-	} else if errors.Is(err, fs.ErrPermission) {
-		err = os.Chmod(p, filePerm)
-		if err != nil {
-			return
-		}
-	} else {
-		return
-	}
-	f, err = os.OpenFile(p, os.O_WRONLY|os.O_CREATE, filePerm)
-	return
-}
-
 func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
 	for i, e := range fst.fts.segmentLocater.LocateIter(
 		segments.Extent{off, int64(len(p))},
 	) {
-		var f *os.File
-		f, err = fst.openForWrite(fst.fts.file(i))
+		var f fileWriter
+		f, err = fst.fts.openForWrite(fst.fts.file(i))
 		if err != nil {
 			return
 		}

@@ -104,6 +104,7 @@ func (fs *fileClientImpl) OpenTorrent(
 		metainfoFileInfos,
 		info.FileSegmentsIndex(),
 		infoHash,
+		classicFileIo{},
 		fs,
 	}
 	if t.partFiles() {

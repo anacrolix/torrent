@@ -21,6 +21,7 @@ type fileTorrentImpl struct {
 	metainfoFileInfos []metainfo.FileInfo
 	segmentLocater    segments.Index
 	infoHash          metainfo.Hash
+	io                fileIo
 	// Save memory by pointing to the other data.
 	client *fileClientImpl
 }
@@ -139,26 +140,32 @@ func (me *fileTorrentImpl) openSharedFile(file file) (f sharedFileIf, err error)
 	// Fine to open once under each name on a unix system. We could make the shared file keys more
 	// constrained, but it shouldn't matter. TODO: Ensure at most one of the names exist.
 	if me.partFiles() {
-		f, err = sharedFiles.Open(file.partFilePath())
+		f, err = me.io.openForSharedRead(file.partFilePath())
 	}
 	if err == nil && f == nil || errors.Is(err, fs.ErrNotExist) {
-		f, err = sharedFiles.Open(file.safeOsPath)
+		f, err = me.io.openForSharedRead(file.safeOsPath)
 	}
 	file.mu.RUnlock()
 	return
 }
 
-// Open file for reading.
-func (me *fileTorrentImpl) openFile(file file) (f *os.File, err error) {
+// Open file for reading. Not a shared handle if that matters.
+func (me *fileTorrentImpl) openFile(file file) (f fileReader, err error) {
 	file.mu.RLock()
 	// Fine to open once under each name on a unix system. We could make the shared file keys more
 	// constrained, but it shouldn't matter. TODO: Ensure at most one of the names exist.
 	if me.partFiles() {
-		f, err = os.Open(file.partFilePath())
+		f, err = me.io.openForRead(file.partFilePath())
 	}
 	if err == nil && f == nil || errors.Is(err, fs.ErrNotExist) {
-		f, err = os.Open(file.safeOsPath)
+		f, err = me.io.openForRead(file.safeOsPath)
 	}
 	file.mu.RUnlock()
 	return
+}
+
+func (fst fileTorrentImpl) openForWrite(file file) (_ fileWriter, err error) {
+	// It might be possible to have a writable handle shared files cache if we need it.
+	fst.logger().Debug("openForWrite", "file.safeOsPath", file.safeOsPath)
+	return fst.io.openForWrite(fst.pathForWrite(&file))
 }

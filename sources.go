@@ -61,7 +61,7 @@ func (t *Torrent) trySource(source string) (retry g.Option[time.Duration], err e
 		return
 	}
 	if err != nil {
-		retry.Set(time.Duration(rand.Int64N(int64(time.Minute))))
+		retry.Set(time.Minute + time.Duration(rand.Int64N(int64(time.Minute))))
 		return
 	}
 	err = t.cl.config.MetainfoSourcesMerger(t, &mi)

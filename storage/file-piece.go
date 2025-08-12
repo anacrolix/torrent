@@ -299,6 +299,24 @@ var (
 	packageExpvarMap = expvar.NewMap("torrentStorage")
 )
 
+type limitWriter struct {
+	rem int64
+	w   io.Writer
+}
+
+func (me *limitWriter) Write(p []byte) (n int, err error) {
+	n, err = me.w.Write(p[:min(int64(len(p)), me.rem)])
+	me.rem -= int64(n)
+	if err != nil {
+		return
+	}
+	p = p[n:]
+	if len(p) > 0 {
+		err = io.ErrShortWrite
+	}
+	return
+}
+
 func (me *filePieceImpl) writeFileTo(w io.Writer, fileIndex int, extent segments.Extent) (written int64, err error) {
 	if extent.Length == 0 {
 		return
@@ -337,7 +355,18 @@ func (me *filePieceImpl) writeFileTo(w io.Writer, fileIndex int, extent segments
 		extentRemaining -= n1
 	}
 	var n1 int64
-	n1, err = io.CopyN(w, f, extentRemaining)
+	if true {
+		n1, err = f.WriteTo(&limitWriter{
+			rem: extentRemaining,
+			w:   w,
+		})
+		// limitWriter will block f from writing too much.
+		if n1 == extentRemaining {
+			err = nil
+		}
+	} else {
+		n1, err = io.CopyN(w, f, extentRemaining)
+	}
 	packageExpvarMap.Add("bytesReadNotSkipped", n1)
 	written += n1
 	return

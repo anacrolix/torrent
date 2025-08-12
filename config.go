@@ -12,6 +12,7 @@ import (
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/pion/webrtc/v4"
 	"golang.org/x/time/rate"
 
@@ -50,6 +51,7 @@ type ClientDhtConfig struct {
 type ClientConfig struct {
 	ClientTrackerConfig
 	ClientDhtConfig
+	MetainfoSourcesConfig
 
 	// Store torrent file data in this directory unless DefaultStorage is
 	// specified.
@@ -111,9 +113,6 @@ type ClientConfig struct {
 	Logger  log.Logger
 	Slogger *slog.Logger
 
-	// Used for torrent metainfo sources only. Falls back to the http.Client created to wrap
-	// WebTransport.
-	MetainfoSourcesClient *http.Client
 	// Used for torrent sources and webseeding if set.
 	WebTransport http.RoundTripper
 	// Defines proxy for HTTP requests, such as for trackers. It's commonly set from the result of
@@ -255,6 +254,9 @@ func NewDefaultClientConfig() *ClientConfig {
 		return func() ([]dht.Addr, error) { return dht.GlobalBootstrapAddrs(network) }
 	}
 	cc.PeriodicallyAnnounceTorrentsToDht = true
+	cc.MetainfoSourcesMerger = func(t *Torrent, info *metainfo.MetaInfo) error {
+		return t.MergeSpec(TorrentSpecFromMetaInfo(info))
+	}
 	return cc
 }
 
@@ -277,4 +279,14 @@ func EffectiveDownloadRateLimit(l *rate.Limiter) rate.Limit {
 		return rate.Inf
 	}
 	return l.Limit()
+}
+
+type MetainfoSourcesConfig struct {
+	// Used for torrent metainfo sources only. Falls back to the http.Client created to wrap
+	// WebTransport.
+	MetainfoSourcesClient *http.Client
+	// If a sources successfully fetches metainfo, this function is called to apply the metainfo. t
+	// is provided to prevent a race as the fetcher for the source was bound to it. Returning an
+	// error will kill the respective sourcer.
+	MetainfoSourcesMerger func(t *Torrent, info *metainfo.MetaInfo) error
 }

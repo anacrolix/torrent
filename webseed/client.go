@@ -146,7 +146,7 @@ func (ws *Client) StartNewRequest(ctx context.Context, r RequestSpec, debugLogge
 		requestParts = append(requestParts, part)
 	}
 	// Technically what we want to ensure is that all parts exist consecutively. If the file data
-	// isn't consecutive, then it is piece aligned and we wouoldn't need to be doing multiple
+	// isn't consecutive, then it is piece aligned and we wouldn't need to be doing multiple
 	// requests. TODO: Assert this.
 	panicif.Zero(len(requestParts))
 	body, w := io.Pipe()
@@ -202,10 +202,10 @@ func (me *Client) recvPartResult(ctx context.Context, w io.Writer, part requestP
 	if part.responseBodyWrapper != nil {
 		body = part.responseBodyWrapper(body)
 	}
-	// Prevent further accidental use
-	resp.Body = nil
+	// We did set resp.Body to nil here, but I'm worried the HTTP machinery might do something
+	// funny.
 	if ctx.Err() != nil {
-		return ctx.Err()
+		return context.Cause(ctx)
 	}
 	switch resp.StatusCode {
 	case http.StatusPartialContent:

@@ -1323,7 +1323,6 @@ func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash) (
 	storagePiece := p.Storage()
 	var written int64
 	written, err = storagePiece.WriteTo(w)
-	// TODO: Require the correct number of bytes were written to pass hash.
 	t.countBytesHashed(written)
 	return
 }
@@ -2662,7 +2661,7 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 	if t.pieceAllDirty(piece) {
 		t.pendAllChunkSpecs(piece)
 	}
-	if !t.wantPieceIndex(piece) {
+	if t.ignorePieceForRequests(piece) {
 		// t.logger.Printf("piece %d incomplete and unwanted", piece)
 		return
 	}
@@ -3564,7 +3563,7 @@ func (t *Torrent) endRequestIndexForFileIndex(fileIndex int) RequestIndex {
 
 func (t *Torrent) wantReceiveChunk(reqIndex RequestIndex) bool {
 	pi := t.pieceIndexOfRequestIndex(reqIndex)
-	if !t.wantPieceIndex(pi) {
+	if t.ignorePieceForRequests(pi) {
 		return false
 	}
 	if t.haveRequestIndexChunk(reqIndex) {

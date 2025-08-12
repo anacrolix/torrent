@@ -55,6 +55,7 @@ func (me *webseedPeer) isLowOnRequests() bool {
 // Webseed requests are issued globally so per-connection reasons or handling make no sense.
 func (me *webseedPeer) onNeedUpdateRequests(reason updateRequestReason) {
 	// Too many reasons here: Can't predictably determine when we need to rerun updates.
+	// TODO: Can trigger this when we have Client-level active-requests map.
 	//me.peer.cl.scheduleImmediateWebseedRequestUpdate(reason)
 }
 

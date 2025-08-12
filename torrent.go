@@ -1570,6 +1570,9 @@ func (t *Torrent) updatePiecePriority(piece pieceIndex, reason updateRequestReas
 }
 
 func (t *Torrent) updateAllPiecePriorities(reason updateRequestReason) {
+	if !t.haveInfo() {
+		return
+	}
 	t.updatePiecePriorities(0, t.numPieces(), reason)
 }
 
@@ -2997,6 +3000,7 @@ func (t *Torrent) AllowDataDownload() {
 	if !t.dataDownloadDisallowed.Clear() {
 		return
 	}
+	t.updateAllPiecePriorities("data download allowed")
 	t.iterPeers(func(p *Peer) {
 		p.onNeedUpdateRequests("allow data download")
 	})

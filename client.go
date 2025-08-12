@@ -1530,6 +1530,9 @@ type AddTorrentOpts struct {
 	// Require pieces to be checked as soon as info is available. This is because we have no way to
 	// schedule an initial check only, and don't want to race against use of Torrent.Complete.
 	IgnoreUnverifiedPieceCompletion bool
+	// Whether to initially allow data download or upload
+	DisallowDataUpload   bool
+	DisallowDataDownload bool
 }
 
 // Add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also
@@ -1547,8 +1550,9 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err e
 }
 
 // The trackers will be merged with the existing ones. If the Info isn't yet known, it will be set.
-// spec.DisallowDataDownload/Upload will be read and applied
 // The display name is replaced if the new spec provides one. Note that any `Storage` is ignored.
+// Many fields in the AddTorrentOpts field in TorrentSpec are ignored because the Torrent is already
+// added.
 func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	if spec.DisplayName != "" {
 		t.SetDisplayName(spec.DisplayName)
@@ -1580,8 +1584,6 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	}
 	t.addTrackers(spec.Trackers)
 	t.maybeNewConns()
-	t.dataDownloadDisallowed.SetBool(spec.DisallowDataDownload)
-	t.dataUploadDisallowed = spec.DisallowDataUpload
 	return errors.Join(t.addPieceLayersLocked(spec.PieceLayers)...)
 }
 

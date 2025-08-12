@@ -27,10 +27,6 @@ type TorrentSpec struct {
 	Sources []string
 	// BEP 52 "piece layers" from metainfo
 	PieceLayers map[string]string
-
-	// Whether to allow data download or upload
-	DisallowDataUpload   bool
-	DisallowDataDownload bool
 }
 
 func TorrentSpecFromMagnetUri(uri string) (spec *TorrentSpec, err error) {

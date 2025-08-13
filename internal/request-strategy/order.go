@@ -13,7 +13,6 @@ type (
 	RequestIndex  uint32
 	ChunkIndex    = RequestIndex
 	Request       = types.Request
-	pieceIndex    = types.PieceIndex
 	piecePriority = types.PiecePriority
 	// This can be made into a type-param later, will be great for testing.
 	ChunkSpec = types.ChunkSpec

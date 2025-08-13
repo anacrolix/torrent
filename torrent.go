@@ -3651,15 +3651,6 @@ func (t *Torrent) piecesMightBePartial(beginPieceIndex, endPieceIndex int) bool 
 	}
 }
 
-func (t *Torrent) requestIndexIsInActiveWebseedRequest(reqIndex RequestIndex) bool {
-	for _, p := range t.webSeeds {
-		for range p.activeRequestsForIndex(reqIndex) {
-			return true
-		}
-	}
-	return false
-}
-
 func (t *Torrent) hasActiveWebseedRequests() bool {
 	for _, p := range t.webSeeds {
 		for req := range p.activeRequests {

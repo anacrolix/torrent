@@ -706,7 +706,6 @@ again:
 	panicif.False(c.peerRequestServerRunning)
 	c.peerRequestServerRunning = false
 	c.locker().Unlock()
-	return
 }
 
 // TODO: Return an error then let caller filter on conditions.

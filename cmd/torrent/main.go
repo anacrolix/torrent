@@ -9,37 +9,22 @@ import (
 	stdLog "log"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/anacrolix/bargle"
 	"github.com/anacrolix/envpprof"
 	app "github.com/anacrolix/gostdapp"
-	"github.com/anacrolix/log"
 	xprometheus "github.com/anacrolix/missinggo/v2/prometheus"
+	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/version"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.opentelemetry.io/otel/sdk/trace"
-
-	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/version"
 )
 
 func init() {
 	stdLog.SetFlags(stdLog.Flags() | stdLog.Lshortfile)
 	prometheus.MustRegister(xprometheus.NewExpvarCollector())
 	http.Handle("/metrics", promhttp.Handler())
-}
-
-func shutdownTracerProvider(ctx context.Context, tp *trace.TracerProvider) {
-	started := time.Now()
-	err := tp.Shutdown(ctx)
-	elapsed := time.Since(started)
-	logger := log.Default.Slogger()
-	logger.Debug("shutting down tracer provider", "took", elapsed)
-	if err != nil && ctx.Err() == nil {
-		log.Default.Slogger().Error("error shutting down tracer provider", "err", err)
-	}
 }
 
 func main() {

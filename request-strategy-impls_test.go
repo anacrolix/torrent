@@ -112,7 +112,7 @@ func BenchmarkRequestStrategy(b *testing.B) {
 	//b.StopTimer()
 	b.ResetTimer()
 	//b.ReportAllocs()
-	for _ = range iter.N(b.N) {
+	for range b.N {
 		storageClient.completed = 0
 		for pieceIndex := range iter.N(numPieces) {
 			tor.updatePieceCompletion(pieceIndex)

@@ -190,8 +190,6 @@ func (info *Info) UpvertedV1Files() iter.Seq[FileInfo] {
 				return
 			}
 		}
-		return
-
 	}
 }
 

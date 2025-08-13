@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"iter"
 	"log/slog"
 	"math/rand"
 	"strings"
@@ -67,11 +66,6 @@ func (me *webseedPeer) checkReceivedChunk(RequestIndex, *pp.Message, Request) (b
 	return true, nil
 }
 
-func (me *webseedPeer) numRequests() int {
-	// What about unassigned requests? TODO: Don't allow those.
-	return len(me.activeRequests)
-}
-
 func (me *webseedPeer) lastWriteUploadRate() float64 {
 	// We never upload to webseeds.
 	return 0
@@ -110,18 +104,6 @@ func (ws *webseedPeer) onGotInfo(info *metainfo.Info) {
 
 // Webseeds check the next request is wanted before reading it.
 func (ws *webseedPeer) handleCancel(RequestIndex) {}
-
-func (ws *webseedPeer) activeRequestsForIndex(r RequestIndex) iter.Seq[*webseedRequest] {
-	return func(yield func(*webseedRequest) bool) {
-		for wr := range ws.activeRequests {
-			if r >= wr.next && r < wr.end {
-				if !yield(wr) {
-					return
-				}
-			}
-		}
-	}
-}
 
 func (ws *webseedPeer) requestIndexTorrentOffset(r RequestIndex) int64 {
 	return ws.peer.t.requestIndexBegin(r)
@@ -230,13 +212,6 @@ func (ws *webseedPeer) deleteActiveRequest(wr *webseedRequest) {
 	g.MustDelete(ws.activeRequests, wr)
 	ws.peer.t.cl.numWebSeedRequests[ws.hostKey]--
 	ws.peer.updateExpectingChunks()
-}
-
-func (ws *webseedPeer) inactiveRequestIndex(index RequestIndex) bool {
-	for range ws.activeRequestsForIndex(index) {
-		return false
-	}
-	return true
 }
 
 func (ws *webseedPeer) connectionFlags() string {

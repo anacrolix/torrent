@@ -28,7 +28,9 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	cl.initLogger()
 	c := cl.newConnection(nil, newConnectionOpts{network: "io.Pipe"})
 	c.setTorrent(cl.newTorrentForTesting())
+	cl.lock()
 	err := c.t.setInfo(&metainfo.Info{Pieces: make([]byte, metainfo.HashSize*3)})
+	cl.unlock()
 	qt.Assert(t, qt.IsNil(err))
 	r, w := io.Pipe()
 	// c.r = r

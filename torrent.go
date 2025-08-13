@@ -3619,6 +3619,14 @@ func (t *Torrent) filesInPieceRangeMightBePartial(begin, end pieceIndex) bool {
 	return t.piecesMightBePartial(begin, end)
 }
 
+// Pieces in the range [begin, end) may have partially complete files. Note we only check for dirty chunks and either all or no pieces being complete.
+func (t *Torrent) filesInForWebseedRequestSliceMightBePartial(firstRequest RequestIndex) bool {
+	beginPiece := t.pieceIndexOfRequestIndex(firstRequest)
+	endRequest := t.endRequestForAlignedWebseedResponse(firstRequest)
+	endPiece := pieceIndex(intCeilDiv(endRequest, t.chunksPerRegularPiece()))
+	return t.filesInPieceRangeMightBePartial(beginPiece, endPiece)
+}
+
 // Pieces in the range [begin, end) are dirty, or in a mixed completion state.
 func (t *Torrent) piecesMightBePartial(beginPieceIndex, endPieceIndex int) bool {
 	// Check for dirtied chunks.

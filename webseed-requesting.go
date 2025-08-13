@@ -48,9 +48,9 @@ func (me webseedUrlKey) String() string {
 - Initiate missing requests that fit into the available limits.
 */
 func (cl *Client) updateWebseedRequests() {
-	aprioriMap := make(map[aprioriWebseedRequestKey]aprioriMapValue)
+	aprioriMap := make(map[webseedUniqueRequestKey]aprioriMapValue)
 	for uniqueKey, value := range cl.iterPossibleWebseedRequests() {
-		cur, ok := aprioriMap[uniqueKey.aprioriWebseedRequestKey]
+		cur, ok := aprioriMap[uniqueKey]
 		if ok {
 			// Shared in the lookup above.
 			t := uniqueKey.t
@@ -69,7 +69,7 @@ func (cl *Client) updateWebseedRequests() {
 				continue
 			}
 		}
-		aprioriMap[uniqueKey.aprioriWebseedRequestKey] = value
+		aprioriMap[uniqueKey] = value
 	}
 	// This includes startRequest in the key. This means multiple webseed requests can exist in the
 	// same webseed request slice.
@@ -94,17 +94,16 @@ func (cl *Client) updateWebseedRequests() {
 	// Build the request heap, merging existing requests if they match.
 	heapSlice := make([]heapElem, 0, len(aprioriMap)+len(existingRequests))
 	for key, value := range aprioriMap {
-		fullKey := webseedUniqueRequestKey{key}
-		if g.MapContains(existingRequests, fullKey) {
+		if g.MapContains(existingRequests, key) {
 			// Prefer the existing request always
 			continue
 		}
 		heapSlice = append(heapSlice, heapElem{
-			fullKey,
+			key,
 			webseedRequestOrderValue{
 				aprioriMapValue: value,
 			},
-			fullKey.t.filesInForWebseedRequestSliceMightBePartial(value.startRequest),
+			key.t.filesInForWebseedRequestSliceMightBePartial(value.startRequest),
 		})
 	}
 	// Add remaining existing requests.
@@ -305,11 +304,9 @@ func (me *plannedWebseedRequest) sliceIndex() RequestIndex {
 
 func (me *plannedWebseedRequest) toChunkedWebseedRequestKey() webseedUniqueRequestKey {
 	return webseedUniqueRequestKey{
-		aprioriWebseedRequestKey{
-			url:        me.url,
-			t:          me.t,
-			sliceIndex: me.sliceIndex(),
-		},
+		url:        me.url,
+		t:          me.t,
+		sliceIndex: me.sliceIndex(),
 	}
 }
 
@@ -325,7 +322,7 @@ func (me webseedRequestPlan) String() string {
 }
 
 // Distinct webseed request data when different offsets are not allowed.
-type aprioriWebseedRequestKey struct {
+type webseedUniqueRequestKey struct {
 	url        webseedUrlKey
 	t          *Torrent
 	sliceIndex RequestIndex
@@ -337,13 +334,8 @@ type aprioriMapValue struct {
 	startRequest RequestIndex
 }
 
-func (me *aprioriWebseedRequestKey) String() string {
+func (me *webseedUniqueRequestKey) String() string {
 	return fmt.Sprintf("slice %v from %v", me.sliceIndex, me.url)
-}
-
-// Distinct webseed request when different offsets to the same object are allowed.
-type webseedUniqueRequestKey struct {
-	aprioriWebseedRequestKey
 }
 
 // Non-distinct proposed webseed request data.
@@ -387,11 +379,9 @@ func (cl *Client) iterPossibleWebseedRequests() iter.Seq2[webseedUniqueRequestKe
 						// iteration, so propagate that to not handling the yield return value.
 						if !yield(
 							webseedUniqueRequestKey{
-								aprioriWebseedRequestKey{
-									t:          t,
-									sliceIndex: webseedSliceIndex,
-									url:        url,
-								},
+								t:          t,
+								sliceIndex: webseedSliceIndex,
+								url:        url,
 							},
 							aprioriMapValue{
 								priority:     priority,
@@ -434,11 +424,9 @@ func (cl *Client) iterCurrentWebseedRequests() iter.Seq2[webseedUniqueRequestKey
 					p := t.piece(t.pieceIndexOfRequestIndex(ar.next))
 					if !yield(
 						webseedUniqueRequestKey{
-							aprioriWebseedRequestKey{
-								t:          t,
-								sliceIndex: ar.next / t.chunksPerAlignedWebseedResponse(),
-								url:        url,
-							},
+							t:          t,
+							sliceIndex: ar.next / t.chunksPerAlignedWebseedResponse(),
+							url:        url,
 						},
 						webseedRequestOrderValue{
 							aprioriMapValue{

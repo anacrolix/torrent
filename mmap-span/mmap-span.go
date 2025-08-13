@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/anacrolix/missinggo/v2/panicif"
+
 	"github.com/anacrolix/torrent/segments"
 )
 

@@ -6,6 +6,7 @@ import (
 	"io/fs"
 
 	"github.com/anacrolix/missinggo/v2/panicif"
+
 	"github.com/anacrolix/torrent/segments"
 )
 

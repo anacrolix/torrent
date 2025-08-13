@@ -7,6 +7,7 @@ import (
 	"os"
 
 	g "github.com/anacrolix/generics"
+
 	"github.com/anacrolix/torrent/metainfo"
 )
 

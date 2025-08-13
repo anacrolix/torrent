@@ -14,11 +14,13 @@ import (
 	"github.com/anacrolix/envpprof"
 	app "github.com/anacrolix/gostdapp"
 	xprometheus "github.com/anacrolix/missinggo/v2/prometheus"
-	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/version"
+
 	"github.com/davecgh/go-spew/spew"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/version"
 )
 
 func init() {

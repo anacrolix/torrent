@@ -31,14 +31,11 @@ func New(mMaps []Mmap, index segments.Index) *MMapSpan {
 	}
 }
 
-func (ms *MMapSpan) Flush() (errs []error) {
+func (ms *MMapSpan) Flush() (err error) {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 	for _, mMap := range ms.mMaps {
-		err := mMap.Flush()
-		if err != nil {
-			errs = append(errs, err)
-		}
+		err = errors.Join(err, mMap.Flush())
 	}
 	return
 }

@@ -14,8 +14,23 @@ import (
 )
 
 type mmapFileIo struct {
-	mu    sync.Mutex
+	mu    sync.RWMutex
 	paths map[string]*fileMmap
+}
+
+func (me *mmapFileIo) flush(name string, offset, nbytes int64) error {
+	// Since we are only flushing writes that we created, and we don't currently unmap files after
+	// we've opened them, then if the mmap doesn't exist yet then there's nothing to flush.
+	me.mu.RLock()
+	defer me.mu.RUnlock()
+	v, ok := me.paths[name]
+	if !ok {
+		return nil
+	}
+	if !v.writable {
+		return nil
+	}
+	return msync(v.m, int(offset), int(nbytes))
 }
 
 type fileMmap struct {

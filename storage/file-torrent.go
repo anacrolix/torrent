@@ -115,17 +115,6 @@ func (fs *fileTorrentImpl) Close() error {
 	return nil
 }
 
-func (fts *fileTorrentImpl) Flush() error {
-	for i := range fts.files {
-		f := fts.file(i)
-		fts.logger().Debug("flushing", "file.safeOsPath", f.safeOsPath)
-		if err := fsync(fts.pathForWrite(&f)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (fts *fileTorrentImpl) file(index int) file {
 	return file{
 		Info:      fts.info,

@@ -32,7 +32,6 @@ type TorrentImpl struct {
 	// Preferred over PieceWithHash. Called with the piece hash if it's available.
 	PieceWithHash func(p metainfo.Piece, pieceHash g.Option[[]byte]) PieceImpl
 	Close         func() error
-	Flush         func() error
 	// Storages that share the same space, will provide equal pointers. The function is called once
 	// to determine the storage for torrents sharing the same function pointer, and mutated in
 	// place.
@@ -62,6 +61,10 @@ type PieceImpl interface {
 	// rehashing, and cheap checks are performed here. (The implementation maintains a cache in
 	// Torrent).
 	Completion() Completion
+}
+
+type Flusher interface {
+	Flush() error
 }
 
 // Completion state of a piece.

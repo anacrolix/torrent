@@ -29,7 +29,21 @@ var _ interface {
 	PieceImpl
 	//PieceReaderer
 	io.WriterTo
+	Flusher
 } = (*filePieceImpl)(nil)
+
+func (me *filePieceImpl) Flush() (err error) {
+	for fileIndex, extent := range me.fileExtents() {
+		file := me.t.file(fileIndex)
+		name := me.t.pathForWrite(&file)
+		err1 := me.t.io.flush(name, extent.Start, extent.Length)
+		if err1 != nil {
+			err = errors.Join(err, fmt.Errorf("flushing %q: %w", name, err1))
+			return
+		}
+	}
+	return nil
+}
 
 func (me *filePieceImpl) logger() *slog.Logger {
 	return me.t.client.opts.Logger
@@ -46,9 +60,13 @@ func (me *filePieceImpl) extent() segments.Extent {
 	}
 }
 
+func (me *filePieceImpl) fileExtents() iter.Seq2[int, segments.Extent] {
+	return me.t.segmentLocater.LocateIter(me.extent())
+}
+
 func (me *filePieceImpl) pieceFiles() iter.Seq[file] {
 	return func(yield func(file) bool) {
-		for fileIndex := range me.t.segmentLocater.LocateIter(me.extent()) {
+		for fileIndex := range me.fileExtents() {
 			f := me.t.file(fileIndex)
 			if !yield(f) {
 				return

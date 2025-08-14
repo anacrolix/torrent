@@ -1,9 +1,7 @@
 package storage
 
 import (
-	"errors"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
@@ -31,7 +29,7 @@ func minFileLengthsForTorrentExtent(
 
 func fsync(filePath string) (err error) {
 	f, err := os.OpenFile(filePath, os.O_WRONLY, filePerm)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err != nil {
 		return
 	}
 	defer f.Close()

@@ -86,10 +86,8 @@ func (p *Piece) Storage() storage.Piece {
 	return p.t.storage.PieceWithHash(p.Info(), pieceHash)
 }
 
-func (p *Piece) Flush() {
-	if p.t.storage.Flush != nil {
-		_ = p.t.storage.Flush()
-	}
+func (p *Piece) Flush() error {
+	return p.Storage().Flush()
 }
 
 func (p *Piece) pendingChunkIndex(chunkIndex chunkIndexType) bool {

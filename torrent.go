@@ -2558,7 +2558,12 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		hasDirty := p.hasDirtyChunks()
 		t.cl.unlock()
 		if hasDirty {
-			p.Flush() // You can be synchronous here!
+			// This could return fs.ErrNotExist, and that would be unexpected since we haven't
+			// marked it complete yet, and nobody should have moved it.
+			err := p.Flush() // You can be synchronous here!
+			if err != nil {
+				t.slogger().Warn("error flushing piece storage", "piece", piece, "err", err)
+			}
 		}
 		p.race++
 		err := p.Storage().MarkComplete()

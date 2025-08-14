@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/edsrzf/mmap-go"
 	"golang.org/x/sys/unix"
 )
 
@@ -16,4 +17,8 @@ func seekData(f *os.File, offset int64) (ret int64, err error) {
 		err = io.EOF
 	}
 	return
+}
+
+func msync(mm mmap.MMap, offset, nbytes int) error {
+	return unix.Msync(mm[offset:offset+nbytes], unix.MS_SYNC)
 }

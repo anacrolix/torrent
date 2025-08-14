@@ -141,6 +141,5 @@ func (fs *fileClientImpl) OpenTorrent(
 	return TorrentImpl{
 		Piece: t.Piece,
 		Close: t.Close,
-		Flush: t.Flush,
 	}, nil
 }

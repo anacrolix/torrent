@@ -21,4 +21,5 @@ type fileIo interface {
 	openForSharedRead(name string) (sharedFileIf, error)
 	openForRead(name string) (fileReader, error)
 	openForWrite(name string, size int64) (fileWriter, error)
+	flush(name string, offset, nbytes int64) error
 }

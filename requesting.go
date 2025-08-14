@@ -79,7 +79,8 @@ type (
 	// be converted to a protocol request. TODO: This should be private.
 	RequestIndex = requestStrategy.RequestIndex
 	// This is request index but per-piece.
-	chunkIndexType = requestStrategy.ChunkIndex
+	chunkIndexType    = requestStrategy.ChunkIndex
+	webseedSliceIndex RequestIndex
 )
 
 type desiredPeerRequests struct {

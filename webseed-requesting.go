@@ -103,7 +103,10 @@ func (cl *Client) updateWebseedRequests() {
 			webseedRequestOrderValue{
 				aprioriMapValue: value,
 			},
-			key.t.filesInForWebseedRequestSliceMightBePartial(value.startRequest),
+			key.t.filesInRequestRangeMightBePartial(
+				value.startRequest,
+				key.t.endRequestForAlignedWebseedResponse(value.startRequest),
+			),
 		})
 	}
 	// Add remaining existing requests.
@@ -112,10 +115,11 @@ func (cl *Client) updateWebseedRequests() {
 		if key.t.dataDownloadDisallowed.IsSet() {
 			continue
 		}
+		wr := value.existingWebseedRequest
 		heapSlice = append(heapSlice, heapElem{
 			key,
 			existingRequests[key],
-			key.t.filesInForWebseedRequestSliceMightBePartial(value.startRequest),
+			key.t.filesInRequestRangeMightBePartial(wr.next, wr.end),
 		})
 	}
 	aprioriHeap := heap.InterfaceForSlice(
@@ -267,15 +271,19 @@ func (t *Torrent) getWebseedRequestEnd(begin RequestIndex, debugLogger *slog.Log
 // smaller will allow requests to complete a smaller set of files faster.
 var webseedRequestChunkSize = initUIntFromEnv[uint64]("TORRENT_WEBSEED_REQUEST_CHUNK_SIZE", 64<<20, 64)
 
+// Can return the same as start if the request is at the end of the torrent.
 func (t *Torrent) endRequestForAlignedWebseedResponse(start RequestIndex) RequestIndex {
 	end := min(t.maxEndRequest(), nextMultiple(start, t.chunksPerAlignedWebseedResponse()))
-	panicif.LessThanOrEqual(end, start)
 	return end
 }
 
 func (t *Torrent) chunksPerAlignedWebseedResponse() RequestIndex {
 	// This is the same as webseedRequestChunkSize, but in terms of RequestIndex.
 	return RequestIndex(webseedRequestChunkSize / t.chunkSize.Uint64())
+}
+
+func (t *Torrent) requestIndexToWebseedSliceIndex(requestIndex RequestIndex) webseedSliceIndex {
+	return webseedSliceIndex(requestIndex / t.chunksPerAlignedWebseedResponse())
 }
 
 func (cl *Client) dumpCurrentWebseedRequests() {
@@ -298,8 +306,8 @@ type plannedWebseedRequest struct {
 	startIndex RequestIndex
 }
 
-func (me *plannedWebseedRequest) sliceIndex() RequestIndex {
-	return me.startIndex / me.t.chunksPerAlignedWebseedResponse()
+func (me *plannedWebseedRequest) sliceIndex() webseedSliceIndex {
+	return me.t.requestIndexToWebseedSliceIndex(me.startIndex)
 }
 
 func (me *plannedWebseedRequest) toChunkedWebseedRequestKey() webseedUniqueRequestKey {
@@ -325,7 +333,7 @@ func (me webseedRequestPlan) String() string {
 type webseedUniqueRequestKey struct {
 	url        webseedUrlKey
 	t          *Torrent
-	sliceIndex RequestIndex
+	sliceIndex webseedSliceIndex
 }
 
 type aprioriMapValue struct {
@@ -373,7 +381,8 @@ func (cl *Client) iterPossibleWebseedRequests() iter.Seq2[webseedUniqueRequestKe
 					// etc. Order state priority would be faster otherwise.
 					priority := p.effectivePriority()
 					firstRequest := p.requestIndexBegin() + cleanOpt.Value
-					webseedSliceIndex := firstRequest / t.chunksPerAlignedWebseedResponse()
+					panicif.GreaterThanOrEqual(firstRequest, t.maxEndRequest())
+					webseedSliceIndex := t.requestIndexToWebseedSliceIndex(firstRequest)
 					for url, ws := range t.webSeeds {
 						// Return value from this function (RequestPieceFunc) doesn't terminate
 						// iteration, so propagate that to not handling the yield return value.
@@ -425,7 +434,7 @@ func (cl *Client) iterCurrentWebseedRequests() iter.Seq2[webseedUniqueRequestKey
 					if !yield(
 						webseedUniqueRequestKey{
 							t:          t,
-							sliceIndex: ar.next / t.chunksPerAlignedWebseedResponse(),
+							sliceIndex: t.requestIndexToWebseedSliceIndex(ar.next),
 							url:        url,
 						},
 						webseedRequestOrderValue{

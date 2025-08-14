@@ -36,12 +36,15 @@ func (t *Torrent) sourcer(source string) {
 	for {
 		var retry g.Option[time.Duration]
 		retry, err = t.trySource(source)
-		if err == nil || ctx.Err() != nil || !retry.Ok {
+		if err == nil || ctx.Err() != nil {
 			return
 		}
 		t.slogger().Warn("error using torrent source", "source", source, "err", err)
+		if !retry.Ok {
+			return
+		}
 		select {
-		case <-time.After(retry.Value):
+		case <-time.After(retry.Unwrap()):
 		case <-ctx.Done():
 		}
 	}

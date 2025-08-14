@@ -243,7 +243,9 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 	ws.deleteActiveRequest(webseedRequest)
 	cl := ws.peer.cl
 	if err == nil && cl.numWebSeedRequests[ws.hostKey] == webseedHostRequestConcurrency/2 {
-		cl.updateWebseedRequestsWithReason("webseedPeer request completed")
+		cl.updateWebseedRequestsWithReason("webseedPeer.runRequest low water")
+	} else if cl.numWebSeedRequests[ws.hostKey] == 0 {
+		cl.updateWebseedRequestsWithReason("webseedPeer.runRequest zero requests")
 	}
 	locker.Unlock()
 }

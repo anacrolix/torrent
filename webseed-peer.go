@@ -317,6 +317,12 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 			fmt.Printf("webseed read %v after cancellation: %v\n", n, err)
 		}
 		if err != nil {
+			// TODO: Pick out missing files or associate error with file. See also
+			// webseed.ReadRequestPartError.
+			var badResponse webseed.ErrBadResponse
+			if errors.As(err, &badResponse) {
+				ws.convict(badResponse, time.Minute)
+			}
 			err = fmt.Errorf("reading chunk: %w", err)
 			return
 		}

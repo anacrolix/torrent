@@ -424,11 +424,14 @@ func (cl *Client) iterCurrentWebseedRequests() iter.Seq2[webseedUniqueRequestKey
 						// This request is done, so don't yield it.
 						continue
 					}
-					if ar.cancelled.Load() {
-						cl.slogger.Debug("iter current webseed requests: skipped cancelled webseed request")
-						// This should prevent overlapping webseed requests that are just filling
-						// slots waiting to cancel from conflicting.
-						continue
+					// Don't spawn requests before old requests are cancelled.
+					if false {
+						if ar.cancelled.Load() {
+							cl.slogger.Debug("iter current webseed requests: skipped cancelled webseed request")
+							// This should prevent overlapping webseed requests that are just filling
+							// slots waiting to cancel from conflicting.
+							continue
+						}
 					}
 					p := t.piece(t.pieceIndexOfRequestIndex(ar.next))
 					if !yield(

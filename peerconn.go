@@ -1165,7 +1165,7 @@ func (cn *PeerConn) drop() {
 	cn.t.dropConnection(cn)
 }
 
-func (cn *PeerConn) ban() {
+func (cn *PeerConn) providedBadData() {
 	cn.t.cl.banPeerIP(cn.remoteIp())
 }
 

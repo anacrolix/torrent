@@ -1232,7 +1232,8 @@ func (t *Torrent) countBytesHashed(n int64) {
 
 func (t *Torrent) hashPiece(piece pieceIndex) (
 	correct bool,
-	// These are peers that sent us blocks that differ from what we hash here.
+	// These are peers that sent us blocks that differ from what we hash here. TODO: Track Peer not
+	// bannable addr for peer types that are rebuked differently.
 	differingPeers map[bannableAddr]struct{},
 	err error,
 ) {
@@ -2625,7 +2626,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 						"piece failed hash. banning peer",
 						"piece", piece,
 						"peer", c)
-					c.ban()
+					c.providedBadData()
 					// TODO: Check if we now have no available peers for pieces we want.
 				}
 			}

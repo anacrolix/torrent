@@ -23,15 +23,30 @@ import (
 
 type webseedPeer struct {
 	// First field for stats alignment.
-	peer             Peer
-	logger           *slog.Logger
-	client           webseed.Client
-	activeRequests   map[*webseedRequest]struct{}
-	locker           sync.Locker
-	lastUnhandledErr time.Time
-	hostKey          webseedHostKeyHandle
+	peer           Peer
+	logger         *slog.Logger
+	client         webseed.Client
+	activeRequests map[*webseedRequest]struct{}
+	locker         sync.Locker
+	hostKey        webseedHostKeyHandle
 	// We need this to look ourselves up in the Client.activeWebseedRequests map.
 	url webseedUrlKey
+
+	// When requests are allowed to resume. If Zero, then anytime.
+	penanceComplete time.Time
+	lastCrime       error
+}
+
+func (me *webseedPeer) suspended() bool {
+	return me.lastCrime != nil && time.Now().Before(me.penanceComplete)
+}
+
+func (me *webseedPeer) convict(err error, term time.Duration) {
+	if me.suspended() {
+		return
+	}
+	me.lastCrime = err
+	me.penanceComplete = time.Now().Add(term)
 }
 
 func (*webseedPeer) allConnStatsImplField(stats *AllConnStats) *ConnStats {
@@ -78,7 +93,12 @@ var _ legacyPeerImpl = (*webseedPeer)(nil)
 func (me *webseedPeer) peerImplStatusLines() []string {
 	lines := []string{
 		me.client.Url,
-		fmt.Sprintf("last unhandled error: %v", eventAgeString(me.lastUnhandledErr)),
+	}
+	if me.lastCrime != nil {
+		lines = append(lines, fmt.Sprintf("last crime: %v", me.lastCrime))
+	}
+	if me.suspended() {
+		lines = append(lines, fmt.Sprintf("suspended for %v more", time.Until(me.penanceComplete)))
 	}
 	if len(me.activeRequests) > 0 {
 		elems := make([]string, 0, len(me.activeRequests))
@@ -238,8 +258,8 @@ func (ws *webseedPeer) connectionFlags() string {
 // Maybe this should drop all existing connections, or something like that.
 func (ws *webseedPeer) drop() {}
 
-func (cn *webseedPeer) ban() {
-	cn.peer.close()
+func (cn *webseedPeer) providedBadData() {
+	cn.convict(errors.New("provided bad data"), time.Minute)
 }
 
 func (ws *webseedPeer) onClose() {

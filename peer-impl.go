@@ -31,7 +31,7 @@ type legacyPeerImpl interface {
 	// Drop connection. This may be a no-op if there is no connection.
 	drop()
 	// Rebuke the peer
-	ban()
+	providedBadData()
 	String() string
 	// Per peer-impl lines for WriteStatus.
 	peerImplStatusLines() []string

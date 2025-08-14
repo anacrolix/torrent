@@ -384,6 +384,9 @@ func (cl *Client) iterPossibleWebseedRequests() iter.Seq2[webseedUniqueRequestKe
 					panicif.GreaterThanOrEqual(firstRequest, t.maxEndRequest())
 					webseedSliceIndex := t.requestIndexToWebseedSliceIndex(firstRequest)
 					for url, ws := range t.webSeeds {
+						if ws.suspended() {
+							continue
+						}
 						// Return value from this function (RequestPieceFunc) doesn't terminate
 						// iteration, so propagate that to not handling the yield return value.
 						if !yield(

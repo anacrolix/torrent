@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"math/rand"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"time"
@@ -167,7 +168,11 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex, logger *slog.Logger
 		"end", end,
 		"len", end-begin,
 	)
-	go ws.runRequest(&wsReq)
+	go func() {
+		// Detach cost association from webseed update requests routine.
+		pprof.SetGoroutineLabels(context.Background())
+		ws.runRequest(&wsReq)
+	}()
 }
 
 func (me *webseedPeer) getRequestKey(wr *webseedRequest) webseedUniqueRequestKey {

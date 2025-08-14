@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -39,11 +38,10 @@ func init() {
 type RequestSpec = segments.Extent
 
 type requestPart struct {
-	req *http.Request
-	e   segments.Extent
-	do  func() (*http.Response, error)
-	// Wrap http response bodies for such things as download rate limiting.
-	responseBodyWrapper ResponseBodyWrapper
+	req       *http.Request
+	e         segments.Extent
+	do        func() (*http.Response, error)
+	fileIndex int
 }
 
 type Request struct {
@@ -103,11 +101,6 @@ func (me *Client) SetInfo(info *metainfo.Info, fileIndex *segments.Index) {
 	me.Pieces.AddRange(0, uint64(info.NumPieces()))
 }
 
-type RequestResult struct {
-	Bytes []byte
-	Err   error
-}
-
 // Returns the URL for the given file index. This is assumed to be globally unique.
 func (ws *Client) UrlForFileIndex(fileIndex int) string {
 	return urlForFileIndex(ws.Url, fileIndex, ws.info, ws.PathEscaper)
@@ -124,9 +117,9 @@ func (ws *Client) StartNewRequest(ctx context.Context, r RequestSpec, debugLogge
 		)
 		panicif.Err(err)
 		part := requestPart{
-			req:                 req,
-			e:                   e,
-			responseBodyWrapper: ws.ResponseBodyWrapper,
+			req:       req,
+			e:         e,
+			fileIndex: i,
 		}
 		part.do = func() (resp *http.Response, err error) {
 			resp, err = ws.HttpClient.Do(req)
@@ -199,8 +192,8 @@ var bufPool = &sync.Pool{New: func() any {
 func (me *Client) recvPartResult(ctx context.Context, w io.Writer, part requestPart, resp *http.Response) error {
 	defer resp.Body.Close()
 	var body io.Reader = resp.Body
-	if part.responseBodyWrapper != nil {
-		body = part.responseBodyWrapper(body)
+	if a := me.ResponseBodyWrapper; a != nil {
+		body = a(body)
 	}
 	// We did set resp.Body to nil here, but I'm worried the HTTP machinery might do something
 	// funny.
@@ -234,9 +227,9 @@ func (me *Client) recvPartResult(ctx context.Context, w io.Writer, part requestP
 					part.req.URL,
 					part.req.Header.Get("Range"))
 			}
-			log.Printf("resp status ok but requested range [url=%q, range=%q]",
-				part.req.URL,
-				part.req.Header.Get("Range"))
+			me.Logger.Debug("resp status ok but requested range",
+				"url", part.req.URL,
+				"range", part.req.Header.Get("Range"))
 		}
 		// Instead of discarding, we could try receiving all the chunks present in the response
 		// body. I don't know how one would handle multiple chunk requests resulting in an OK
@@ -264,6 +257,20 @@ func (me *Client) recvPartResult(ctx context.Context, w io.Writer, part requestP
 
 var ErrTooFast = errors.New("making requests too fast")
 
+// Contains info for callers to act (like ignoring particular files or rate limiting).
+type ReadRequestPartError struct {
+	FileIndex int
+	Err       error
+}
+
+func (me ReadRequestPartError) Unwrap() error {
+	return me.Err
+}
+
+func (r ReadRequestPartError) Error() string {
+	return fmt.Sprintf("reading request part for file index %v: %v", r.FileIndex, r.Err)
+}
+
 func (me *Client) readRequestPartResponses(ctx context.Context, w io.Writer, parts []requestPart) (err error) {
 	for _, part := range parts {
 		var resp *http.Response
@@ -274,6 +281,10 @@ func (me *Client) readRequestPartResponses(ctx context.Context, w io.Writer, par
 		}
 		if err != nil {
 			err = fmt.Errorf("reading %q at %q: %w", part.req.URL, part.req.Header.Get("Range"), err)
+			err = ReadRequestPartError{
+				FileIndex: part.fileIndex,
+				Err:       err,
+			}
 			break
 		}
 	}

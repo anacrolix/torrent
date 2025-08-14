@@ -113,8 +113,9 @@ type Client struct {
 
 	upnpMappings []*upnpMapping
 
-	webseedRequestTimer *time.Timer
-	webseedUpdateReason updateRequestReason
+	webseedRequestTimer   *time.Timer
+	webseedUpdateReason   updateRequestReason
+	activeWebseedRequests map[webseedUniqueRequestKey]*webseedRequest
 
 	activePieceHashers int
 }

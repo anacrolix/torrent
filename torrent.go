@@ -1115,6 +1115,13 @@ func (t *Torrent) close(wg *sync.WaitGroup) {
 	t.pieceStateChanges.Close()
 	t.updateWantPeersEvent()
 	g.MustDelete(t.cl.torrents, t)
+	// This doesn't work yet because requests remove themselves after they close, and we don't
+	// remove them synchronously.
+	if false {
+		if len(t.cl.torrents) == 0 {
+			panicif.NotZero(len(t.cl.activeWebseedRequests))
+		}
+	}
 	return
 }
 
@@ -3085,7 +3092,8 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	if t.cl.config.DisableWebseeds {
 		return false
 	}
-	if _, ok := t.webSeeds[webseedUrlKey(unique.Make(url))]; ok {
+	urlKey := webseedUrlKey(unique.Make(url))
+	if _, ok := t.webSeeds[urlKey]; ok {
 		return false
 	}
 	// I don't think Go http supports pipelining requests. However, we can have more ready to go
@@ -3113,6 +3121,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 			ResponseBodyRateLimiter: t.cl.config.DownloadRateLimiter,
 		},
 		hostKey: t.deriveWebSeedHostKey(url),
+		url:     urlKey,
 	}
 	ws.peer.initClosedCtx()
 	for _, opt := range opts {
@@ -3136,7 +3145,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	if t.haveInfo() {
 		ws.onGotInfo(t.info)
 	}
-	t.webSeeds[webseedUrlKey(unique.Make(url))] = &ws
+	t.webSeeds[urlKey] = &ws
 	ws.peer.onNeedUpdateRequests("Torrent.addWebSeed")
 	return true
 }

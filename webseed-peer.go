@@ -30,6 +30,8 @@ type webseedPeer struct {
 	locker           sync.Locker
 	lastUnhandledErr time.Time
 	hostKey          webseedHostKeyHandle
+	// We need this to look ourselves up in the Client.activeWebseedRequests map.
+	url webseedUrlKey
 }
 
 func (*webseedPeer) allConnStatsImplField(stats *AllConnStats) *ConnStats {
@@ -132,6 +134,10 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex, logger *slog.Logger
 		ws.peer.t.cl.dumpCurrentWebseedRequests()
 	}
 	ws.activeRequests[&wsReq] = struct{}{}
+	t := ws.peer.t
+	cl := t.cl
+	g.MakeMapIfNil(&cl.activeWebseedRequests)
+	g.MapMustAssignNew(cl.activeWebseedRequests, ws.getRequestKey(&wsReq), &wsReq)
 	ws.peer.updateExpectingChunks()
 	panicif.Zero(ws.hostKey)
 	ws.peer.t.cl.numWebSeedRequests[ws.hostKey]++
@@ -142,6 +148,15 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex, logger *slog.Logger
 		"len", end-begin,
 	)
 	go ws.runRequest(&wsReq)
+}
+
+func (me *webseedPeer) getRequestKey(wr *webseedRequest) webseedUniqueRequestKey {
+	// This is used to find the request in the Client's active requests map.
+	return webseedUniqueRequestKey{
+		url:        me.url,
+		t:          me.peer.t,
+		sliceIndex: me.peer.t.requestIndexToWebseedSliceIndex(wr.begin),
+	}
 }
 
 func (me *webseedPeer) hasOverlappingRequests(begin, end RequestIndex) bool {
@@ -210,7 +225,9 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 
 func (ws *webseedPeer) deleteActiveRequest(wr *webseedRequest) {
 	g.MustDelete(ws.activeRequests, wr)
-	ws.peer.t.cl.numWebSeedRequests[ws.hostKey]--
+	cl := ws.peer.cl
+	cl.numWebSeedRequests[ws.hostKey]--
+	g.MustDelete(cl.activeWebseedRequests, ws.getRequestKey(wr))
 	ws.peer.updateExpectingChunks()
 }
 

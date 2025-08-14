@@ -2800,11 +2800,13 @@ func (t *Torrent) finishHash(index pieceIndex) {
 	t.storageLock.RUnlock()
 	t.cl.lock()
 	if correct {
-		for peer := range failedPeers {
-			t.cl.banPeerIP(peer.AsSlice())
-			t.logger.WithDefaultLevel(log.Debug).Printf("smart banned %v for piece %v", peer, index)
+		if len(failedPeers) > 0 {
+			for peer := range failedPeers {
+				t.cl.banPeerIP(peer.AsSlice())
+				t.slogger().Info("smart banned peer", "peer", peer, "piece", index)
+			}
+			t.dropBannedPeers()
 		}
-		t.dropBannedPeers()
 		t.smartBanCache.ForgetBlockSeq(iterRange(t.pieceRequestIndexBegin(index), t.pieceRequestIndexBegin(index+1)))
 	}
 	p.hashing = false

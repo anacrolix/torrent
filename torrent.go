@@ -187,7 +187,7 @@ type Torrent struct {
 
 	pex pexState
 
-	// Is On when all pieces are complete.
+	// Is On when all pieces are complete, no hashing is pending or occurring.
 	complete chansync.Flag
 
 	// Torrent sources in use keyed by the source string. string -> error. If the slot is occupied
@@ -328,7 +328,7 @@ func (t *Torrent) pieceCompleteUncached(piece pieceIndex) (ret storage.Completio
 		return
 	}
 	if t.storage == nil {
-		return storage.Completion{Complete: false, Ok: true}
+		return storage.Completion{Complete: false, Ok: false}
 	}
 	return p.Storage().Completion()
 }
@@ -1785,7 +1785,7 @@ func (t *Torrent) afterSetPieceCompletion(piece pieceIndex, changed bool) {
 		t.openNewConns()
 	}
 	p.t.updatePieceRequestOrderPiece(piece)
-	t.updateComplete()
+	t.deferUpdateComplete()
 	if complete && len(p.dirtiers) != 0 {
 		t.logger.Printf("marked piece %v complete but still has dirtiers", piece)
 	}
@@ -2740,7 +2740,6 @@ func (t *Torrent) pieceHasher(initial pieceIndex) {
 func (t *Torrent) startHash(pi pieceIndex) {
 	p := t.piece(pi)
 	t.piecesQueuedForHash.Remove(pi)
-	t.deferUpdateComplete()
 	p.hashing = true
 	t.deferPublishPieceStateChange(pi)
 	t.updatePiecePriority(pi, "Torrent.startHash")
@@ -2813,6 +2812,9 @@ func (t *Torrent) finishHash(index pieceIndex) {
 	t.pieceHashed(index, correct, copyErr)
 	t.updatePiecePriority(index, "Torrent.finishHash")
 	t.activePieceHashes--
+	if t.activePieceHashes == 0 {
+		t.deferUpdateComplete()
+	}
 	t.cl.activePieceHashers--
 }
 
@@ -3196,7 +3198,20 @@ func (t *Torrent) deferUpdateComplete() {
 
 func (t *Torrent) updateComplete() {
 	// TODO: Announce complete to trackers?
-	t.complete.SetBool(t.haveAllPieces())
+	t.complete.SetBool(t.isComplete())
+}
+
+func (t *Torrent) isComplete() bool {
+	if t.activePieceHashes != 0 {
+		return false
+	}
+	if !t.piecesQueuedForHash.IsEmpty() {
+		return false
+	}
+	if !t.haveAllPieces() {
+		return false
+	}
+	return true
 }
 
 func (t *Torrent) cancelRequest(r RequestIndex) *PeerConn {

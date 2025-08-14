@@ -186,7 +186,11 @@ type mmapFileHandle struct {
 }
 
 func (me *mmapFileHandle) WriteTo(w io.Writer) (n int64, err error) {
-	n1, err := w.Write(me.shared.f.m[me.pos:])
+	b := me.shared.f.m
+	if me.pos >= int64(len(b)) {
+		return
+	}
+	n1, err := w.Write(b[me.pos:])
 	n = int64(n1)
 	me.pos += n
 	return

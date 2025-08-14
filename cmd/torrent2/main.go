@@ -72,6 +72,8 @@ func mainErr() error {
 					assertOk(err)
 					info, err := mi.UnmarshalInfo()
 					assertOk(err)
+					fmt.Printf("name: %q\n", info.Name)
+					fmt.Printf("# files:\n")
 					files := info.UpvertedFiles()
 					pieceIndex := 0
 					for _, f := range files {
@@ -82,9 +84,14 @@ func mainErr() error {
 							hash = a.HexString()
 						}
 						fmt.Printf(
-							"%s: %q: pieces (%v-%v)\n",
+							"%s: %v: pieces (%v-%v)\n",
 							hash,
-							f.BestPath(),
+							func() any {
+								if info.IsDir() {
+									return fmt.Sprintf("%q", f.BestPath())
+								}
+								return "(single file torrent)"
+							}(),
 							pieceIndex,
 							endIndex-1,
 						)

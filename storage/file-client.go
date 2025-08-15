@@ -72,7 +72,7 @@ func (me *fileClientImpl) Close() error {
 }
 
 var defaultFileIo func() fileIo = func() fileIo {
-	return classicFileIo{}
+	return &mmapFileIo{}
 }
 
 func init() {

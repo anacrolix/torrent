@@ -11,6 +11,7 @@ import (
 
 type bannableAddr = netip.Addr
 
+// TODO: Should be keyed on weak[Peer].
 type smartBanCache = smartban.Cache[bannableAddr, RequestIndex, uint64]
 
 type blockCheckingWriter struct {

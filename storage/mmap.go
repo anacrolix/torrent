@@ -46,7 +46,7 @@ func (s *mmapClientImpl) OpenTorrent(
 		span:     span,
 		pc:       s.pc,
 	}
-	return TorrentImpl{Piece: t.Piece, Close: t.Close, Flush: t.Flush}, err
+	return TorrentImpl{Piece: t.Piece, Close: t.Close}, err
 }
 
 func (s *mmapClientImpl) Close() error {
@@ -61,9 +61,8 @@ type mmapTorrentStorage struct {
 
 func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
 	return mmapStoragePiece{
-		pc:       ts.pc,
+		t:        ts,
 		p:        p,
-		ih:       ts.infoHash,
 		ReaderAt: io.NewSectionReader(ts.span, p.Offset(), p.Length()),
 		WriterAt: missinggo.NewSectionWriter(ts.span, p.Offset(), p.Length()),
 	}
@@ -73,28 +72,27 @@ func (ts *mmapTorrentStorage) Close() error {
 	return ts.span.Close()
 }
 
-func (ts *mmapTorrentStorage) Flush() error {
-	errs := ts.span.Flush()
-	if len(errs) > 0 {
-		return errs[0]
-	}
-	return nil
-}
-
 type mmapStoragePiece struct {
-	pc PieceCompletionGetSetter
-	p  metainfo.Piece
-	ih metainfo.Hash
+	t *mmapTorrentStorage
+	p metainfo.Piece
 	io.ReaderAt
 	io.WriterAt
 }
 
+var _ Flusher = mmapStoragePiece{}
+
+func (me mmapStoragePiece) Flush() error {
+	// TODO: Flush just the regions of the files we care about. At least this is no worse than it
+	// was previously.
+	return me.t.span.Flush()
+}
+
 func (me mmapStoragePiece) pieceKey() metainfo.PieceKey {
-	return metainfo.PieceKey{me.ih, me.p.Index()}
+	return metainfo.PieceKey{me.t.infoHash, me.p.Index()}
 }
 
 func (sp mmapStoragePiece) Completion() Completion {
-	c, err := sp.pc.Get(sp.pieceKey())
+	c, err := sp.t.pc.Get(sp.pieceKey())
 	if err != nil {
 		panic(err)
 	}
@@ -102,11 +100,11 @@ func (sp mmapStoragePiece) Completion() Completion {
 }
 
 func (sp mmapStoragePiece) MarkComplete() error {
-	return sp.pc.Set(sp.pieceKey(), true)
+	return sp.t.pc.Set(sp.pieceKey(), true)
 }
 
 func (sp mmapStoragePiece) MarkNotComplete() error {
-	return sp.pc.Set(sp.pieceKey(), false)
+	return sp.t.pc.Set(sp.pieceKey(), false)
 }
 
 func mMapTorrent(md *metainfo.Info, location string) (mms *mmapSpan.MMapSpan, err error) {

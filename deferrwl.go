@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	g "github.com/anacrolix/generics"
+	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/sync"
 )
 
@@ -16,15 +17,18 @@ type lockWithDeferreds struct {
 	unlockActions []func()
 	uniqueActions map[any]struct{}
 	// Currently unlocking, defers should not occur?
-	unlocking bool
+	allowDefers bool
 }
 
 func (me *lockWithDeferreds) Lock() {
 	me.internal.Lock()
+	panicif.True(me.allowDefers)
+	me.allowDefers = true
 }
 
 func (me *lockWithDeferreds) Unlock() {
-	me.unlocking = true
+	panicif.False(me.allowDefers)
+	me.allowDefers = false
 	startLen := len(me.unlockActions)
 	var i int
 	for i = 0; i < len(me.unlockActions); i++ {
@@ -34,8 +38,7 @@ func (me *lockWithDeferreds) Unlock() {
 		panic(fmt.Sprintf("num deferred changed while running: %v -> %v", startLen, len(me.unlockActions)))
 	}
 	me.unlockActions = me.unlockActions[:0]
-	clear(me.uniqueActions)
-	me.unlocking = false
+	me.uniqueActions = nil
 	me.internal.Unlock()
 }
 
@@ -49,19 +52,18 @@ func (me *lockWithDeferreds) RUnlock() {
 
 // Not allowed after unlock has started.
 func (me *lockWithDeferreds) Defer(action func()) {
-	if me.unlocking {
-		panic("defer called while unlocking")
-	}
 	me.deferInner(action)
 }
 
 // Already guarded.
 func (me *lockWithDeferreds) deferInner(action func()) {
+	panicif.False(me.allowDefers)
 	me.unlockActions = append(me.unlockActions, action)
 }
 
 // Protected from looping by once filter.
 func (me *lockWithDeferreds) deferOnceInner(key any, action func()) {
+	panicif.False(me.allowDefers)
 	g.MakeMapIfNil(&me.uniqueActions)
 	if g.MapContains(me.uniqueActions, key) {
 		return

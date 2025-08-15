@@ -8,6 +8,11 @@ type ajwernerBtree struct {
 	btree btree.Set[PieceRequestOrderItem]
 }
 
+func (a *ajwernerBtree) Contains(item PieceRequestOrderItem) bool {
+	_, ok := a.btree.Get(item)
+	return ok
+}
+
 var _ Btree = (*ajwernerBtree)(nil)
 
 func NewAjwernerBtree() *ajwernerBtree {

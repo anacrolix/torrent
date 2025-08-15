@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	g "github.com/anacrolix/generics"
-	qt "github.com/go-quicktest/qt"
+	"github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
@@ -28,7 +28,9 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	cl.initLogger()
 	c := cl.newConnection(nil, newConnectionOpts{network: "io.Pipe"})
 	c.setTorrent(cl.newTorrentForTesting())
+	cl.lock()
 	err := c.t.setInfo(&metainfo.Info{Pieces: make([]byte, metainfo.HashSize*3)})
+	cl.unlock()
 	qt.Assert(t, qt.IsNil(err))
 	r, w := io.Pipe()
 	// c.r = r
@@ -90,9 +92,7 @@ func (me *torrentStorage) WriteAt(b []byte, _ int64) (int, error) {
 
 func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	var cl Client
-	cl.init(&ClientConfig{
-		DownloadRateLimiter: unlimited,
-	})
+	cl.init(&ClientConfig{})
 	cl.initLogger()
 	ts := &torrentStorage{}
 	t := cl.newTorrentForTesting()
@@ -267,23 +267,25 @@ func TestConnPexEvent(t *testing.T) {
 func TestHaveAllThenBitfield(t *testing.T) {
 	cl := newTestingClient(t)
 	tt := cl.newTorrentForTesting()
-	// cl.newConnection()
+	//pc := cl.newConnection(nil, newConnectionOpts{})
 	pc := PeerConn{
 		Peer: Peer{t: tt},
 	}
 	pc.initRequestState()
 	pc.legacyPeerImpl = &pc
 	tt.conns[&pc] = struct{}{}
+	g.InitNew(&pc.callbacks)
 	qt.Assert(t, qt.IsNil(pc.onPeerSentHaveAll()))
 	qt.Check(t, qt.DeepEquals(pc.t.connsWithAllPieces, map[*Peer]struct{}{&pc.Peer: {}}))
 	pc.peerSentBitfield([]bool{false, false, true, false, true, true, false, false})
 	qt.Check(t, qt.Equals(pc.peerMinPieces, 6))
 	qt.Check(t, qt.HasLen(pc.t.connsWithAllPieces, 0))
-	qt.Assert(t, qt.IsNil(pc.t.setInfo(&metainfo.Info{
-		PieceLength: 0,
+	qt.Assert(t, qt.IsNil(pc.t.setInfoUnlocked(&metainfo.Info{
+		Name:        "herp",
+		Length:      7,
+		PieceLength: 1,
 		Pieces:      make([]byte, pieceHash.Size()*7),
 	})))
-	pc.t.onSetInfo()
 	qt.Check(t, qt.Equals(tt.numPieces(), 7))
 	qt.Check(t, qt.DeepEquals(tt.pieceAvailabilityRuns(), []pieceAvailabilityRun{
 		// The last element of the bitfield is irrelevant, as the Torrent actually only has 7

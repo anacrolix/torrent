@@ -1,8 +1,9 @@
 package segments
 
 import (
+	"cmp"
 	"iter"
-	"sort"
+	"slices"
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
@@ -10,7 +11,7 @@ import (
 
 func NewIndex(segments LengthIter) (ret Index) {
 	var start Length
-	for l, ok := segments(); ok; l, ok = segments() {
+	for l := range segments {
 		ret.segments = append(ret.segments, Extent{start, l})
 		start += l
 	}
@@ -25,64 +26,48 @@ func NewIndexFromSegments(segments []Extent) Index {
 	return Index{segments}
 }
 
-func (me Index) iterSegments() func() (Extent, bool) {
-	var lastEnd g.Option[Int]
-	return func() (ret Extent, ok bool) {
-		if len(me.segments) == 0 {
-			return
+// Yields segments as extents with Start relative to the previous segment's end.
+func (me Index) iterSegments(startIndex int) iter.Seq[Extent] {
+	return func(yield func(Extent) bool) {
+		var lastEnd g.Option[Int]
+		for _, cur := range me.segments[startIndex:] {
+			ret := Extent{
+				// Why ignore initial start on the first segment?
+				Start:  cur.Start - lastEnd.UnwrapOr(cur.Start),
+				Length: cur.Length,
+			}
+			lastEnd.Set(cur.End())
+			if !yield(ret) {
+				return
+			}
 		}
-		cur := me.segments[0]
-		me.segments = me.segments[1:]
-		ret.Start = cur.Start - lastEnd.UnwrapOr(cur.Start)
-		ret.Length = cur.Length
-		lastEnd.Set(cur.End())
-		ok = true
-		return
 	}
-}
-
-// Returns true if the callback returns false early, or extents are found in the index for all parts
-// of the given extent. TODO: This might not handle discontiguous extents. To be tested. Needed for
-// BitTorrent v2 possibly.
-func (me Index) Locate(e Extent, output Callback) bool {
-	first := sort.Search(len(me.segments), func(i int) bool {
-		_e := me.segments[i]
-		return _e.End() > e.Start
-	})
-	if first == len(me.segments) {
-		return e.Length == 0
-	}
-	e.Start -= me.segments[first].Start
-	// The extent is before the first segment.
-	if e.Start < 0 {
-		e.Length += e.Start
-		e.Start = 0
-	}
-	me.segments = me.segments[first:]
-	return ScanConsecutive(me.iterSegments(), e, func(i int, e Extent) bool {
-		return output(i+first, e)
-	})
 }
 
 func (me Index) LocateIter(e Extent) iter.Seq2[int, Extent] {
 	return func(yield func(int, Extent) bool) {
-		first := sort.Search(len(me.segments), func(i int) bool {
-			_e := me.segments[i]
-			return _e.End() > e.Start
+		// We find the first segment that ends after the start of the target extent.
+		first, eq := slices.BinarySearchFunc(me.segments, e.Start, func(elem Extent, target Int) int {
+			return cmp.Compare(elem.End(), target+1)
 		})
+		//fmt.Printf("binary search for %v in %v returned %v\n", e.Start, me.segments, first)
 		if first == len(me.segments) {
 			return
 		}
+		_ = eq
 		e.Start -= me.segments[first].Start
 		// The extent is before the first segment.
 		if e.Start < 0 {
 			e.Length += e.Start
 			e.Start = 0
 		}
-		me.segments = me.segments[first:]
-		ScanConsecutive(me.iterSegments(), e, func(i int, e Extent) bool {
-			return yield(i+first, e)
-		})
+		i := first
+		for cons := range scanConsecutive(me.iterSegments(first), e) {
+			if !yield(i, cons) {
+				return
+			}
+			i++
+		}
 	}
 }
 

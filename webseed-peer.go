@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"iter"
 	"log/slog"
 	"math/rand"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"time"
@@ -24,19 +24,41 @@ import (
 
 type webseedPeer struct {
 	// First field for stats alignment.
-	peer             Peer
-	client           webseed.Client
-	activeRequests   map[*webseedRequest]struct{}
-	locker           sync.Locker
-	lastUnhandledErr time.Time
-	hostKey          webseedHostKeyHandle
+	peer           Peer
+	logger         *slog.Logger
+	client         webseed.Client
+	activeRequests map[*webseedRequest]struct{}
+	locker         sync.Locker
+	hostKey        webseedHostKeyHandle
+	// We need this to look ourselves up in the Client.activeWebseedRequests map.
+	url webseedUrlKey
+
+	// When requests are allowed to resume. If Zero, then anytime.
+	penanceComplete time.Time
+	lastCrime       error
+}
+
+func (me *webseedPeer) suspended() bool {
+	return me.lastCrime != nil && time.Now().Before(me.penanceComplete)
+}
+
+func (me *webseedPeer) convict(err error, term time.Duration) {
+	if me.suspended() {
+		return
+	}
+	me.lastCrime = err
+	me.penanceComplete = time.Now().Add(term)
+}
+
+func (*webseedPeer) allConnStatsImplField(stats *AllConnStats) *ConnStats {
+	return &stats.WebSeeds
 }
 
 func (me *webseedPeer) cancelAllRequests() {
 	// Is there any point to this? Won't we fail to receive a chunk and cancel anyway? Should we
 	// Close requests instead?
 	for req := range me.activeRequests {
-		req.Cancel()
+		req.Cancel("all requests cancelled")
 	}
 }
 
@@ -48,7 +70,11 @@ func (me *webseedPeer) isLowOnRequests() bool {
 }
 
 // Webseed requests are issued globally so per-connection reasons or handling make no sense.
-func (me *webseedPeer) onNeedUpdateRequests(updateRequestReason) {}
+func (me *webseedPeer) onNeedUpdateRequests(reason updateRequestReason) {
+	// Too many reasons here: Can't predictably determine when we need to rerun updates.
+	// TODO: Can trigger this when we have Client-level active-requests map.
+	//me.peer.cl.scheduleImmediateWebseedRequestUpdate(reason)
+}
 
 func (me *webseedPeer) expectingChunks() bool {
 	return len(me.activeRequests) > 0
@@ -56,11 +82,6 @@ func (me *webseedPeer) expectingChunks() bool {
 
 func (me *webseedPeer) checkReceivedChunk(RequestIndex, *pp.Message, Request) (bool, error) {
 	return true, nil
-}
-
-func (me *webseedPeer) numRequests() int {
-	// What about unassigned requests? TODO: Don't allow those.
-	return len(me.activeRequests)
 }
 
 func (me *webseedPeer) lastWriteUploadRate() float64 {
@@ -73,7 +94,12 @@ var _ legacyPeerImpl = (*webseedPeer)(nil)
 func (me *webseedPeer) peerImplStatusLines() []string {
 	lines := []string{
 		me.client.Url,
-		fmt.Sprintf("last unhandled error: %v", eventAgeString(me.lastUnhandledErr)),
+	}
+	if me.lastCrime != nil {
+		lines = append(lines, fmt.Sprintf("last crime: %v", me.lastCrime))
+	}
+	if me.suspended() {
+		lines = append(lines, fmt.Sprintf("suspended for %v more", time.Until(me.penanceComplete)))
 	}
 	if len(me.activeRequests) > 0 {
 		elems := make([]string, 0, len(me.activeRequests))
@@ -102,18 +128,6 @@ func (ws *webseedPeer) onGotInfo(info *metainfo.Info) {
 // Webseeds check the next request is wanted before reading it.
 func (ws *webseedPeer) handleCancel(RequestIndex) {}
 
-func (ws *webseedPeer) activeRequestsForIndex(r RequestIndex) iter.Seq[*webseedRequest] {
-	return func(yield func(*webseedRequest) bool) {
-		for wr := range ws.activeRequests {
-			if r >= wr.next && r < wr.end {
-				if !yield(wr) {
-					return
-				}
-			}
-		}
-	}
-}
-
 func (ws *webseedPeer) requestIndexTorrentOffset(r RequestIndex) int64 {
 	return ws.peer.t.requestIndexBegin(r)
 }
@@ -125,9 +139,10 @@ func (ws *webseedPeer) intoSpec(begin, end RequestIndex) webseed.RequestSpec {
 	return webseed.RequestSpec{start, endOff - start}
 }
 
-func (ws *webseedPeer) spawnRequest(begin, end RequestIndex) {
-	extWsReq := ws.client.StartNewRequest(ws.intoSpec(begin, end))
+func (ws *webseedPeer) spawnRequest(begin, end RequestIndex, logger *slog.Logger) {
+	extWsReq := ws.client.StartNewRequest(ws.peer.closedCtx, ws.intoSpec(begin, end), logger)
 	wsReq := webseedRequest{
+		logger:  logger,
 		request: extWsReq,
 		begin:   begin,
 		next:    begin,
@@ -135,11 +150,15 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex) {
 	}
 	if ws.hasOverlappingRequests(begin, end) {
 		if webseed.PrintDebug {
-			fmt.Printf("webseedPeer.spawnRequest: overlapping request for %v[%v-%v)\n", ws.peer.t.name(), begin, end)
+			logger.Warn("webseedPeer.spawnRequest: request overlaps existing")
 		}
 		ws.peer.t.cl.dumpCurrentWebseedRequests()
 	}
 	ws.activeRequests[&wsReq] = struct{}{}
+	t := ws.peer.t
+	cl := t.cl
+	g.MakeMapIfNil(&cl.activeWebseedRequests)
+	g.MapMustAssignNew(cl.activeWebseedRequests, ws.getRequestKey(&wsReq), &wsReq)
 	ws.peer.updateExpectingChunks()
 	panicif.Zero(ws.hostKey)
 	ws.peer.t.cl.numWebSeedRequests[ws.hostKey]++
@@ -149,7 +168,20 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex) {
 		"end", end,
 		"len", end-begin,
 	)
-	go ws.runRequest(&wsReq)
+	go func() {
+		// Detach cost association from webseed update requests routine.
+		pprof.SetGoroutineLabels(context.Background())
+		ws.runRequest(&wsReq)
+	}()
+}
+
+func (me *webseedPeer) getRequestKey(wr *webseedRequest) webseedUniqueRequestKey {
+	// This is used to find the request in the Client's active requests map.
+	return webseedUniqueRequestKey{
+		url:        me.url,
+		t:          me.peer.t,
+		sliceIndex: me.peer.t.requestIndexToWebseedSliceIndex(wr.begin),
+	}
 }
 
 func (me *webseedPeer) hasOverlappingRequests(begin, end RequestIndex) bool {
@@ -164,8 +196,11 @@ func (me *webseedPeer) hasOverlappingRequests(begin, end RequestIndex) bool {
 	return false
 }
 
-func readChunksErrorLevel(err error, req *webseedRequest) slog.Level {
+func (ws *webseedPeer) readChunksErrorLevel(err error, req *webseedRequest) slog.Level {
 	if req.cancelled.Load() {
+		return slog.LevelDebug
+	}
+	if ws.peer.closedCtx.Err() != nil {
 		return slog.LevelDebug
 	}
 	var h2e http2.GoAwayError
@@ -191,7 +226,7 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 	// Ensure the body reader and response are closed.
 	webseedRequest.Close()
 	if err != nil {
-		level := readChunksErrorLevel(err, webseedRequest)
+		level := ws.readChunksErrorLevel(err, webseedRequest)
 		ws.slogger().Log(context.TODO(), level, "webseed request error", "err", err)
 		torrent.Add("webseed request error count", 1)
 		// This used to occur only on webseed.ErrTooFast but I think it makes sense to slow down any
@@ -206,24 +241,21 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 	locker.Lock()
 	// Delete this entry after waiting above on an error, to prevent more requests.
 	ws.deleteActiveRequest(webseedRequest)
-	if err != nil {
-		ws.peer.onNeedUpdateRequests("webseedPeer request errored")
+	cl := ws.peer.cl
+	if err == nil && cl.numWebSeedRequests[ws.hostKey] == webseedHostRequestConcurrency/2 {
+		cl.updateWebseedRequestsWithReason("webseedPeer.runRequest low water")
+	} else if cl.numWebSeedRequests[ws.hostKey] == 0 {
+		cl.updateWebseedRequestsWithReason("webseedPeer.runRequest zero requests")
 	}
-	ws.peer.t.cl.updateWebseedRequestsWithReason("webseedPeer request completed")
 	locker.Unlock()
 }
 
 func (ws *webseedPeer) deleteActiveRequest(wr *webseedRequest) {
 	g.MustDelete(ws.activeRequests, wr)
-	ws.peer.t.cl.numWebSeedRequests[ws.hostKey]--
+	cl := ws.peer.cl
+	cl.numWebSeedRequests[ws.hostKey]--
+	g.MustDelete(cl.activeWebseedRequests, ws.getRequestKey(wr))
 	ws.peer.updateExpectingChunks()
-}
-
-func (ws *webseedPeer) inactiveRequestIndex(index RequestIndex) bool {
-	for range ws.activeRequestsForIndex(index) {
-		return false
-	}
-	return true
 }
 
 func (ws *webseedPeer) connectionFlags() string {
@@ -233,8 +265,8 @@ func (ws *webseedPeer) connectionFlags() string {
 // Maybe this should drop all existing connections, or something like that.
 func (ws *webseedPeer) drop() {}
 
-func (cn *webseedPeer) ban() {
-	cn.peer.close()
+func (cn *webseedPeer) providedBadData() {
+	cn.convict(errors.New("provided bad data"), time.Minute)
 }
 
 func (ws *webseedPeer) onClose() {
@@ -254,7 +286,9 @@ func (ws *webseedPeer) maxChunkDiscard() RequestIndex {
 	return RequestIndex(int(intCeilDiv(webseed.MaxDiscardBytes, ws.peer.t.chunkSize)))
 }
 
-func (ws *webseedPeer) keepReading(wr *webseedRequest) bool {
+func (ws *webseedPeer) wantedChunksInDiscardWindow(wr *webseedRequest) bool {
+	// Shouldn't call this if request is at the end already.
+	panicif.GreaterThanOrEqual(wr.next, wr.end)
 	for ri := wr.next; ri < wr.end && ri <= wr.next+ws.maxChunkDiscard(); ri++ {
 		if ws.wantChunk(ri) {
 			return true
@@ -277,13 +311,25 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 		var n int
 		n, err = io.ReadFull(wr.request.Body, buf)
 		ws.peer.readBytes(int64(n))
+		reqCtxErr := context.Cause(wr.request.Context())
+		if errors.Is(err, reqCtxErr) {
+			err = reqCtxErr
+		}
 		if webseed.PrintDebug && wr.cancelled.Load() {
 			fmt.Printf("webseed read %v after cancellation: %v\n", n, err)
 		}
 		if err != nil {
+			// TODO: Pick out missing files or associate error with file. See also
+			// webseed.ReadRequestPartError.
+			var badResponse webseed.ErrBadResponse
+			if errors.As(err, &badResponse) {
+				ws.convict(badResponse, time.Minute)
+			}
 			err = fmt.Errorf("reading chunk: %w", err)
 			return
 		}
+		// TODO: This happens outside Client lock, and stats can be written out of sync with each
+		// other. Why even bother with atomics?
 		ws.peer.doChunkReadStats(int64(n))
 		// TODO: Clean up the parameters for receiveChunk.
 		msg.Piece = buf
@@ -297,8 +343,10 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 		err = ws.peer.receiveChunk(&msg)
 		stop := err != nil || wr.next >= wr.end
 		if !stop {
-			if !ws.keepReading(wr) {
-				wr.Cancel()
+			if !ws.wantedChunksInDiscardWindow(wr) {
+				// This cancels the stream, but we don't stop su--reading to make the most of the
+				// buffered body.
+				wr.Cancel("no wanted chunks in discard window")
 			}
 		}
 		ws.peer.locker().Unlock()

@@ -16,10 +16,12 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"runtime"
 	"slices"
 	"strconv"
 	"time"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
@@ -51,19 +53,21 @@ import (
 	"github.com/anacrolix/torrent/webtorrent"
 )
 
-const webseedRequestUpdateTimerInterval = time.Second
+const webseedRequestUpdateTimerInterval = 5 * time.Second
 
 // Clients contain zero or more Torrents. A Client manages a blocklist, the
 // TCP/UDP protocol ports, and DHT as desired.
 type Client struct {
 	// An aggregate of stats over all connections. First in struct to ensure 64-bit alignment of
 	// fields. See #262.
-	connStats ConnStats
+	connStats AllConnStats
 	counters  TorrentStatCounters
 
-	_mu    lockWithDeferreds
-	event  sync.Cond
-	closed chansync.SetOnce
+	_mu lockWithDeferreds
+	// Used in constrained situations when the lock is held.
+	roaringIntIterator roaring.IntIterator
+	event              sync.Cond
+	closed             chansync.SetOnce
 
 	config  *ClientConfig
 	logger  log.Logger
@@ -85,7 +89,8 @@ type Client struct {
 	// All Torrents once.
 	torrents map[*Torrent]struct{}
 	// All Torrents by their short infohashes (v1 if valid, and truncated v2 if valid). Unless the
-	// info has been obtained, there's no knowing if an infohash belongs to v1 or v2.
+	// info has been obtained, there's no knowing if an infohash belongs to v1 or v2. TODO: Make
+	// this a weak pointer.
 	torrentsByShortHash map[InfoHash]*Torrent
 
 	// Piece request orderings grouped by storage. Value is value type because all fields are
@@ -99,7 +104,8 @@ type Client struct {
 	numWebSeedRequests map[webseedHostKeyHandle]int
 
 	activeAnnounceLimiter limiter.Instance
-	httpClient            *http.Client
+	// TODO: Move this onto ClientConfig.
+	httpClient *http.Client
 
 	clientHolepunchAddrSets
 
@@ -107,7 +113,11 @@ type Client struct {
 
 	upnpMappings []*upnpMapping
 
-	webseedRequestTimer *time.Timer
+	webseedRequestTimer   *time.Timer
+	webseedUpdateReason   updateRequestReason
+	activeWebseedRequests map[webseedUniqueRequestKey]*webseedRequest
+
+	activePieceHashers int
 }
 
 type ipStr string
@@ -240,6 +250,7 @@ func (cl *Client) announceKey() int32 {
 // Initializes a bare minimum Client. *Client and *ClientConfig must not be nil.
 func (cl *Client) init(cfg *ClientConfig) {
 	cl.config = cfg
+	cfg.setRateLimiterBursts()
 	g.MakeMap(&cl.dopplegangerAddrs)
 	g.MakeMap(&cl.torrentsByShortHash)
 	g.MakeMap(&cl.torrents)
@@ -259,6 +270,7 @@ func (cl *Client) init(cfg *ClientConfig) {
 			MaxConnsPerHost: 10,
 		}
 	}
+	cfg.MetainfoSourcesClient = cmp.Or(cfg.MetainfoSourcesClient, cl.httpClient)
 	cl.defaultLocalLtepProtocolMap = makeBuiltinLtepProtocols(!cfg.DisablePEX)
 	g.MakeMap(&cl.numWebSeedRequests)
 }
@@ -270,42 +282,83 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		cfg = NewDefaultClientConfig()
 		cfg.ListenPort = 0
 	}
-	cfg.setRateLimiterBursts()
 	cl = &Client{}
 	cl.init(cfg)
-	go cl.acceptLimitClearer()
-	cl.initLogger()
-	//cl.logger.Levelf(log.Critical, "test after init")
+	// Belongs after infallible init
 	defer func() {
 		if err != nil {
 			cl.Close()
 			cl = nil
 		}
 	}()
+	// Infallible init. Belongs in separate function.
+	{
+		go cl.acceptLimitClearer()
+		cl.initLogger()
+		//cl.logger.Levelf(log.Critical, "test after init")
 
-	storageImpl := cfg.DefaultStorage
-	if storageImpl == nil {
-		// We'd use mmap by default but HFS+ doesn't support sparse files.
-		storageImplCloser := storage.NewFile(cfg.DataDir)
-		cl.onClose = append(cl.onClose, func() {
-			if err := storageImplCloser.Close(); err != nil {
-				cl.logger.Printf("error closing default storage: %s", err)
-			}
-		})
-		storageImpl = storageImplCloser
-	}
-	cl.defaultStorage = storage.NewClient(storageImpl)
-
-	if cfg.PeerID != "" {
-		missinggo.CopyExact(&cl.peerID, cfg.PeerID)
-	} else {
-		o := copy(cl.peerID[:], cfg.Bep20)
-		_, err = rand.Read(cl.peerID[o:])
-		if err != nil {
-			panic("error generating peer id")
+		storageImpl := cfg.DefaultStorage
+		if storageImpl == nil {
+			// We'd use mmap by default but HFS+ doesn't support sparse files.
+			storageImplCloser := storage.NewFile(cfg.DataDir)
+			cl.onClose = append(cl.onClose, func() {
+				if err := storageImplCloser.Close(); err != nil {
+					cl.logger.Printf("error closing default storage: %s", err)
+				}
+			})
+			storageImpl = storageImplCloser
 		}
-	}
+		cl.defaultStorage = storage.NewClient(storageImpl)
 
+		if cfg.PeerID != "" {
+			missinggo.CopyExact(&cl.peerID, cfg.PeerID)
+		} else {
+			o := copy(cl.peerID[:], cfg.Bep20)
+			_, err = rand.Read(cl.peerID[o:])
+			if err != nil {
+				panic("error generating peer id")
+			}
+		}
+
+		cl.websocketTrackers = websocketTrackers{
+			PeerId: cl.peerID,
+			Logger: cl.logger.WithNames("websocketTrackers"),
+			GetAnnounceRequest: func(
+				event tracker.AnnounceEvent, infoHash [20]byte,
+			) (
+				tracker.AnnounceRequest, error,
+			) {
+				cl.lock()
+				defer cl.unlock()
+				t, ok := cl.torrentsByShortHash[infoHash]
+				if !ok {
+					return tracker.AnnounceRequest{}, errors.New("torrent not tracked by client")
+				}
+				return t.announceRequest(event, infoHash), nil
+			},
+			Proxy:                      cl.config.HTTPProxy,
+			WebsocketTrackerHttpHeader: cl.config.WebsocketTrackerHttpHeader,
+			ICEServers:                 cl.ICEServers(),
+			DialContext:                cl.config.TrackerDialContext,
+			callbacks:                  &cl.config.Callbacks,
+			OnConn: func(dc webtorrent.DataChannelConn, dcc webtorrent.DataChannelContext) {
+				cl.lock()
+				defer cl.unlock()
+				t, ok := cl.torrentsByShortHash[dcc.InfoHash]
+				if !ok {
+					cl.logger.WithDefaultLevel(log.Warning).Printf(
+						"got webrtc conn for unloaded torrent with infohash %x",
+						dcc.InfoHash,
+					)
+					dc.Close()
+					return
+				}
+				go t.onWebRtcConn(dc, dcc)
+			},
+		}
+
+		cl.webseedRequestTimer = time.AfterFunc(webseedRequestUpdateTimerInterval, cl.updateWebseedRequestsTimerFunc)
+	}
 	builtinListenNetworks := cl.listenNetworks()
 	sockets, err := listenAll(
 		builtinListenNetworks,
@@ -351,45 +404,6 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 			}
 		}
 	}
-
-	cl.websocketTrackers = websocketTrackers{
-		PeerId: cl.peerID,
-		Logger: cl.logger.WithNames("websocketTrackers"),
-		GetAnnounceRequest: func(
-			event tracker.AnnounceEvent, infoHash [20]byte,
-		) (
-			tracker.AnnounceRequest, error,
-		) {
-			cl.lock()
-			defer cl.unlock()
-			t, ok := cl.torrentsByShortHash[infoHash]
-			if !ok {
-				return tracker.AnnounceRequest{}, errors.New("torrent not tracked by client")
-			}
-			return t.announceRequest(event, infoHash), nil
-		},
-		Proxy:                      cl.config.HTTPProxy,
-		WebsocketTrackerHttpHeader: cl.config.WebsocketTrackerHttpHeader,
-		ICEServers:                 cl.ICEServers(),
-		DialContext:                cl.config.TrackerDialContext,
-		callbacks:                  &cl.config.Callbacks,
-		OnConn: func(dc webtorrent.DataChannelConn, dcc webtorrent.DataChannelContext) {
-			cl.lock()
-			defer cl.unlock()
-			t, ok := cl.torrentsByShortHash[dcc.InfoHash]
-			if !ok {
-				cl.logger.WithDefaultLevel(log.Warning).Printf(
-					"got webrtc conn for unloaded torrent with infohash %x",
-					dcc.InfoHash,
-				)
-				dc.Close()
-				return
-			}
-			go t.onWebRtcConn(dc, dcc)
-		},
-	}
-
-	cl.webseedRequestTimer = time.AfterFunc(webseedRequestUpdateTimerInterval, cl.updateWebseedRequestsTimerFunc)
 
 	err = cl.checkConfig()
 	return
@@ -499,19 +513,21 @@ func (cl *Client) eachDhtServer(f func(DhtServer)) {
 
 // Stops the client. All connections to peers are closed and all activity will come to a halt.
 func (cl *Client) Close() (errs []error) {
+	// Close atomically, allow systems to break early if we're contended on the Client lock.
+	cl.closed.Set()
+	cl.webseedRequestTimer.Stop()
 	var closeGroup sync.WaitGroup // For concurrent cleanup to complete before returning
 	cl.lock()
 	for t := range cl.torrents {
-		err := t.close(&closeGroup)
-		if err != nil {
-			errs = append(errs, err)
-		}
+		cl.dropTorrent(t, &closeGroup)
 	}
+	// Can we not modify cl.torrents as we delete from it?
+	panicif.NotZero(len(cl.torrents))
+	panicif.NotZero(len(cl.torrentsByShortHash))
 	cl.clearPortMappings()
 	for i := range cl.onClose {
 		cl.onClose[len(cl.onClose)-1-i]()
 	}
-	cl.closed.Set()
 	cl.unlock()
 	cl.event.Broadcast()
 	closeGroup.Wait() // defer is LIFO. We want to Wait() after cl.unlock()
@@ -1289,7 +1305,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 	piece := d.Piece
 	switch d.Type {
 	case pp.DataMetadataExtensionMsgType:
-		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.MetadataChunksRead }))
+		c.modifyRelevantConnStats(add(1, func(cs *ConnStats) *Count { return &cs.MetadataChunksRead }))
 		if !c.requestedMetadataPiece(piece) {
 			return fmt.Errorf("got unexpected piece %d", piece)
 		}
@@ -1422,6 +1438,7 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 		opts.ChunkSize = defaultChunkSize
 	}
 	t.setChunkSize(opts.ChunkSize)
+	cl.torrents[t] = struct{}{}
 	return
 }
 
@@ -1492,7 +1509,6 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 		}
 	})
 	cl.torrentsByShortHash[infoHash] = t
-	cl.torrents[t] = struct{}{}
 	t.setInfoBytesLocked(opts.InfoBytes)
 	cl.clearAcceptLimits()
 	t.updateWantPeersEvent()
@@ -1505,14 +1521,19 @@ type AddTorrentOpts struct {
 	InfoHash   infohash.T
 	InfoHashV2 g.Option[infohash_v2.T]
 	Storage    storage.ClientImpl
-	ChunkSize  pp.Integer
-	InfoBytes  []byte
+	// Only applied for new torrents (check Client.AddTorrent* method bool return value). If 0, the
+	// default chunk size is used (16 KiB in current modern BitTorrent clients).
+	ChunkSize pp.Integer
+	InfoBytes []byte
 	// Don't hash data if piece completion is missing. This is useful for very large torrents that
 	// are dropped in place from an external source and trigger a lot of initial piece checks.
 	DisableInitialPieceCheck bool
 	// Require pieces to be checked as soon as info is available. This is because we have no way to
 	// schedule an initial check only, and don't want to race against use of Torrent.Complete.
 	IgnoreUnverifiedPieceCompletion bool
+	// Whether to initially allow data download or upload
+	DisallowDataUpload   bool
+	DisallowDataDownload bool
 }
 
 // Add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also
@@ -1520,11 +1541,8 @@ type AddTorrentOpts struct {
 func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
 	t, new = cl.AddTorrentOpt(spec.AddTorrentOpts)
 	modSpec := *spec
-	if new {
-		// ChunkSize was already applied by adding a new Torrent, and MergeSpec disallows changing
-		// it.
-		modSpec.ChunkSize = 0
-	}
+	// ChunkSize was already applied by adding a new Torrent, and MergeSpec disallows changing it.
+	modSpec.ChunkSize = 0
 	err = t.MergeSpec(&modSpec)
 	if err != nil && new {
 		t.Drop()
@@ -1533,8 +1551,9 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err e
 }
 
 // The trackers will be merged with the existing ones. If the Info isn't yet known, it will be set.
-// spec.DisallowDataDownload/Upload will be read and applied
 // The display name is replaced if the new spec provides one. Note that any `Storage` is ignored.
+// Many fields in the AddTorrentOpts field in TorrentSpec are ignored because the Torrent is already
+// added.
 func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	if spec.DisplayName != "" {
 		t.SetDisplayName(spec.DisplayName)
@@ -1566,18 +1585,11 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	}
 	t.addTrackers(spec.Trackers)
 	t.maybeNewConns()
-	t.dataDownloadDisallowed.SetBool(spec.DisallowDataDownload)
-	t.dataUploadDisallowed = spec.DisallowDataUpload
 	return errors.Join(t.addPieceLayersLocked(spec.PieceLayers)...)
 }
 
-func (cl *Client) dropTorrent(t *Torrent, wg *sync.WaitGroup) (err error) {
-	t.eachShortInfohash(func(short [20]byte) {
-		delete(cl.torrentsByShortHash, short)
-	})
-	err = t.close(wg)
-	delete(cl.torrents, t)
-	return
+func (cl *Client) dropTorrent(t *Torrent, wg *sync.WaitGroup) {
+	t.close(wg)
 }
 
 func (cl *Client) allTorrentsCompleted() bool {
@@ -1614,6 +1626,7 @@ func (cl *Client) Torrents() []*Torrent {
 }
 
 func (cl *Client) torrentsAsSlice() (ret []*Torrent) {
+	ret = make([]*Torrent, 0, len(cl.torrents))
 	for t := range cl.torrents {
 		ret = append(ret, t)
 	}
@@ -1702,6 +1715,7 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 	}
 	c = &PeerConn{
 		Peer: Peer{
+			cl:          cl,
 			outgoing:    opts.outgoing,
 			choking:     true,
 			peerChoking: true,
@@ -1728,10 +1742,7 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 	c.peerImpl = c
 	c.setPeerLoggers(cl.logger, cl.slogger)
 	c.setRW(connStatsReadWriter{nc, c})
-	c.r = &rateLimitedReader{
-		l: cl.config.DownloadRateLimiter,
-		r: c.r,
-	}
+	c.r = cl.newDownloadRateLimitedReader(c.r)
 	c.logger.Levelf(
 		log.Debug,
 		"inited with remoteAddr %v network %v outgoing %t",
@@ -1741,6 +1752,17 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 		f(&c.Peer)
 	}
 	return
+}
+
+func (cl *Client) newDownloadRateLimitedReader(r io.Reader) io.Reader {
+	if cl.config.DownloadRateLimiter == nil {
+		return r
+	}
+	// Why if the limit is Inf? Because it can be dynamically adjusted.
+	return rateLimitedReader{
+		l: cl.config.DownloadRateLimiter,
+		r: r,
+	}
 }
 
 func (cl *Client) onDHTAnnouncePeer(ih metainfo.Hash, ip net.IP, port int, portOk bool) {
@@ -1913,9 +1935,9 @@ func (cl *Client) ICEServers() []webrtc.ICEServer {
 }
 
 // Returns connection-level aggregate connStats at the Client level. See the comment on
-// TorrentStats.ConnStats.
+// TorrentStats.ConnStats. You probably want Client.Stats() instead.
 func (cl *Client) ConnStats() ConnStats {
-	return cl.connStats.Copy()
+	return cl.connStats.ConnStats.Copy()
 }
 
 func (cl *Client) Stats() ClientStats {
@@ -1926,12 +1948,12 @@ func (cl *Client) Stats() ClientStats {
 
 func (cl *Client) underWebSeedHttpRequestLimit(key webseedHostKeyHandle) bool {
 	panicif.Zero(key)
-	return cl.numWebSeedRequests[key] < defaultRequestsPerWebseedHost
+	return cl.numWebSeedRequests[key] < webseedHostRequestConcurrency
 }
 
 // Check for bad arrangements. This is a candidate for an error state check method.
 func (cl *Client) checkConfig() error {
-	if cl.config.DownloadRateLimiter.Limit() == 0 {
+	if EffectiveDownloadRateLimit(cl.config.DownloadRateLimiter) == 0 {
 		if len(cl.dialers) != 0 {
 			return errors.New("download rate limit is zero, but dialers are set")
 		}
@@ -1940,4 +1962,41 @@ func (cl *Client) checkConfig() error {
 		}
 	}
 	return nil
+}
+
+var maxActivePieceHashers = initIntFromEnv("TORRENT_MAX_ACTIVE_PIECE_HASHERS", runtime.NumCPU(), 0)
+
+func (cl *Client) maxActivePieceHashers() int {
+	return maxActivePieceHashers
+}
+
+func (cl *Client) belowMaxActivePieceHashers() bool {
+	return cl.activePieceHashers < cl.maxActivePieceHashers()
+}
+
+func (cl *Client) canStartPieceHashers() bool {
+	return cl.belowMaxActivePieceHashers()
+}
+
+func (cl *Client) startPieceHashers() {
+	if !cl.canStartPieceHashers() {
+		return
+	}
+	ts := make([]*Torrent, 0, len(cl.torrents))
+	for t := range cl.torrents {
+		if !t.considerStartingHashers() {
+			continue
+		}
+		ts = append(ts, t)
+	}
+	// Sort largest torrents first, as those are preferred by webseeds, and will cause less thrashing.
+	slices.SortFunc(ts, func(a, b *Torrent) int {
+		return -cmp.Compare(a.length(), b.length())
+	})
+	for _, t := range ts {
+		t.startPieceHashers()
+		if !cl.canStartPieceHashers() {
+			break
+		}
+	}
 }

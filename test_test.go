@@ -5,16 +5,17 @@ package torrent
 import (
 	"testing"
 
+	"github.com/go-quicktest/qt"
+
 	"github.com/anacrolix/torrent/metainfo"
 )
 
 func newTestingClient(t testing.TB) *Client {
-	cl := new(Client)
-	cl.init(TestingConfig(t))
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
 	t.Cleanup(func() {
 		cl.Close()
 	})
-	cl.initLogger()
 	return cl
 }
 

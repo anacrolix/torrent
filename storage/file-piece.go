@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"expvar"
 	"fmt"
 	"io"
 	"io/fs"
@@ -28,7 +29,21 @@ var _ interface {
 	PieceImpl
 	//PieceReaderer
 	io.WriterTo
+	Flusher
 } = (*filePieceImpl)(nil)
+
+func (me *filePieceImpl) Flush() (err error) {
+	for fileIndex, extent := range me.fileExtents() {
+		file := me.t.file(fileIndex)
+		name := me.t.pathForWrite(&file)
+		err1 := me.t.io.flush(name, extent.Start, extent.Length)
+		if err1 != nil {
+			err = errors.Join(err, fmt.Errorf("flushing %q: %w", name, err1))
+			return
+		}
+	}
+	return nil
+}
 
 func (me *filePieceImpl) logger() *slog.Logger {
 	return me.t.client.opts.Logger
@@ -45,9 +60,13 @@ func (me *filePieceImpl) extent() segments.Extent {
 	}
 }
 
+func (me *filePieceImpl) fileExtents() iter.Seq2[int, segments.Extent] {
+	return me.t.segmentLocater.LocateIter(me.extent())
+}
+
 func (me *filePieceImpl) pieceFiles() iter.Seq[file] {
 	return func(yield func(file) bool) {
-		for fileIndex := range me.t.segmentLocater.LocateIter(me.extent()) {
+		for fileIndex := range me.fileExtents() {
 			f := me.t.file(fileIndex)
 			if !yield(f) {
 				return
@@ -73,16 +92,15 @@ func (me *filePieceImpl) Completion() (c Completion) {
 
 func (me *filePieceImpl) iterFileSegments() iter.Seq2[int, segments.Extent] {
 	return func(yield func(int, segments.Extent) bool) {
+		pieceExtent := me.extent()
 		noFiles := true
-		for i, extent := range me.t.segmentLocater.LocateIter(me.extent()) {
+		for i, extent := range me.t.segmentLocater.LocateIter(pieceExtent) {
 			noFiles = false
 			if !yield(i, extent) {
 				return
 			}
 		}
-		if noFiles {
-			panic("files do not cover piece extent")
-		}
+		panicif.NotEq(noFiles, pieceExtent.Length == 0)
 	}
 }
 
@@ -214,95 +232,51 @@ func (me *filePieceImpl) MarkNotComplete() (err error) {
 }
 
 func (me *filePieceImpl) promotePartFile(f file) (err error) {
+	if !me.partFiles() {
+		return nil
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.race++
-	if me.partFiles() {
-		err = me.exclRenameIfExists(f.partFilePath(), f.safeOsPath)
-		if err != nil {
-			return
-		}
-	}
-	info, err := os.Stat(f.safeOsPath)
+	renamed, err := me.exclRenameIfExists(f.partFilePath(), f.safeOsPath)
 	if err != nil {
-		err = fmt.Errorf("statting file: %w", err)
 		return
 	}
-	// Clear writability for the file.
-	err = os.Chmod(f.safeOsPath, info.Mode().Perm()&^0o222)
-	if err != nil {
-		err = fmt.Errorf("setting file to read-only: %w", err)
+	if !renamed {
 		return
+	}
+	err = os.Chmod(f.safeOsPath, filePerm&^0o222)
+	if err != nil {
+		me.logger().Info("error setting promoted file to read-only", "file", f.safeOsPath, "err", err)
+		err = nil
 	}
 	return
 }
 
 // Rename from if exists, and if so, to must not exist.
-func (me *filePieceImpl) exclRenameIfExists(from, to string) error {
-	if true {
-		// Might be cheaper to check source exists than to create destination regardless.
-		_, err := os.Stat(from)
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-	}
-	panicif.Eq(from, to)
-	// We don't want anyone reading or writing to this until the rename completes.
-	f, err := os.OpenFile(to, os.O_CREATE|os.O_EXCL, 0)
-	if errors.Is(err, fs.ErrExist) {
-		_, err = os.Stat(from)
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		return errors.New("source and destination files both exist")
-	}
-	if err != nil {
-		return fmt.Errorf("exclusively creating destination file: %w", err)
-	}
-	f.Close()
+func (me *filePieceImpl) exclRenameIfExists(from, to string) (renamed bool, err error) {
 	err = os.Rename(from, to)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			// Someone else has moved it already.
-			return nil
+			err = nil
 		}
-		// If we can't rename it, remove the blocking destination file we made. Maybe the remove
-		// error should be logged separately since it's not actionable.
-		return errors.Join(err, os.Remove(to))
+		return
 	}
+	renamed = true
 	me.logger().Debug("renamed file", "from", from, "to", to)
-	return nil
+	return
 }
 
 func (me *filePieceImpl) onFileNotComplete(f file) (err error) {
+	if !me.partFiles() {
+		return
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.race++
-	if me.partFiles() {
-		err = me.exclRenameIfExists(f.safeOsPath, f.partFilePath())
-		if err != nil {
-			err = fmt.Errorf("restoring part file: %w", err)
-			return
-		}
-	}
-	info, err := os.Stat(me.pathForWrite(&f))
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
+	_, err = me.exclRenameIfExists(f.safeOsPath, f.partFilePath())
 	if err != nil {
-		err = fmt.Errorf("statting file: %w", err)
-		return
-	}
-	// Ensure the file is writable
-	err = os.Chmod(me.pathForWrite(&f), info.Mode().Perm()|(filePerm&0o222))
-	if err != nil {
-		err = fmt.Errorf("setting file writable: %w", err)
+		err = fmt.Errorf("restoring part file: %w", err)
 		return
 	}
 	return
@@ -316,23 +290,104 @@ func (me *filePieceImpl) partFiles() bool {
 	return me.t.partFiles()
 }
 
+type zeroReader struct{}
+
+func (me zeroReader) Read(p []byte) (n int, err error) {
+	clear(p)
+	return len(p), nil
+}
+
 func (me *filePieceImpl) WriteTo(w io.Writer) (n int64, err error) {
 	for fileIndex, extent := range me.iterFileSegments() {
-		file := me.t.file(fileIndex)
-		var f *os.File
-		f, err = me.t.openFile(file)
-		if err != nil {
-			return
-		}
-		f.Seek(extent.Start, io.SeekStart)
 		var n1 int64
-		n1, err = io.CopyN(w, f, extent.Length)
+		n1, err = me.writeFileTo(w, fileIndex, extent)
 		n += n1
-		f.Close()
 		if err != nil {
 			return
 		}
+		panicif.GreaterThan(n1, extent.Length)
+		if n1 < extent.Length {
+			return
+		}
+		panicif.NotEq(n1, extent.Length)
 	}
+	return
+}
+
+var (
+	packageExpvarMap = expvar.NewMap("torrentStorage")
+)
+
+type limitWriter struct {
+	rem int64
+	w   io.Writer
+}
+
+func (me *limitWriter) Write(p []byte) (n int, err error) {
+	n, err = me.w.Write(p[:min(int64(len(p)), me.rem)])
+	me.rem -= int64(n)
+	if err != nil {
+		return
+	}
+	p = p[n:]
+	if len(p) > 0 {
+		err = io.ErrShortWrite
+	}
+	return
+}
+
+func (me *filePieceImpl) writeFileTo(w io.Writer, fileIndex int, extent segments.Extent) (written int64, err error) {
+	if extent.Length == 0 {
+		return
+	}
+	file := me.t.file(fileIndex)
+	// Do we want io.WriterTo here, or are we happy to let that be type asserted in io.CopyN?
+	var f fileReader
+	f, err = me.t.openFile(file)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			err = nil
+		}
+		return
+	}
+	defer f.Close()
+	panicif.GreaterThan(extent.End(), file.FileInfo.Length)
+	extentRemaining := extent.Length
+	var dataOffset int64
+	dataOffset, err = f.seekData(extent.Start)
+	if err == io.EOF {
+		return
+	}
+	panicif.Err(err)
+	panicif.LessThan(dataOffset, extent.Start)
+	if dataOffset > extent.Start {
+		// Write zeroes until the end of the hole we're in.
+		var n1 int64
+		n := min(dataOffset-extent.Start, extent.Length)
+		n1, err = io.CopyN(w, zeroReader{}, n)
+		packageExpvarMap.Add("bytesReadSkippedHole", n1)
+		written += n1
+		if err != nil {
+			return
+		}
+		panicif.NotEq(n1, n)
+		extentRemaining -= n1
+	}
+	var n1 int64
+	if true {
+		n1, err = f.WriteTo(&limitWriter{
+			rem: extentRemaining,
+			w:   w,
+		})
+		// limitWriter will block f from writing too much.
+		if n1 == extentRemaining {
+			err = nil
+		}
+	} else {
+		n1, err = io.CopyN(w, f, extentRemaining)
+	}
+	packageExpvarMap.Add("bytesReadNotSkipped", n1)
+	written += n1
 	return
 }
 

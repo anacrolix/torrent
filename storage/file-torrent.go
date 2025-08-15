@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/anacrolix/missinggo/v2"
+	"github.com/anacrolix/missinggo/v2/panicif"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/segments"
@@ -20,6 +21,7 @@ type fileTorrentImpl struct {
 	metainfoFileInfos []metainfo.FileInfo
 	segmentLocater    segments.Index
 	infoHash          metainfo.Hash
+	io                fileIo
 	// Save memory by pointing to the other data.
 	client *fileClientImpl
 }
@@ -57,18 +59,24 @@ func (fts *fileTorrentImpl) setCompletionFromPartFiles() error {
 		} else if !errors.Is(err, fs.ErrNotExist) {
 			fts.logger().Warn("error checking file size", "err", err)
 		}
+		// Ensure all pieces associated with a file are not marked as complete (at most unknown).
 		for pieceIndex := f.beginPieceIndex(); pieceIndex < f.endPieceIndex(); pieceIndex++ {
 			notComplete[pieceIndex] = true
 		}
 	}
 	for i, nc := range notComplete {
 		if nc {
-			// Use whatever the piece completion has, or trigger a hash.
-			continue
-		}
-		err := fts.setPieceCompletion(i, true)
-		if err != nil {
-			return fmt.Errorf("setting piece %v completion: %w", i, err)
+			c := fts.getCompletion(i)
+			if c.Complete {
+				// TODO: We need to set unknown so that verification of the data we do have could
+				// occur naturally but that'll be a big change.
+				panicif.Err(fts.setPieceCompletion(i, false))
+			}
+		} else {
+			err := fts.setPieceCompletion(i, true)
+			if err != nil {
+				return fmt.Errorf("setting piece %v completion: %w", i, err)
+			}
 		}
 	}
 	return nil
@@ -107,17 +115,6 @@ func (fs *fileTorrentImpl) Close() error {
 	return nil
 }
 
-func (fts *fileTorrentImpl) Flush() error {
-	for i := range fts.files {
-		f := fts.file(i)
-		fts.logger().Debug("flushing", "file.safeOsPath", f.safeOsPath)
-		if err := fsync(fts.pathForWrite(&f)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (fts *fileTorrentImpl) file(index int) file {
 	return file{
 		Info:      fts.info,
@@ -132,26 +129,32 @@ func (me *fileTorrentImpl) openSharedFile(file file) (f sharedFileIf, err error)
 	// Fine to open once under each name on a unix system. We could make the shared file keys more
 	// constrained, but it shouldn't matter. TODO: Ensure at most one of the names exist.
 	if me.partFiles() {
-		f, err = sharedFiles.Open(file.partFilePath())
+		f, err = me.io.openForSharedRead(file.partFilePath())
 	}
 	if err == nil && f == nil || errors.Is(err, fs.ErrNotExist) {
-		f, err = sharedFiles.Open(file.safeOsPath)
+		f, err = me.io.openForSharedRead(file.safeOsPath)
 	}
 	file.mu.RUnlock()
 	return
 }
 
-// Open file for reading.
-func (me *fileTorrentImpl) openFile(file file) (f *os.File, err error) {
+// Open file for reading. Not a shared handle if that matters.
+func (me *fileTorrentImpl) openFile(file file) (f fileReader, err error) {
 	file.mu.RLock()
 	// Fine to open once under each name on a unix system. We could make the shared file keys more
 	// constrained, but it shouldn't matter. TODO: Ensure at most one of the names exist.
 	if me.partFiles() {
-		f, err = os.Open(file.partFilePath())
+		f, err = me.io.openForRead(file.partFilePath())
 	}
 	if err == nil && f == nil || errors.Is(err, fs.ErrNotExist) {
-		f, err = os.Open(file.safeOsPath)
+		f, err = me.io.openForRead(file.safeOsPath)
 	}
 	file.mu.RUnlock()
 	return
+}
+
+func (fst *fileTorrentImpl) openForWrite(file file) (_ fileWriter, err error) {
+	// It might be possible to have a writable handle shared files cache if we need it.
+	fst.logger().Debug("openForWrite", "file.safeOsPath", file.safeOsPath)
+	return fst.io.openForWrite(fst.pathForWrite(&file), file.FileInfo.Length)
 }

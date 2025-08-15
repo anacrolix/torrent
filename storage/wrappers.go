@@ -7,7 +7,6 @@ import (
 	"os"
 
 	g "github.com/anacrolix/generics"
-	"github.com/anacrolix/missinggo/v2"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -90,7 +89,6 @@ func (p Piece) WriteAt(b []byte, off int64) (n int, err error) {
 	if off+int64(len(b)) > p.mip.Length() {
 		panic("write overflows piece")
 	}
-	b = missinggo.LimitLen(b, p.mip.Length()-off)
 	return p.PieceImpl.WriteAt(b, off)
 }
 
@@ -105,7 +103,7 @@ func (p Piece) ReadAt(b []byte, off int64) (n int, err error) {
 		err = io.EOF
 		return
 	}
-	b = missinggo.LimitLen(b, p.mip.Length()-off)
+	b = b[:min(int64(len(b)), p.mip.Length()-off)]
 	if len(b) == 0 {
 		return
 	}
@@ -144,6 +142,13 @@ func (p Piece) NewReader() (PieceReader, error) {
 		p,
 		nopCloser{},
 	}, nil
+}
+
+func (p Piece) Flush() error {
+	if fl, ok := p.PieceImpl.(Flusher); ok {
+		return fl.Flush()
+	}
+	return nil
 }
 
 type nopCloser struct{}

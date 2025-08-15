@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"cmp"
 	"io"
 	"os"
 	"testing"
@@ -90,9 +91,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	cfg.Seed = true
 	// Some test instances don't like this being on, even when there's no cache involved.
 	cfg.DropMutuallyCompletePeers = false
-	if ps.SeederUploadRateLimiter != nil {
-		cfg.UploadRateLimiter = ps.SeederUploadRateLimiter
-	}
+	cfg.UploadRateLimiter = cmp.Or(ps.SeederUploadRateLimiter, cfg.UploadRateLimiter)
 	cfg.DataDir = greetingTempDir
 	if ps.ConfigureSeeder.Config != nil {
 		ps.ConfigureSeeder.Config(cfg)

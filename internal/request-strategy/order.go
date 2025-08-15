@@ -13,7 +13,6 @@ type (
 	RequestIndex  uint32
 	ChunkIndex    = RequestIndex
 	Request       = types.Request
-	pieceIndex    = types.PieceIndex
 	piecePriority = types.PiecePriority
 	// This can be made into a type-param later, will be great for testing.
 	ChunkSpec = types.ChunkSpec
@@ -25,7 +24,7 @@ type (
 func pieceOrderLess(i, j *PieceRequestOrderItem) multiless.Computation {
 	return multiless.New().Int(
 		int(j.State.Priority), int(i.State.Priority),
-		// TODO: Should we match on complete here to prevent churn when availability changes?
+		// TODO: Should we match on complete here to prevent churn when availability changes? (Answer: Yes).
 	).Bool(
 		j.State.Partial, i.State.Partial,
 	).Int(
@@ -36,24 +35,22 @@ func pieceOrderLess(i, j *PieceRequestOrderItem) multiless.Computation {
 	).Int(
 		i.Key.Index, j.Key.Index,
 	).Lazy(func() multiless.Computation {
-		return multiless.New().Cmp(bytes.Compare(
-			i.Key.InfoHash[:],
-			j.Key.InfoHash[:],
-		))
+		a := i.Key.InfoHash.Value()
+		b := j.Key.InfoHash.Value()
+		return multiless.New().Cmp(bytes.Compare(a[:], b[:]))
 	})
 }
 
-// Returns true if the piece should be considered against the unverified bytes limit. This is
-// based on whether the callee intends to request from the piece. Pieces submitted to this
-// callback passed Piece.Request and so are ready for immediate download.
+// This did return true if the piece should be considered against the unverified bytes limit. But
+// that would cause thrashing on completion: The order should be stable. This is now a 3-tuple
+// iterator.
 type RequestPieceFunc func(ih metainfo.Hash, pieceIndex int, orderState PieceRequestOrderState) bool
 
 // Calls f with requestable pieces in order.
 func GetRequestablePieces(
 	input Input, pro *PieceRequestOrder,
-	// Returns true if the piece should be considered against the unverified bytes limit. This is
-	// based on whether the callee intends to request from the piece. Pieces submitted to this
-	// callback passed Piece.Request and so are ready for immediate download.
+	// Pieces submitted to this callback passed Piece.Request and so are ready for immediate
+	// download.
 	requestPiece RequestPieceFunc,
 ) {
 	// Storage capacity left for this run, keyed by the storage capacity pointer on the storage
@@ -67,9 +64,9 @@ func GetRequestablePieces(
 		maxUnverifiedBytes         = input.MaxUnverifiedBytes()
 	)
 	pro.tree.Scan(func(item PieceRequestOrderItem) bool {
-		ih := item.Key.InfoHash
-		var t = input.Torrent(ih)
-		var piece = t.Piece(item.Key.Index)
+		ih := item.Key.InfoHash.Value()
+		t := input.Torrent(ih)
+		piece := t.Piece(item.Key.Index)
 		pieceLength := t.PieceLength()
 		// Storage limits will always apply against requestable pieces, since we need to keep the
 		// highest priority pieces, even if they're complete or in an undesirable state.
@@ -83,7 +80,7 @@ func GetRequestablePieces(
 			if !requestPiece(ih, item.Key.Index, item.State) {
 				// No blocks are being considered from this piece, so it won't result in unverified
 				// bytes.
-				return true
+				return false
 			}
 		} else if !piece.CountUnverified() {
 			// The piece is pristine, and we're not considering it for requests.

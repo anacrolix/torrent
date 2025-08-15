@@ -20,6 +20,7 @@ func (t *Torrent) updatePieceRequestOrderPiece(pieceIndex int) (changed bool) {
 	if t.hasStorageCap() {
 		return pro.pieces.Update(key, t.requestStrategyPieceOrderState(pieceIndex))
 	}
+	// TODO: This might eject a piece that could count toward being unverified?
 	pending := !t.ignorePieceForRequests(pieceIndex)
 	if pending {
 		newState := t.requestStrategyPieceOrderState(pieceIndex)

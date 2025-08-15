@@ -1,3 +1,5 @@
+//go:build !windows
+
 // Mounts a FUSE filesystem backed by torrents and magnet links.
 package main
 

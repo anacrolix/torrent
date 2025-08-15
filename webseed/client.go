@@ -5,13 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
+	"runtime/pprof"
 	"strings"
+	"sync"
 
 	"github.com/RoaringBitmap/roaring"
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/dustin/go-humanize"
 	"golang.org/x/time/rate"
@@ -36,25 +38,30 @@ func init() {
 type RequestSpec = segments.Extent
 
 type requestPart struct {
-	req *http.Request
-	e   segments.Extent
-	do  func() (*http.Response, error)
-	// Wrap http response bodies for such things as download rate limiting.
-	responseBodyWrapper ResponseBodyWrapper
+	req       *http.Request
+	e         segments.Extent
+	do        func() (*http.Response, error)
+	fileIndex int
 }
 
 type Request struct {
-	cancel func()
+	// So you can view it from externally.
+	ctx    context.Context
+	cancel context.CancelCauseFunc
 	Body   io.Reader
 	// Closed with error to unstick copy routine when context isn't checked.
 	bodyPipe *io.PipeReader
 }
 
-func (r Request) Cancel() {
-	r.cancel()
+func (r *Request) Context() context.Context {
+	return r.ctx
 }
 
-func (r Request) Close() {
+func (r *Request) Cancel(cause error) {
+	r.cancel(cause)
+}
+
+func (r *Request) Close() {
 	// We aren't cancelling because we want to know if we can keep receiving buffered data after
 	// cancellation. PipeReader.Close always returns nil.
 	_ = r.bodyPipe.Close()
@@ -64,7 +71,7 @@ type Client struct {
 	Logger     *slog.Logger
 	HttpClient *http.Client
 	Url        string
-	// Max concurrent requests to a WebSeed for a given torrent.
+	// Max concurrent requests to a WebSeed for a given torrent. TODO: Unused.
 	MaxRequests int
 
 	fileIndex *segments.Index
@@ -73,7 +80,7 @@ type Client struct {
 	// given that's how requests are mapped to webseeds, but the torrent.Client works at the piece
 	// level. We can map our file-level adjustments to the pieces here. This probably need to be
 	// private in the future, if Client ever starts removing pieces. TODO: This belongs in
-	// webseedPeer.
+	// webseedPeer. TODO: Unused.
 	Pieces roaring.Bitmap
 	// This wraps http.Response bodies, for example to limit the download rate.
 	ResponseBodyWrapper     ResponseBodyWrapper
@@ -94,56 +101,56 @@ func (me *Client) SetInfo(info *metainfo.Info, fileIndex *segments.Index) {
 	me.Pieces.AddRange(0, uint64(info.NumPieces()))
 }
 
-type RequestResult struct {
-	Bytes []byte
-	Err   error
-}
-
 // Returns the URL for the given file index. This is assumed to be globally unique.
 func (ws *Client) UrlForFileIndex(fileIndex int) string {
 	return urlForFileIndex(ws.Url, fileIndex, ws.info, ws.PathEscaper)
 }
 
-func (ws *Client) StartNewRequest(r RequestSpec) Request {
-	ctx, cancel := context.WithCancel(context.TODO())
+func (ws *Client) StartNewRequest(ctx context.Context, r RequestSpec, debugLogger *slog.Logger) Request {
+	ctx, cancel := context.WithCancelCause(ctx)
 	var requestParts []requestPart
-	if !ws.fileIndex.Locate(r, func(i int, e segments.Extent) bool {
+	for i, e := range ws.fileIndex.LocateIter(r) {
 		req, err := newRequest(
 			ctx,
 			ws.Url, i, ws.info, e.Start, e.Length,
 			ws.PathEscaper,
 		)
-		if err != nil {
-			panic(err)
-		}
+		panicif.Err(err)
 		part := requestPart{
-			req:                 req,
-			e:                   e,
-			responseBodyWrapper: ws.ResponseBodyWrapper,
+			req:       req,
+			e:         e,
+			fileIndex: i,
 		}
-		part.do = func() (*http.Response, error) {
+		part.do = func() (resp *http.Response, err error) {
+			resp, err = ws.HttpClient.Do(req)
 			if PrintDebug {
-				fmt.Printf(
-					"doing request for %q (file size %v), Range: %q\n",
-					req.URL,
-					humanize.Bytes(uint64(ws.fileIndex.Index(i).Length)),
-					req.Header.Get("Range"),
-				)
+				if err == nil {
+					debugLogger.Debug(
+						"request for part",
+						"url", req.URL,
+						"part-length", humanize.IBytes(uint64(e.Length)),
+						"part-file-offset", humanize.IBytes(uint64(e.Start)),
+						"CF-Cache-Status", resp.Header.Get("CF-Cache-Status"),
+					)
+				}
 			}
-			return ws.HttpClient.Do(req)
+			return
 		}
 		requestParts = append(requestParts, part)
-		return true
-	}) {
-		panic("request out of file bounds")
 	}
+	// Technically what we want to ensure is that all parts exist consecutively. If the file data
+	// isn't consecutive, then it is piece aligned and we wouldn't need to be doing multiple
+	// requests. TODO: Assert this.
+	panicif.Zero(len(requestParts))
 	body, w := io.Pipe()
 	req := Request{
+		ctx:      ctx,
 		cancel:   cancel,
 		Body:     body,
 		bodyPipe: body,
 	}
 	go func() {
+		pprof.SetGoroutineLabels(context.Background())
 		err := ws.readRequestPartResponses(ctx, w, requestParts)
 		panicif.Err(w.CloseWithError(err))
 	}()
@@ -177,23 +184,29 @@ func (me *Client) checkContentLength(resp *http.Response, part requestPart, expe
 	}
 }
 
+var bufPool = &sync.Pool{New: func() any {
+	return g.PtrTo(make([]byte, 128<<10)) // 128 KiB. 4x the default.
+}}
+
 // Reads the part in full. All expected bytes must be returned or there will an error returned.
 func (me *Client) recvPartResult(ctx context.Context, w io.Writer, part requestPart, resp *http.Response) error {
 	defer resp.Body.Close()
 	var body io.Reader = resp.Body
-	if part.responseBodyWrapper != nil {
-		body = part.responseBodyWrapper(body)
+	if a := me.ResponseBodyWrapper; a != nil {
+		body = a(body)
 	}
-	// Prevent further accidental use
-	resp.Body = nil
+	// We did set resp.Body to nil here, but I'm worried the HTTP machinery might do something
+	// funny.
 	if ctx.Err() != nil {
-		return ctx.Err()
+		return context.Cause(ctx)
 	}
 	switch resp.StatusCode {
 	case http.StatusPartialContent:
 		// The response should be just as long as we requested.
 		me.checkContentLength(resp, part, part.e.Length)
-		copied, err := io.Copy(w, body)
+		buf := bufPool.Get().(*[]byte)
+		defer bufPool.Put(buf)
+		copied, err := io.CopyBuffer(w, body, *buf)
 		if err != nil {
 			return err
 		}
@@ -209,9 +222,14 @@ func (me *Client) recvPartResult(ctx context.Context, w io.Writer, part requestP
 			return ErrBadResponse{"resp status ok but requested range", resp}
 		}
 		if discard != 0 {
-			log.Printf("resp status ok but requested range [url=%q, range=%q]",
-				part.req.URL,
-				part.req.Header.Get("Range"))
+			if PrintDebug {
+				fmt.Printf("resp status ok but requested range [url=%q, range=%q]",
+					part.req.URL,
+					part.req.Header.Get("Range"))
+			}
+			me.Logger.Debug("resp status ok but requested range",
+				"url", part.req.URL,
+				"range", part.req.Header.Get("Range"))
 		}
 		// Instead of discarding, we could try receiving all the chunks present in the response
 		// body. I don't know how one would handle multiple chunk requests resulting in an OK
@@ -239,15 +257,34 @@ func (me *Client) recvPartResult(ctx context.Context, w io.Writer, part requestP
 
 var ErrTooFast = errors.New("making requests too fast")
 
+// Contains info for callers to act (like ignoring particular files or rate limiting).
+type ReadRequestPartError struct {
+	FileIndex int
+	Err       error
+}
+
+func (me ReadRequestPartError) Unwrap() error {
+	return me.Err
+}
+
+func (r ReadRequestPartError) Error() string {
+	return fmt.Sprintf("reading request part for file index %v: %v", r.FileIndex, r.Err)
+}
+
 func (me *Client) readRequestPartResponses(ctx context.Context, w io.Writer, parts []requestPart) (err error) {
 	for _, part := range parts {
 		var resp *http.Response
 		resp, err = part.do()
+		// TODO: Does debugging caching belong here?
 		if err == nil {
 			err = me.recvPartResult(ctx, w, part, resp)
 		}
 		if err != nil {
 			err = fmt.Errorf("reading %q at %q: %w", part.req.URL, part.req.Header.Get("Range"), err)
+			err = ReadRequestPartError{
+				FileIndex: part.fileIndex,
+				Err:       err,
+			}
 			break
 		}
 	}

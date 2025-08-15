@@ -3,7 +3,6 @@ package torrent
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -15,12 +14,14 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"weak"
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/generics"
 	. "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/bitmap"
+	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/multiless"
 
 	"golang.org/x/time/rate"
@@ -98,7 +99,6 @@ type PeerConn struct {
 	// we may not even know the number of pieces in the torrent yet.
 	peerSentHaveAll bool
 
-	// TODO: How are pending cancels handled for webseed peers?
 	requestState requestStrategy.PeerRequestState
 
 	peerRequestDataAllocLimiter alloclim.Limiter
@@ -112,6 +112,15 @@ type PeerConn struct {
 	// we can verify all the pieces for a file when they're all arrived before submitting them to
 	// the torrent.
 	receivedHashPieces map[[32]byte][][32]byte
+
+	peerRequestServerRunning bool
+	// Set true after we've added our ConnStats generated during handshake to other ConnStat
+	// instances as determined when the *Torrent became known.
+	reconciledHandshakeStats bool
+}
+
+func (*PeerConn) allConnStatsImplField(stats *AllConnStats) *ConnStats {
+	return &stats.PeerConns
 }
 
 func (cn *PeerConn) lastWriteUploadRate() float64 {
@@ -582,11 +591,11 @@ func (cn *PeerConn) wroteMsg(msg *pp.Message) {
 			torrent.Add(fmt.Sprintf("Extended messages written for protocol %q", name), 1)
 		}
 	}
-	cn.allStats(func(cs *ConnStats) { cs.wroteMsg(msg) })
+	cn.modifyRelevantConnStats(func(cs *ConnStats) { cs.wroteMsg(msg) })
 }
 
 func (cn *PeerConn) wroteBytes(n int64) {
-	cn.allStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesWritten }))
+	cn.modifyRelevantConnStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesWritten }))
 }
 
 func (c *PeerConn) fastEnabled() bool {
@@ -670,17 +679,41 @@ func (c *PeerConn) onReadRequest(r Request, startFetch bool) error {
 	}
 	c.peerRequests[r] = value
 	if startFetch {
-		// TODO: Limit peer request data read concurrency.
-		go c.peerRequestDataReader(r, value)
+		c.startPeerRequestServer()
 	}
 	return nil
 }
 
-func (c *PeerConn) peerRequestDataReader(r Request, prs *peerRequestState) {
+func (c *PeerConn) startPeerRequestServer() {
+	if !c.peerRequestServerRunning {
+		go c.peerRequestServer()
+		c.peerRequestServerRunning = true
+	}
+}
+
+func (c *PeerConn) peerRequestServer() {
+again:
+	c.locker().Lock()
+	if !c.closed.IsSet() {
+		for r, state := range c.peerRequests {
+			if state.data == nil {
+				c.locker().Unlock()
+				c.servePeerRequest(r, state)
+				goto again
+			}
+		}
+	}
+	panicif.False(c.peerRequestServerRunning)
+	c.peerRequestServerRunning = false
+	c.locker().Unlock()
+}
+
+// TODO: Return an error then let caller filter on conditions.
+func (c *PeerConn) servePeerRequest(r Request, prs *peerRequestState) {
 	// Should we depend on Torrent closure here? I think it's okay to get cancelled from elsewhere,
 	// or fail to read and then cleanup. Also, we used to hang here if the reservation was never
 	// dropped, that was fixed.
-	ctx := context.Background()
+	ctx := c.closedCtx
 	err := prs.allocReservation.Wait(ctx)
 	if err != nil {
 		c.logger.WithDefaultLevel(log.Debug).Levelf(log.ErrorLevel(err), "waiting for alloc limit reservation: %v", err)
@@ -689,6 +722,10 @@ func (c *PeerConn) peerRequestDataReader(r Request, prs *peerRequestState) {
 	b, err := c.readPeerRequestData(r)
 	c.locker().Lock()
 	defer c.locker().Unlock()
+	// This function should remove work from peerRequests so peerRequestServer does not stall.
+	defer func() {
+		panicif.True(MapContains(c.peerRequests, r) && prs.data == nil)
+	}()
 	if err != nil {
 		c.peerRequestDataReadFailed(err, r)
 	} else {
@@ -1128,7 +1165,7 @@ func (cn *PeerConn) drop() {
 	cn.t.dropConnection(cn)
 }
 
-func (cn *PeerConn) ban() {
+func (cn *PeerConn) providedBadData() {
 	cn.t.cl.banPeerIP(cn.remoteIp())
 }
 
@@ -1150,13 +1187,12 @@ func (c *PeerConn) sendChunk(r Request, msg func(pp.Message) bool, state *peerRe
 }
 
 func (c *PeerConn) setTorrent(t *Torrent) {
-	if c.t != nil {
-		panic("connection already associated with a torrent")
-	}
+	panicif.NotNil(c.t)
 	c.t = t
+	c.initClosedCtx()
 	c.logger.WithDefaultLevel(log.Debug).Printf("set torrent=%v", t)
 	c.setPeerLoggers(t.logger, t.slogger())
-	t.reconcileHandshakeStats(c.peerPtr())
+	c.reconcileHandshakeStats()
 }
 
 func (c *PeerConn) pexPeerFlags() pp.PexPeerFlags {
@@ -1686,7 +1722,7 @@ func (cn *PeerConn) request(r RequestIndex) (more bool, err error) {
 	}
 	cn.validReceiveChunks[r]++
 	cn.t.requestState[r] = requestState{
-		peer: cn,
+		peer: weak.Make(cn),
 		when: time.Now(),
 	}
 	cn.updateExpectingChunks()
@@ -1839,4 +1875,24 @@ func (c *PeerConn) checkReceivedChunk(req RequestIndex, msg *pp.Message, ppReq R
 	}
 
 	return
+}
+
+// Reconcile bytes transferred before connection was associated with a torrent.
+func (c *PeerConn) reconcileHandshakeStats() {
+	panicif.True(c.reconciledHandshakeStats)
+	if c._stats != (ConnStats{
+		// Handshakes should only increment these fields:
+		BytesWritten: c._stats.BytesWritten,
+		BytesRead:    c._stats.BytesRead,
+	}) {
+		panic("bad stats")
+	}
+	// Add the stat data so far to relevant Torrent stats that were skipped before the handshake
+	// completed.
+	c.relevantConnStats(&c.t.connStats)(func(cs *ConnStats) bool {
+		cs.BytesRead.Add(c._stats.BytesRead.Int64())
+		cs.BytesWritten.Add(c._stats.BytesWritten.Int64())
+		return true
+	})
+	c.reconciledHandshakeStats = true
 }

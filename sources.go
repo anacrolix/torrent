@@ -36,12 +36,15 @@ func (t *Torrent) sourcer(source string) {
 	for {
 		var retry g.Option[time.Duration]
 		retry, err = t.trySource(source)
-		if err == nil || ctx.Err() != nil || !retry.Ok {
+		if err == nil || ctx.Err() != nil {
 			return
 		}
 		t.slogger().Warn("error using torrent source", "source", source, "err", err)
+		if !retry.Ok {
+			return
+		}
 		select {
-		case <-time.After(retry.Value):
+		case <-time.After(retry.Unwrap()):
 		case <-ctx.Done():
 		}
 	}
@@ -56,15 +59,15 @@ func (t *Torrent) trySource(source string) (retry g.Option[time.Duration], err e
 		return
 	}
 	var mi metainfo.MetaInfo
-	mi, err = getTorrentSource(ctx, source, t.cl.httpClient)
+	mi, err = getTorrentSource(ctx, source, t.cl.config.MetainfoSourcesClient)
 	if ctx.Err() != nil {
 		return
 	}
 	if err != nil {
-		retry.Set(time.Duration(rand.Int64N(int64(time.Minute))))
+		retry.Set(time.Minute + time.Duration(rand.Int64N(int64(time.Minute))))
 		return
 	}
-	err = t.MergeSpec(TorrentSpecFromMetaInfo(&mi))
+	err = t.cl.config.MetainfoSourcesMerger(t, &mi)
 	return
 }
 

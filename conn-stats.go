@@ -55,12 +55,16 @@ func (cs *ConnStats) receivedChunk(size int64) {
 	cs.BytesReadData.Add(size)
 }
 
-func (cs *ConnStats) incrementPiecesDirtiedGood() {
+func (cs *ConnStats) incrementPiecesDirtiedGood() bool {
 	cs.PiecesDirtiedGood.Add(1)
+	// This method is used as an iterator and should never return early.
+	return true
 }
 
-func (cs *ConnStats) incrementPiecesDirtiedBad() {
+func (cs *ConnStats) incrementPiecesDirtiedBad() bool {
 	cs.PiecesDirtiedBad.Add(1)
+	// This method is used as an iterator and should never return early.
+	return true
 }
 
 func add(n int64, f func(*ConnStats) *Count) func(*ConnStats) {

@@ -7,6 +7,7 @@ import (
 	"iter"
 	"sync"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/chansync"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/bitmap"
@@ -61,7 +62,7 @@ type Piece struct {
 	hashing bool
 	// The piece state may have changed, and is being synchronized with storage.
 	marking bool
-	// The Completion.Ok field from the storage layer.
+	// The Completion.Ok field cached from the storage layer.
 	storageCompletionOk bool
 }
 
@@ -85,10 +86,8 @@ func (p *Piece) Storage() storage.Piece {
 	return p.t.storage.PieceWithHash(p.Info(), pieceHash)
 }
 
-func (p *Piece) Flush() {
-	if p.t.storage.Flush != nil {
-		_ = p.t.storage.Flush()
-	}
+func (p *Piece) Flush() error {
+	return p.Storage().Flush()
 }
 
 func (p *Piece) pendingChunkIndex(chunkIndex chunkIndexType) bool {
@@ -107,7 +106,8 @@ func (p *Piece) numDirtyChunks() chunkIndexType {
 	return chunkIndexType(roaringBitmapRangeCardinality[RequestIndex](
 		&p.t.dirtyChunks,
 		p.requestIndexBegin(),
-		p.requestIndexMaxEnd()))
+		p.t.pieceRequestIndexBegin(p.index+1),
+	))
 }
 
 func (p *Piece) unpendChunkIndex(i chunkIndexType) {
@@ -155,9 +155,9 @@ func (p *Piece) chunkIndexDirty(chunk chunkIndexType) bool {
 	return p.t.dirtyChunks.Contains(p.requestIndexBegin() + chunk)
 }
 
-func (p *Piece) iterCleanChunks() iter.Seq[chunkIndexType] {
+func (p *Piece) iterCleanChunks(it *roaring.IntIterator) iter.Seq[chunkIndexType] {
 	return func(yield func(chunkIndexType) bool) {
-		it := p.t.dirtyChunks.Iterator()
+		it.Initialize(&p.t.dirtyChunks.Bitmap)
 		begin := uint32(p.requestIndexBegin())
 		end := uint32(p.requestIndexMaxEnd())
 		it.AdvanceIfNeeded(begin)
@@ -173,7 +173,7 @@ func (p *Piece) iterCleanChunks() iter.Seq[chunkIndexType] {
 }
 
 func (p *Piece) firstCleanChunk() (_ g.Option[chunkIndexType]) {
-	for some := range p.iterCleanChunks() {
+	for some := range p.iterCleanChunks(&p.t.cl.roaringIntIterator) {
 		return g.Some(some)
 	}
 	return
@@ -228,6 +228,9 @@ func (p *Piece) VerifyData() error {
 func (p *Piece) VerifyDataContext(ctx context.Context) error {
 	locker := p.t.cl.locker()
 	locker.Lock()
+	if p.t.closed.IsSet() {
+		return errTorrentClosed
+	}
 	target, err := p.t.queuePieceCheck(p.index)
 	locker.Unlock()
 	if err != nil {
@@ -292,7 +295,24 @@ func (p *Piece) purePriority() (ret PiecePriority) {
 }
 
 func (p *Piece) ignoreForRequests() bool {
-	return p.hashing || p.marking || !p.haveHash() || p.t.pieceComplete(p.index) || p.queuedForHash()
+	// Ordered by cheapest checks and most likely to persist first.
+
+	// There's a method that gets this with complete, but that requires a bitmap lookup. Defer that.
+	if !p.storageCompletionOk {
+		// Piece completion unknown.
+		return true
+	}
+	if p.hashing || p.marking || !p.haveHash() || p.t.dataDownloadDisallowed.IsSet() {
+		return true
+	}
+	// This is valid after we know that storage completion has been cached.
+	if p.t.pieceComplete(p.index) {
+		return true
+	}
+	if p.queuedForHash() {
+		return true
+	}
+	return false
 }
 
 // This is the priority adjusted for piece state like completion, hashing etc.
@@ -313,6 +333,7 @@ func (p *Piece) UpdateCompletion() {
 	p.t.updatePieceCompletion(p.index)
 }
 
+// TODO: Probably don't include Completion.Err?
 func (p *Piece) completion() (ret storage.Completion) {
 	ret.Ok = p.storageCompletionOk
 	if ret.Ok {
@@ -337,10 +358,14 @@ func (p *Piece) requestIndexBegin() RequestIndex {
 // The maximum end request index for the piece. Some of the requests might not be valid, it's for
 // cleaning up arrays and bitmaps in broad strokes.
 func (p *Piece) requestIndexMaxEnd() RequestIndex {
-	return p.t.pieceRequestIndexBegin(p.index + 1)
+	new := min(p.t.pieceRequestIndexBegin(p.index+1), p.t.maxEndRequest())
+	if false {
+		old := p.t.pieceRequestIndexBegin(p.index + 1)
+		panicif.NotEq(new, old)
+	}
+	return new
 }
 
-// TODO: Make this peer-only?
 func (p *Piece) availability() int {
 	return len(p.t.connsWithAllPieces) + p.relativeAvailability
 }

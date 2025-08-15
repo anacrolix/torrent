@@ -1,9 +1,7 @@
 package storage
 
 import (
-	"errors"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
@@ -18,18 +16,20 @@ func minFileLengthsForTorrentExtent(
 	fileSegmentsIndex segments.Index,
 	off, n int64,
 	each func(fileIndex int, length int64) bool,
-) bool {
-	return fileSegmentsIndex.Locate(segments.Extent{
+) {
+	for fileIndex, segmentBounds := range fileSegmentsIndex.LocateIter(segments.Extent{
 		Start:  off,
 		Length: n,
-	}, func(fileIndex int, segmentBounds segments.Extent) bool {
-		return each(fileIndex, segmentBounds.Start+segmentBounds.Length)
-	})
+	}) {
+		if !each(fileIndex, segmentBounds.Start+segmentBounds.Length) {
+			return
+		}
+	}
 }
 
 func fsync(filePath string) (err error) {
 	f, err := os.OpenFile(filePath, os.O_WRONLY, filePerm)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err != nil {
 		return
 	}
 	defer f.Close()

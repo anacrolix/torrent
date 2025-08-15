@@ -6,16 +6,16 @@ require (
 	github.com/RoaringBitmap/roaring v1.2.3
 	github.com/ajwerner/btree v0.0.0-20211221152037-f427b3e689c0
 	github.com/alexflint/go-arg v1.4.3
-	github.com/anacrolix/bargle v0.0.0-20221014000746-4f2739072e9d
+	github.com/anacrolix/bargle v1.0.0
 	github.com/anacrolix/bargle/v2 v2.0.0
-	github.com/anacrolix/chansync v0.6.1-0.20250805140455-89f141559964
-	github.com/anacrolix/dht/v2 v2.22.2-0.20250623060212-d7b7d8a52b01
+	github.com/anacrolix/chansync v0.7.0
+	github.com/anacrolix/dht/v2 v2.23.0
 	github.com/anacrolix/envpprof v1.3.0
-	github.com/anacrolix/fuse v0.3.2-0.20250603105216-aeb550c91d7a
-	github.com/anacrolix/generics v0.0.4-0.20250708073025-68393b391647
+	github.com/anacrolix/fuse v0.3.2
+	github.com/anacrolix/generics v0.1.0
 	github.com/anacrolix/go-libutp v1.3.2
 	github.com/anacrolix/gostdapp v0.2.0
-	github.com/anacrolix/log v0.16.1-0.20250526073428-5cb74e15092b
+	github.com/anacrolix/log v0.17.0
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/v2 v2.10.0
 	github.com/anacrolix/multiless v0.4.0
@@ -50,7 +50,6 @@ require (
 	github.com/tidwall/btree v1.6.0
 	go.etcd.io/bbolt v1.3.6
 	go.opentelemetry.io/otel v1.11.1
-	go.opentelemetry.io/otel/sdk v1.11.1
 	go.opentelemetry.io/otel/trace v1.11.1
 	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948
 	golang.org/x/net v0.42.0
@@ -63,6 +62,7 @@ require (
 	github.com/alecthomas/atomic v0.1.0-alpha2 // indirect
 	github.com/alexflint/go-scalar v1.1.0 // indirect
 	github.com/anacrolix/backtrace v0.0.0-20221205112523-22a61db8f82e // indirect
+	github.com/anacrolix/lsan v0.1.0 // indirect
 	github.com/anacrolix/missinggo/perf v1.0.0 // indirect
 	github.com/anacrolix/mmsg v1.0.1 // indirect
 	github.com/anacrolix/stm v0.5.0 // indirect
@@ -134,6 +134,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.11.1 // indirect
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.11.1 // indirect
 	go.opentelemetry.io/otel/metric v0.33.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.11.1 // indirect
 	go.opentelemetry.io/otel/sdk/metric v0.33.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.19.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect

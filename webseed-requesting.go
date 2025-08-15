@@ -25,7 +25,8 @@ import (
 	"github.com/anacrolix/torrent/webseed"
 )
 
-var webseedHostRequestConcurrency = initIntFromEnv("TORRENT_WEBSEED_HOST_REQUEST_CONCURRENCY", 10, 0)
+// Default is based on experience with CloudFlare.
+var webseedHostRequestConcurrency = initIntFromEnv("TORRENT_WEBSEED_HOST_REQUEST_CONCURRENCY", 25, 0)
 
 type (
 	webseedHostKey       string

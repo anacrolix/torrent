@@ -19,7 +19,7 @@ require (
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/v2 v2.10.0
 	github.com/anacrolix/multiless v0.4.0
-	github.com/anacrolix/possum/go v0.3.2
+	github.com/anacrolix/possum/go v0.4.0
 	github.com/anacrolix/squirrel v0.6.4
 	github.com/anacrolix/sync v0.5.4
 	github.com/anacrolix/tagflag v1.3.0
@@ -162,5 +162,3 @@ retract (
 	// Indefinite outgoing requests on storage write errors. https://github.com/anacrolix/torrent/issues/889
 	[v1.29.0, v1.53.2]
 )
-
-replace github.com/anacrolix/possum/go => ./storage/possum/lib/go

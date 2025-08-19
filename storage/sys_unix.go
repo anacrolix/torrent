@@ -10,6 +10,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// Returns io.EOF if there's no data after offset. That doesn't mean there isn't zeroes for a sparse
+// hole. Note that lseek returns -1 on error.
 func seekData(f *os.File, offset int64) (ret int64, err error) {
 	ret, err = unix.Seek(int(f.Fd()), offset, unix.SEEK_DATA)
 	// TODO: Handle filesystems that don't support sparse files.

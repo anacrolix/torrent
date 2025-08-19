@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -35,15 +36,20 @@ func (me *mmapFileIo) flush(name string, offset, nbytes int64) error {
 
 type fileMmap struct {
 	m        mmap.MMap
-	writable bool
+	f        *os.File
 	refs     atomic.Int32
+	writable bool
 }
 
 func (me *fileMmap) dec() error {
 	if me.refs.Add(-1) == 0 {
-		return me.m.Unmap()
+		return me.close()
 	}
 	return nil
+}
+
+func (me *fileMmap) close() (err error) {
+	return errors.Join(me.m.Unmap(), me.f.Close())
 }
 
 func (me *fileMmap) inc() {
@@ -75,13 +81,13 @@ func (m *mmapFileIo) openReadOnly(name string) (_ *mmapSharedFileHandle, err err
 	if err != nil {
 		return
 	}
-	defer f.Close()
 	mm, err := mmap.Map(f, mmap.RDONLY, 0)
 	if err != nil {
+		f.Close()
 		err = fmt.Errorf("mapping file: %w", err)
 		return
 	}
-	v = m.addNewMmap(name, mm, false)
+	v = m.addNewMmap(name, mm, false, f)
 	return newMmapFile(v), nil
 }
 
@@ -98,11 +104,17 @@ func (m *mmapFileIo) openForWrite(name string, size int64) (_ fileWriter, err er
 			g.MustDelete(m.paths, name)
 		}
 	}
+	// TODO: A bunch of this can be done without holding the lock.
 	f, err := openFileExtra(name, os.O_RDWR)
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	closeFile := true
+	defer func() {
+		if closeFile {
+			f.Close()
+		}
+	}()
 	err = f.Truncate(size)
 	if err != nil {
 		err = fmt.Errorf("error truncating file: %w", err)
@@ -118,7 +130,8 @@ func (m *mmapFileIo) openForWrite(name string, size int64) (_ fileWriter, err er
 		mm.Unmap()
 		return
 	}
-	return newMmapFile(m.addNewMmap(name, mm, true)), nil
+	closeFile = false
+	return newMmapFile(m.addNewMmap(name, mm, true, f)), nil
 }
 
 func newMmapFile(f *fileMmap) *mmapSharedFileHandle {
@@ -129,9 +142,10 @@ func newMmapFile(f *fileMmap) *mmapSharedFileHandle {
 	return ret
 }
 
-func (me *mmapFileIo) addNewMmap(name string, mm mmap.MMap, writable bool) *fileMmap {
+func (me *mmapFileIo) addNewMmap(name string, mm mmap.MMap, writable bool, f *os.File) *fileMmap {
 	v := &fileMmap{
 		m:        mm,
+		f:        f,
 		writable: writable,
 	}
 	// One for the store, one for the caller.
@@ -213,8 +227,19 @@ func (me *mmapFileHandle) Read(p []byte) (n int, err error) {
 	return
 }
 
-func (me *mmapFileHandle) seekData(offset int64) (ret int64, err error) {
-	me.pos = offset
-	ret = offset
+func (me *mmapFileHandle) seekDataOrEof(offset int64) (ret int64, err error) {
+	// This should be fine as it's an atomic operation, on a shared file handle, so nobody will be
+	// relying non-atomic operations on the file. TODO: Does this require msync first so we don't
+	// skip our own writes.
+	ret, err = seekData(me.shared.f.f, offset)
+	if err == nil {
+		me.pos = ret
+	} else if err == io.EOF {
+		err = nil
+		ret = int64(len(me.shared.f.m))
+		me.pos = ret
+	} else {
+		ret = me.pos
+	}
 	return
 }

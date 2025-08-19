@@ -354,12 +354,15 @@ func (me *filePieceImpl) writeFileTo(w io.Writer, fileIndex int, extent segments
 	panicif.GreaterThan(extent.End(), file.FileInfo.Length)
 	extentRemaining := extent.Length
 	var dataOffset int64
-	dataOffset, err = f.seekData(extent.Start)
-	if err == io.EOF {
+	dataOffset, err = f.seekDataOrEof(extent.Start)
+	if err != nil {
+		err = fmt.Errorf("seeking to start of extent: %w", err)
 		return
 	}
-	panicif.Err(err)
-	panicif.LessThan(dataOffset, extent.Start)
+	if dataOffset < extent.Start {
+		// File is too short.
+		return
+	}
 	if dataOffset > extent.Start {
 		// Write zeroes until the end of the hole we're in.
 		var n1 int64

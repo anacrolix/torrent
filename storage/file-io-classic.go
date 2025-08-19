@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"io"
 	"os"
 )
 
@@ -27,6 +28,10 @@ type classicFileReader struct {
 	*os.File
 }
 
-func (c classicFileReader) seekData(offset int64) (ret int64, err error) {
-	return seekData(c.File, offset)
+func (c classicFileReader) seekDataOrEof(offset int64) (ret int64, err error) {
+	ret, err = seekData(c.File, offset)
+	if err == io.EOF {
+		ret, err = c.File.Seek(0, io.SeekEnd)
+	}
+	return
 }

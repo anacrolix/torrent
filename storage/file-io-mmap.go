@@ -210,6 +210,19 @@ func (me *mmapFileHandle) WriteTo(w io.Writer) (n int64, err error) {
 	return
 }
 
+func (me *mmapFileHandle) writeToN(w io.Writer, n int64) (written int64, err error) {
+	b := me.shared.f.m
+	if me.pos >= int64(len(b)) {
+		return
+	}
+	b = b[me.pos:]
+	b = b[:min(int64(len(b)), n)]
+	i, err := w.Write(b)
+	written = int64(i)
+	me.pos += written
+	return
+}
+
 func (me *mmapFileHandle) Close() error {
 	return me.shared.Close()
 }

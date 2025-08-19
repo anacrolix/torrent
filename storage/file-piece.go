@@ -376,19 +376,7 @@ func (me *filePieceImpl) writeFileTo(w io.Writer, fileIndex int, extent segments
 		panicif.NotEq(n1, n)
 		extentRemaining -= n1
 	}
-	var n1 int64
-	if true {
-		n1, err = f.WriteTo(&limitWriter{
-			rem: extentRemaining,
-			w:   w,
-		})
-		// limitWriter will block f from writing too much.
-		if n1 == extentRemaining {
-			err = nil
-		}
-	} else {
-		n1, err = io.CopyN(w, f, extentRemaining)
-	}
+	n1, err := f.writeToN(w, extentRemaining)
 	packageExpvarMap.Add("bytesReadNotSkipped", n1)
 	written += n1
 	return

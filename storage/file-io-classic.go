@@ -28,6 +28,14 @@ type classicFileReader struct {
 	*os.File
 }
 
+func (c classicFileReader) writeToN(w io.Writer, n int64) (written int64, err error) {
+	lw := limitWriter{
+		rem: n,
+		w:   w,
+	}
+	return c.File.WriteTo(&lw)
+}
+
 func (c classicFileReader) seekDataOrEof(offset int64) (ret int64, err error) {
 	ret, err = seekData(c.File, offset)
 	if err == io.EOF {

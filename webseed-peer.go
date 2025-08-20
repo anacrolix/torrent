@@ -168,11 +168,7 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex, logger *slog.Logger
 		"end", end,
 		"len", end-begin,
 	)
-	go func() {
-		// Detach cost association from webseed update requests routine.
-		pprof.SetGoroutineLabels(context.Background())
-		ws.runRequest(&wsReq)
-	}()
+	go ws.sliceProcessor(&wsReq)
 }
 
 func (me *webseedPeer) getRequestKey(wr *webseedRequest) webseedUniqueRequestKey {
@@ -214,7 +210,10 @@ func (ws *webseedPeer) readChunksErrorLevel(err error, req *webseedRequest) slog
 	return slog.LevelWarn
 }
 
-func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
+// Reads chunks from the responses for the webseed slice.
+func (ws *webseedPeer) sliceProcessor(webseedRequest *webseedRequest) {
+	// Detach cost association from webseed update requests routine.
+	pprof.SetGoroutineLabels(context.Background())
 	locker := ws.locker
 	err := ws.readChunks(webseedRequest)
 	if webseed.PrintDebug && webseedRequest.next < webseedRequest.end {

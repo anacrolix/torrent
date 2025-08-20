@@ -149,12 +149,15 @@ func (ws *Client) StartNewRequest(ctx context.Context, r RequestSpec, debugLogge
 		Body:     body,
 		bodyPipe: body,
 	}
-	go func() {
-		pprof.SetGoroutineLabels(context.Background())
-		err := ws.readRequestPartResponses(ctx, w, requestParts)
-		panicif.Err(w.CloseWithError(err))
-	}()
+	go ws.requestPartResponsesReader(ctx, w, requestParts)
 	return req
+}
+
+// Concatenates request part responses and sends them over the pipe.
+func (ws *Client) requestPartResponsesReader(ctx context.Context, w *io.PipeWriter, requestParts []requestPart) {
+	pprof.SetGoroutineLabels(context.Background())
+	err := ws.readRequestPartResponses(ctx, w, requestParts)
+	panicif.Err(w.CloseWithError(err))
 }
 
 type ErrBadResponse struct {

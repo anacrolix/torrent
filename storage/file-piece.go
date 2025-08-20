@@ -367,7 +367,7 @@ func (me *filePieceImpl) writeFileTo(w io.Writer, fileIndex int, extent segments
 		// Write zeroes until the end of the hole we're in.
 		var n1 int64
 		n := min(dataOffset-extent.Start, extent.Length)
-		n1, err = io.CopyN(w, zeroReader{}, n)
+		n1, err = writeZeroes(w, n)
 		packageExpvarMap.Add("bytesReadSkippedHole", n1)
 		written += n1
 		if err != nil {

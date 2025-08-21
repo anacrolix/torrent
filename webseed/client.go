@@ -38,10 +38,11 @@ func init() {
 type RequestSpec = segments.Extent
 
 type requestPart struct {
-	req       *http.Request
-	e         segments.Extent
-	do        func() (*http.Response, error)
-	fileIndex int
+	req        *http.Request
+	fileRange  segments.Extent
+	fileLength int64
+	do         func() (*http.Response, error)
+	fileIndex  int
 }
 
 type Request struct {
@@ -117,9 +118,10 @@ func (ws *Client) StartNewRequest(ctx context.Context, r RequestSpec, debugLogge
 		)
 		panicif.Err(err)
 		part := requestPart{
-			req:       req,
-			e:         e,
-			fileIndex: i,
+			req:        req,
+			fileRange:  e,
+			fileLength: ws.fileIndex.Index(i).Length,
+			fileIndex:  i,
 		}
 		part.do = func() (resp *http.Response, err error) {
 			resp, err = ws.HttpClient.Do(req)
@@ -183,7 +185,7 @@ func (me *Client) checkContentLength(resp *http.Response, part requestPart, expe
 		me.Logger.Warn("unexpected identity response Content-Length value",
 			"actual", resp.ContentLength,
 			"expected", expectedLen,
-			"url", part.req.URL)
+			"url", part.req.URL.String())
 	}
 }
 
@@ -206,24 +208,21 @@ func (me *Client) recvPartResult(ctx context.Context, w io.Writer, part requestP
 	switch resp.StatusCode {
 	case http.StatusPartialContent:
 		// The response should be just as long as we requested.
-		me.checkContentLength(resp, part, part.e.Length)
+		me.checkContentLength(resp, part, part.fileRange.Length)
 		buf := bufPool.Get().(*[]byte)
 		defer bufPool.Put(buf)
 		copied, err := io.CopyBuffer(w, body, *buf)
 		if err != nil {
 			return err
 		}
-		if copied != part.e.Length {
-			return fmt.Errorf("got %v bytes, expected %v", copied, part.e.Length)
+		if copied != part.fileRange.Length {
+			return fmt.Errorf("got %v bytes, expected %v", copied, part.fileRange.Length)
 		}
 		return nil
 	case http.StatusOK:
-		// The response is from the beginning.
-		me.checkContentLength(resp, part, part.e.End())
-		discard := part.e.Start
-		if discard > MaxDiscardBytes {
-			return ErrBadResponse{"resp status ok but requested range", resp}
-		}
+		// The response is from the beginning of the file.
+		me.checkContentLength(resp, part, part.fileRange.End())
+		discard := part.fileRange.Start
 		if discard != 0 {
 			if PrintDebug {
 				fmt.Printf("resp status ok but requested range [url=%q, range=%q]",
@@ -231,8 +230,11 @@ func (me *Client) recvPartResult(ctx context.Context, w io.Writer, part requestP
 					part.req.Header.Get("Range"))
 			}
 			me.Logger.Debug("resp status ok but requested range",
-				"url", part.req.URL,
+				"url", part.req.URL.String(),
 				"range", part.req.Header.Get("Range"))
+		}
+		if discard > MaxDiscardBytes {
+			return ErrBadResponse{"resp status ok but requested range", resp}
 		}
 		// Instead of discarding, we could try receiving all the chunks present in the response
 		// body. I don't know how one would handle multiple chunk requests resulting in an OK
@@ -244,7 +246,7 @@ func (me *Client) recvPartResult(ctx context.Context, w io.Writer, part requestP
 		panicif.NotEq(discarded, discard)
 		// Because the reply is not a partial aware response, we limit the body reader
 		// intentionally.
-		_, err = io.CopyN(w, body, part.e.Length)
+		_, err = io.CopyN(w, body, part.fileRange.Length)
 		return err
 	case http.StatusServiceUnavailable:
 		// TODO: Include all of Erigon's cases here?

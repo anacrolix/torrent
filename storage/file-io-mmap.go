@@ -163,14 +163,9 @@ type mmapSharedFileHandle struct {
 }
 
 func (m *mmapSharedFileHandle) WriteAt(p []byte, off int64) (n int, err error) {
-	//fmt.Println("mmapSharedFileHandle.WriteAt", off, len(p), len(m.f.m))
-	n = copy(m.f.m[off:], p)
-	return
-}
-
-func (m *mmapSharedFileHandle) WriteTo(w io.Writer) (n int64, err error) {
-	//TODO implement me
-	panic("implement me")
+	// It's not actually worth the hassle to write using mmap here since the caller provided the
+	// buffer already.
+	return m.f.f.WriteAt(p, off)
 }
 
 func (m *mmapSharedFileHandle) ReadAt(p []byte, off int64) (n int, err error) {

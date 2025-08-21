@@ -19,7 +19,7 @@ require (
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/v2 v2.10.0
 	github.com/anacrolix/multiless v0.4.0
-	github.com/anacrolix/possum/go v0.4.0
+	github.com/anacrolix/possum/go v0.4.1-0.20250821022006-9d91a37b5d3d
 	github.com/anacrolix/squirrel v0.6.4
 	github.com/anacrolix/sync v0.5.4
 	github.com/anacrolix/tagflag v1.3.0

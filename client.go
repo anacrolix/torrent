@@ -113,11 +113,17 @@ type Client struct {
 
 	upnpMappings []*upnpMapping
 
+	clientWebseedState
+
+	activePieceHashers int
+}
+
+type clientWebseedState struct {
 	webseedRequestTimer   *time.Timer
 	webseedUpdateReason   updateRequestReason
 	activeWebseedRequests map[webseedUniqueRequestKey]*webseedRequest
-
-	activePieceHashers int
+	aprioriMap            map[webseedUniqueRequestKey]aprioriMapValue
+	heapSlice             []webseedRequestHeapElem
 }
 
 type ipStr string

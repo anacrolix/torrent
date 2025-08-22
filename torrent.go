@@ -3078,6 +3078,7 @@ func WebSeedPathEscaper(custom webseed.PathEscaper) AddWebSeedsOpt {
 	}
 }
 
+// The rules for ClientConfig.DownloadRateLimiter apply here.
 func WebSeedResponseBodyRateLimiter(rl *rate.Limiter) AddWebSeedsOpt {
 	return func(wc *webseed.Client) {
 		wc.ResponseBodyRateLimiter = rl

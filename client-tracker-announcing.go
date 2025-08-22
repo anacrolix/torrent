@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"context"
 	"fmt"
 	"iter"
 	"net/url"
@@ -43,7 +44,9 @@ func (cl *Client) startRegularTrackerAnnouncer(clientKey clientTrackerKey) {
 		err = fmt.Errorf("creating tracker client for %q: %w", urlStr, err)
 	}
 	panicif.Err(err)
+	ctx, cancel := context.WithCancelCause(context.Background())
 	announcer = &trackerAnnouncer{
+		cancel: cancel,
 		cl:     cl,
 		tc:     tc,
 		tUrl:   urlStr,
@@ -52,7 +55,7 @@ func (cl *Client) startRegularTrackerAnnouncer(clientKey clientTrackerKey) {
 	}
 	g.MakeMapIfNil(&cl.regularTrackers)
 	g.MapMustAssignNew(cl.regularTrackers, clientKey, announcer)
-	go announcer.run()
+	go announcer.run(ctx)
 }
 
 func (cl *Client) trackerUrlKeys(_url string) iter.Seq[clientTrackerKey] {

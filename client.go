@@ -525,6 +525,9 @@ func (cl *Client) Close() (errs []error) {
 	cl.webseedRequestTimer.Stop()
 	var closeGroup sync.WaitGroup // For concurrent cleanup to complete before returning
 	cl.lock()
+	for _, a := range cl.regularTrackers {
+		a.cancel(errors.New("client closed"))
+	}
 	for t := range cl.torrents {
 		cl.dropTorrent(t, &closeGroup)
 	}

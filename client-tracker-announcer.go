@@ -3,6 +3,7 @@ package torrent
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"log/slog"
 	"slices"
 	"time"
@@ -25,6 +26,7 @@ type announceKey struct {
 }
 
 type trackerAnnouncer struct {
+	cancel    context.CancelCauseFunc
 	cl        *Client
 	tc        tracker.Client
 	tUrl      string
@@ -105,7 +107,7 @@ var announceEventPriority = map[tracker.AnnounceEvent]int{
 	tracker.None: 4,
 }
 
-func (me *trackerAnnouncer) run() {
+func (me *trackerAnnouncer) run(ctx context.Context) {
 	me.logger.Debug("started running")
 	defer me.logger.Debug("stopped running")
 	me.lock()
@@ -127,11 +129,41 @@ func (me *trackerAnnouncer) run() {
 			me.lock()
 			continue
 		}
-		req := me.cl.torrentsByShortHash[announce.infoHash].announceRequest(announce.event, announce.infoHash)
+		t := me.cl.torrentsByShortHash[announce.infoHash]
+		req := t.announceRequest(announce.event, announce.infoHash)
+
 		me.unlock()
-		me.tc.Announce(context.TODO(), req, tracker.AnnounceOpt{})
-		panic("unimplemented: handle announce response")
+		res, err := me.tc.Announce(ctx, req, tracker.AnnounceOpt{})
+		me.logger.Debug("completed announce",
+			"err", err,
+			"ih", fmt.Sprintf("%x", announce.infoHash),
+			"peers", len(res.Peers),
+			"interval", res.Interval,
+		)
+
+		newLast := lastTrackerAnnounce{
+			event: g.Some(req.Event),
+			result: trackerAnnounceResult{
+				Err:       err,
+				NumPeers:  len(res.Peers),
+				Interval:  time.Duration(res.Interval) * time.Second,
+				Completed: time.Now(),
+			},
+		}
 		me.lock()
+		if ctx.Err() != nil {
+			return
+		}
+		g.MakeMapIfNil(&t.lastTrackerAnnounces)
+		t.lastTrackerAnnounces[me.trackerAnnounceKey(announce.infoHash)] = newLast
+		t.addPeers(peerInfos(nil).AppendFromTracker(res.Peers))
+	}
+}
+
+func (me *trackerAnnouncer) trackerAnnounceKey(infoHash [20]byte) trackerAnnounceKey {
+	return trackerAnnounceKey{
+		announceKey:      announceKey{infoHash: infoHash},
+		clientTrackerKey: me.tKey,
 	}
 }
 

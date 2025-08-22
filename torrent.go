@@ -140,8 +140,8 @@ type Torrent struct {
 	// the swarm.
 	peers prioritizedPeers
 	// Whether we want to know more peers.
-	wantPeersEvent      missinggo.Event
-	lastTrackerAnnounce map[trackerAnnounceKey]lastTrackerAnnounce
+	wantPeersEvent       missinggo.Event
+	lastTrackerAnnounces map[trackerAnnounceKey]lastTrackerAnnounce
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
 	numDHTAnnounces int
 
@@ -212,11 +212,6 @@ type Torrent struct {
 type trackerAnnounceKey struct {
 	announceKey
 	clientTrackerKey
-}
-
-type torrentTrackerAnnouncerKey struct {
-	shortInfohash [20]byte
-	url           string
 }
 
 type outgoingConnAttemptKey = *PeerInfo
@@ -921,9 +916,8 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	})
 	fmt.Fprintln(w)
 
-	fmt.Fprintf(w, "Enabled trackers:\n")
-	{
-	}
+	fmt.Fprintf(w, "Trackers:\n")
+	t.writeTrackerStatus(w)
 
 	fmt.Fprintf(w, "DHT Announces: %d\n", t.numDHTAnnounces)
 
@@ -974,7 +968,7 @@ func (t *Torrent) writeTrackerStatus(w io.Writer) {
 		)
 	})
 	for _, key := range announceKeys {
-		fmt.Fprintf(tw, "    %q\t%v\n", key, t.lastTrackerAnnounce[key].statusLine())
+		fmt.Fprintf(tw, "    %q\t%v\n", key.clientTrackerKey, t.lastTrackerAnnounces[key].statusLine())
 	}
 	tw.Flush()
 }
@@ -3733,10 +3727,12 @@ func (t *Torrent) hasTrackerUrl(url string) bool {
 }
 
 func (t *Torrent) nextAnnounce(key trackerAnnounceKey) (_ g.Option[torrentNextAnnounce]) {
-	last := t.lastTrackerAnnounce[key]
+	last := t.lastTrackerAnnounces[key]
 	if !t.hasTrackerUrl(key.Url) {
-		// Only announce to signal stopped if our last event announced wasn't stopped.
-		if last.event.Ok && last.event.Value != tracker.Stopped && last.result.Err == nil {
+		// Only announce to signal stopped if our last event announced wasn't stopped. We also only
+		// announce because the user may have removed the tracker on purpose and doesn't want to be
+		// included in the swarm.
+		if last.event.Ok && last.event.Value != tracker.Stopped || last.result.Err == nil {
 			return g.Some(torrentNextAnnounce{
 				event: tracker.Stopped,
 			})

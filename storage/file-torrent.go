@@ -155,6 +155,6 @@ func (me *fileTorrentImpl) openFile(file file) (f fileReader, err error) {
 
 func (fst *fileTorrentImpl) openForWrite(file file) (_ fileWriter, err error) {
 	// It might be possible to have a writable handle shared files cache if we need it.
-	fst.logger().Debug("openForWrite", "file.safeOsPath", file.safeOsPath)
+	//fst.logger().Debug("openForWrite", "file.safeOsPath", file.safeOsPath)
 	return fst.io.openForWrite(fst.pathForWrite(&file), file.FileInfo.Length)
 }

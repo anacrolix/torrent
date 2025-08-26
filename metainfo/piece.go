@@ -5,6 +5,7 @@ import (
 	"iter"
 
 	g "github.com/anacrolix/generics"
+	"github.com/anacrolix/missinggo/v2/panicif"
 )
 
 type Piece struct {
@@ -24,13 +25,14 @@ func (p Piece) Length() int64 {
 		pieceLength := p.Info.PieceLength
 		lastFileEnd := int64(0)
 		for fi := range p.Info.FileTree.upvertedFiles(pieceLength) {
+			// I don't think we need to track offset ourselves.
+			panicif.NotEq(offset, fi.TorrentOffset)
 			fileStartPiece := int(offset / pieceLength)
 			if fileStartPiece > p.i {
 				break
 			}
 			lastFileEnd = offset + fi.Length
 			offset = (lastFileEnd + pieceLength - 1) / pieceLength * pieceLength
-
 		}
 		ret := min(lastFileEnd-int64(p.i)*pieceLength, pieceLength)
 		if ret <= 0 {

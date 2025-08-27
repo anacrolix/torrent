@@ -449,7 +449,7 @@ func (cl *Client) yieldKeyAndValue(
 	return yield(
 		webseedUniqueRequestKey{
 			t:          t,
-			sliceIndex: t.requestIndexToWebseedSliceIndex(ar.next),
+			sliceIndex: t.requestIndexToWebseedSliceIndex(ar.begin),
 			url:        url,
 		},
 		webseedRequestOrderValue{
@@ -481,7 +481,7 @@ func (cl *Client) iterCurrentWebseedRequests() iter.Seq2[webseedUniqueRequestKey
 				for ar := range ws.activeRequests {
 					key := webseedUniqueRequestKey{
 						t:          t,
-						sliceIndex: t.requestIndexToWebseedSliceIndex(ar.next),
+						sliceIndex: t.requestIndexToWebseedSliceIndex(ar.begin),
 						url:        url,
 					}
 					if !cl.yieldKeyAndValue(yield, key, ar) {

@@ -28,6 +28,10 @@ type sqlitePieceCompletion struct {
 	db     *sqlite.Conn
 }
 
+func (me *sqlitePieceCompletion) Persistent() bool {
+	return true
+}
+
 var _ PieceCompletion = (*sqlitePieceCompletion)(nil)
 
 func NewSqlitePieceCompletion(dir string) (ret *sqlitePieceCompletion, err error) {

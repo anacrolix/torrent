@@ -63,10 +63,6 @@ type PieceImpl interface {
 	Completion() Completion
 }
 
-type Flusher interface {
-	Flush() error
-}
-
 // Completion state of a piece.
 type Completion struct {
 	Err error

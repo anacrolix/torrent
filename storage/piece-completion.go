@@ -21,6 +21,9 @@ type PieceCompletionGetSetter interface {
 // Implementations track the completion of pieces. It must be concurrent-safe.
 type PieceCompletion interface {
 	PieceCompletionGetSetter
+	// Piece completion is maintained between storage instances. We can use this to avoid flushing
+	// pieces when they're marked complete if there's some other mechanism to ensure correctness.
+	Persistent() bool
 	Close() error
 }
 

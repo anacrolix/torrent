@@ -15,6 +15,10 @@ type mapPieceCompletion struct {
 	m sync.Map
 }
 
+func (me *mapPieceCompletion) Persistent() bool {
+	return false
+}
+
 type (
 	justComplete              = g.Option[bool]
 	memoryTorrentJustComplete struct {

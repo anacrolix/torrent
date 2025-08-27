@@ -79,8 +79,6 @@ type mmapStoragePiece struct {
 	io.WriterAt
 }
 
-var _ Flusher = mmapStoragePiece{}
-
 func (me mmapStoragePiece) Flush() error {
 	// TODO: Flush just the regions of the files we care about. At least this is no worse than it
 	// was previously.
@@ -100,7 +98,11 @@ func (sp mmapStoragePiece) Completion() Completion {
 }
 
 func (sp mmapStoragePiece) MarkComplete() error {
-	return sp.t.pc.Set(sp.pieceKey(), true)
+	err := sp.t.pc.Set(sp.pieceKey(), true)
+	if err == nil {
+		err = sp.Flush()
+	}
+	return err
 }
 
 func (sp mmapStoragePiece) MarkNotComplete() error {

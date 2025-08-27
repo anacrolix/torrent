@@ -86,10 +86,6 @@ func (p *Piece) Storage() storage.Piece {
 	return p.t.storage.PieceWithHash(p.Info(), pieceHash)
 }
 
-func (p *Piece) Flush() error {
-	return p.Storage().Flush()
-}
-
 func (p *Piece) pendingChunkIndex(chunkIndex chunkIndexType) bool {
 	return !p.chunkIndexDirty(chunkIndex)
 }

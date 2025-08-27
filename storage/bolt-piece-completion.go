@@ -25,6 +25,10 @@ type boltPieceCompletion struct {
 	db *bbolt.DB
 }
 
+func (me boltPieceCompletion) Persistent() bool {
+	return true
+}
+
 var _ PieceCompletion = (*boltPieceCompletion)(nil)
 
 func NewBoltPieceCompletion(dir string) (ret PieceCompletion, err error) {

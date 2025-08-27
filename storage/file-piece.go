@@ -29,7 +29,6 @@ var _ interface {
 	PieceImpl
 	//PieceReaderer
 	io.WriterTo
-	Flusher
 } = (*filePieceImpl)(nil)
 
 func (me *filePieceImpl) Flush() (err error) {
@@ -38,7 +37,7 @@ func (me *filePieceImpl) Flush() (err error) {
 		name := me.t.pathForWrite(&file)
 		err1 := me.t.io.flush(name, extent.Start, extent.Length)
 		if err1 != nil {
-			err = errors.Join(err, fmt.Errorf("flushing %q: %w", name, err1))
+			err = errors.Join(err, fmt.Errorf("flushing %q:%v+%v: %w", name, extent.Start, extent.Length, err1))
 			return
 		}
 	}
@@ -172,6 +171,12 @@ func (me *filePieceImpl) MarkComplete() (err error) {
 	if err != nil {
 		return
 	}
+	if me.pieceCompletion().Persistent() {
+		err := me.Flush()
+		if err != nil {
+			me.logger().Warn("error flushing completed piece", "piece", me.p.Index(), "err", err)
+		}
+	}
 	for f := range me.pieceFiles() {
 		res := me.allFilePiecesComplete(f)
 		if res.Err != nil {
@@ -232,6 +237,12 @@ func (me *filePieceImpl) MarkNotComplete() (err error) {
 }
 
 func (me *filePieceImpl) promotePartFile(f file) (err error) {
+	// Flush file on completion, even if we don't promote it.
+	err = me.t.io.flush(f.partFilePath(), 0, f.length())
+	if err != nil {
+		me.logger().Warn("error flushing file before promotion", "file", f.partFilePath(), "err", err)
+		err = nil
+	}
 	if !me.partFiles() {
 		return nil
 	}

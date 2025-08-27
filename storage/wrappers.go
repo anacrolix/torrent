@@ -144,13 +144,6 @@ func (p Piece) NewReader() (PieceReader, error) {
 	}, nil
 }
 
-func (p Piece) Flush() error {
-	if fl, ok := p.PieceImpl.(Flusher); ok {
-		return fl.Flush()
-	}
-	return nil
-}
-
 type nopCloser struct{}
 
 func (nopCloser) Close() error {

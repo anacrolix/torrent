@@ -150,7 +150,7 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex, logger *slog.Logger
 	}
 	if ws.hasOverlappingRequests(begin, end) {
 		if webseed.PrintDebug {
-			logger.Warn("webseedPeer.spawnRequest: request overlaps existing")
+			logger.Warn("webseedPeer.spawnRequest: request overlaps existing", "new", &wsReq)
 		}
 		ws.peer.t.cl.dumpCurrentWebseedRequests()
 	}
@@ -288,6 +288,8 @@ func (ws *webseedPeer) maxChunkDiscard() RequestIndex {
 func (ws *webseedPeer) wantedChunksInDiscardWindow(wr *webseedRequest) bool {
 	// Shouldn't call this if request is at the end already.
 	panicif.GreaterThanOrEqual(wr.next, wr.end)
+	windowEnd := wr.next + ws.maxChunkDiscard()
+	panicif.LessThan(windowEnd, wr.next)
 	for ri := wr.next; ri < wr.end && ri <= wr.next+ws.maxChunkDiscard(); ri++ {
 		if ws.wantChunk(ri) {
 			return true

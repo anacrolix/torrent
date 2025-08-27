@@ -11,6 +11,6 @@ func intCeilDiv[T constraints.Unsigned](a, b T) T {
 	return (a + b - 1) / b
 }
 
-func nextMultiple[T constraints.Integer](x, multiple T) T {
-	return x + multiple - x%multiple
+func roundToNextMultiple[T constraints.Unsigned](x, multiple T) T {
+	return intCeilDiv(x, multiple) * multiple
 }

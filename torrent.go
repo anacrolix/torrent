@@ -3170,7 +3170,7 @@ func (t *Torrent) requestIndexToRequest(ri RequestIndex) Request {
 	index := t.pieceIndexOfRequestIndex(ri)
 	return Request{
 		pp.Integer(index),
-		t.piece(index).chunkIndexSpec(ri % t.chunksPerRegularPiece()),
+		t.chunkIndexSpec(index, ri%t.chunksPerRegularPiece()),
 	}
 }
 
@@ -3293,7 +3293,7 @@ type requestState struct {
 	when time.Time
 }
 
-// Returns an error if a received chunk is out of bounds in someway.
+// Returns an error if a received chunk is out of bounds in some way.
 func (t *Torrent) checkValidReceiveChunk(r Request) error {
 	if !t.haveInfo() {
 		return errors.New("torrent missing info")
@@ -3586,6 +3586,9 @@ func (t *Torrent) endRequestIndexForFileIndex(fileIndex int) RequestIndex {
 }
 
 func (t *Torrent) wantReceiveChunk(reqIndex RequestIndex) bool {
+	if t.checkValidReceiveChunk(t.requestIndexToRequest(reqIndex)) != nil {
+		return false
+	}
 	pi := t.pieceIndexOfRequestIndex(reqIndex)
 	if t.ignorePieceForRequests(pi) {
 		return false
@@ -3718,4 +3721,9 @@ func (t *Torrent) incrementPiecesDirtiedStats(p *Piece, inc func(stats *ConnStat
 // don't make sense if padding files and v2 are in use.
 func (t *Torrent) maxEndRequest() RequestIndex {
 	return RequestIndex(intCeilDiv(uint64(t.length()), t.chunkSize.Uint64()))
+}
+
+// Avoids needing or indexing the pieces slice.
+func (p *Torrent) chunkIndexSpec(piece pieceIndex, chunk chunkIndexType) ChunkSpec {
+	return chunkIndexSpec(pp.Integer(chunk), p.pieceLength(piece), p.chunkSize)
 }

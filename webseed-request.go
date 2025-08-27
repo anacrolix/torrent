@@ -31,7 +31,7 @@ func (me *webseedRequest) Cancel(cause string) {
 	me.request.Cancel(stringError(cause))
 	if !me.cancelled.Swap(true) {
 		if webseed.PrintDebug {
-			me.logger.Debug("cancelled", "cause", cause)
+			me.logger.Debug("webseed request cancelled", "cause", cause)
 		}
 	}
 }

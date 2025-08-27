@@ -31,6 +31,7 @@ func (me *mmapFileIo) flush(name string, offset, nbytes int64) error {
 	if !v.writable {
 		return nil
 	}
+	// Darwin doesn't have sync for file-offsets?!
 	return msync(v.m, int(offset), int(nbytes))
 }
 

@@ -22,6 +22,9 @@ func seekData(f *os.File, offset int64) (ret int64, err error) {
 	return
 }
 
+var pageSize = unix.Getpagesize()
+
 func msync(mm mmap.MMap, offset, nbytes int) error {
-	return unix.Msync(mm[offset:offset+nbytes], unix.MS_SYNC)
+	getDown := offset % pageSize
+	return unix.Msync(mm[offset-getDown:offset+nbytes], unix.MS_SYNC)
 }

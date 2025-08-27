@@ -83,20 +83,20 @@ func BenchmarkRequestStrategy(b *testing.B) {
 	cl := newTestingClient(b)
 	storageClient := storageClient{}
 	tor, new := cl.AddTorrentOpt(AddTorrentOpts{
+		InfoHash:   testingTorrentInfoHash,
 		InfoHashV2: g.Some(infohash_v2.FromHexString("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")),
 		Storage:    &storageClient,
 	})
 	tor.disableTriggers = true
 	qt.Assert(b, qt.IsTrue(new))
 	const pieceLength = 1 << 8 << 10
-	const numPieces = 30_000
-	err := tor.setInfo(&metainfo.Info{
+	const numPieces = 10_000
+	err := tor.setInfoUnlocked(&metainfo.Info{
 		Pieces:      make([]byte, numPieces*metainfo.HashSize),
 		PieceLength: pieceLength,
 		Length:      pieceLength * numPieces,
 	})
 	qt.Assert(b, qt.IsNil(err))
-	tor.onSetInfo()
 	peer := cl.newConnection(nil, newConnectionOpts{
 		network: "test",
 	})
@@ -109,18 +109,19 @@ func BenchmarkRequestStrategy(b *testing.B) {
 		tor.updatePiecePriorityNoRequests(i)
 	}
 	peer.peerChoking = false
-	//b.StopTimer()
-	b.ResetTimer()
-	//b.ReportAllocs()
-	for range b.N {
+	for b.Loop() {
 		storageClient.completed = 0
 		for pieceIndex := range iter.N(numPieces) {
+			tor.cl.lock()
 			tor.updatePieceCompletion(pieceIndex)
+			tor.cl.unlock()
 		}
 		for completed := 0; completed <= numPieces; completed += 1 {
 			storageClient.completed = completed
 			if completed > 0 {
+				tor.cl.lock()
 				tor.updatePieceCompletion(completed - 1)
+				tor.cl.unlock()
 			}
 			// Starting and stopping timers around this part causes lots of GC overhead.
 			rs := peer.getDesiredRequestState()

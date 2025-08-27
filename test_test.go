@@ -19,6 +19,11 @@ func newTestingClient(t testing.TB) *Client {
 	return cl
 }
 
+var testingTorrentInfoHash = metainfo.Hash{1}
+
 func (cl *Client) newTorrentForTesting() *Torrent {
-	return cl.newTorrent(metainfo.Hash{1}, nil)
+	return cl.newTorrentOpt(AddTorrentOpts{
+		InfoHash:                 testingTorrentInfoHash,
+		DisableInitialPieceCheck: true,
+	})
 }

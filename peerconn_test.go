@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -23,14 +24,16 @@ import (
 // Ensure that no race exists between sending a bitfield, and a subsequent
 // Have that would potentially alter it.
 func TestSendBitfieldThenHave(t *testing.T) {
-	var cl Client
-	cl.init(TestingConfig(t))
-	cl.initLogger()
+	cl := newTestingClient(t)
 	c := cl.newConnection(nil, newConnectionOpts{network: "io.Pipe"})
 	c.setTorrent(cl.newTorrentForTesting())
-	cl.lock()
-	err := c.t.setInfo(&metainfo.Info{Pieces: make([]byte, metainfo.HashSize*3)})
-	cl.unlock()
+	// I think code to handle zero size, no-name torrents is missing. It should be fine to a point.
+	err := c.t.setInfoUnlocked(&metainfo.Info{
+		Pieces:      make([]byte, metainfo.HashSize*3),
+		Name:        "dummy",
+		PieceLength: 1,
+		Length:      3,
+	})
 	qt.Assert(t, qt.IsNil(err))
 	r, w := io.Pipe()
 	// c.r = r
@@ -79,7 +82,7 @@ func (me *torrentStorage) MarkNotComplete() error {
 }
 
 func (me *torrentStorage) ReadAt([]byte, int64) (int, error) {
-	panic("shouldn't be called")
+	return 0, errors.New("not implemented")
 }
 
 func (me *torrentStorage) WriteAt(b []byte, _ int64) (int, error) {
@@ -90,20 +93,34 @@ func (me *torrentStorage) WriteAt(b []byte, _ int64) (int, error) {
 	return len(b), nil
 }
 
+type torrentStorageClient struct {
+	ts *torrentStorage
+}
+
+func (t torrentStorageClient) OpenTorrent(ctx context.Context, info *metainfo.Info, infoHash metainfo.Hash) (storage.TorrentImpl, error) {
+	ts := t.ts
+	return storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}, nil
+}
+
 func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	var cl Client
-	cl.init(&ClientConfig{})
-	cl.initLogger()
+	cfg := TestingConfig(b)
 	ts := &torrentStorage{}
-	t := cl.newTorrentForTesting()
-	t.initialPieceCheckDisabled = true
-	require.NoError(b, t.setInfo(&metainfo.Info{
+	cfg.DefaultStorage = &torrentStorageClient{ts}
+	cl.init(cfg)
+	cl.initLogger()
+	t, _ := cl.AddTorrentOpt(AddTorrentOpts{
+		InfoHash:                 testingTorrentInfoHash,
+		Storage:                  &torrentStorageClient{ts},
+		DisableInitialPieceCheck: true,
+	})
+	require.NoError(b, t.setInfoUnlocked(&metainfo.Info{
 		Pieces:      make([]byte, 20),
 		Length:      1 << 20,
 		PieceLength: 1 << 20,
 	}))
-	t.storage = &storage.Torrent{TorrentImpl: storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}}
-	t.onSetInfo()
+	//t.storage = &storage.Torrent{TorrentImpl: storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}}
+	//t.onSetInfo()
 	t._pendingPieces.Add(0)
 	r, w := net.Pipe()
 	b.Logf("pipe reader remote addr: %v", r.RemoteAddr())

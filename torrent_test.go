@@ -86,15 +86,13 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 		numPieces   = 13410
 		pieceLength = 256 << 10
 	)
-	cl := &Client{config: TestingConfig(b)}
-	cl.initLogger()
+	cl := newTestingClient(b)
 	t := cl.newTorrentForTesting()
-	require.NoError(b, t.setInfo(&metainfo.Info{
+	require.NoError(b, t.setInfoUnlocked(&metainfo.Info{
 		Pieces:      make([]byte, metainfo.HashSize*numPieces),
 		PieceLength: pieceLength,
 		Length:      pieceLength * numPieces,
 	}))
-	t.onSetInfo()
 	assert.EqualValues(b, 13410, t.numPieces())
 	for i := 0; i < 7; i += 1 {
 		r := t.NewReader()
@@ -107,7 +105,9 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 	}
 	t.DownloadPieces(0, t.numPieces())
 	for b.Loop() {
+		cl.lock()
 		t.updateAllPiecePriorities("")
+		cl.unlock()
 	}
 }
 

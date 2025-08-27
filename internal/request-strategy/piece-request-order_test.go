@@ -2,7 +2,9 @@ package requestStrategy
 
 import (
 	"testing"
+	"unique"
 
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/bradfitz/iter"
 )
 
@@ -14,15 +16,16 @@ func benchmarkPieceRequestOrder[B Btree](
 	hintForPiece func(index int),
 	numPieces int,
 ) {
-	b.ResetTimer()
 	b.ReportAllocs()
-	for range iter.N(b.N) {
+	zeroHashHandle := unique.Make(metainfo.Hash{})
+	for b.Loop() {
 		pro := NewPieceOrder(newBtree(), numPieces)
 		state := PieceRequestOrderState{}
 		doPieces := func(m func(PieceRequestOrderKey) bool) {
 			for i := range iter.N(numPieces) {
 				key := PieceRequestOrderKey{
-					Index: i,
+					Index:    i,
+					InfoHash: zeroHashHandle,
 				}
 				hintForPiece(i)
 				m(key)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 
 	g "github.com/anacrolix/generics"
@@ -71,27 +70,8 @@ func (me *fileClientImpl) Close() error {
 	return me.opts.PieceCompletion.Close()
 }
 
-var defaultFileIo func() fileIo = func() fileIo {
-	return &mmapFileIo{}
-}
-
-func init() {
-	s, ok := os.LookupEnv("TORRENT_STORAGE_DEFAULT_FILE_IO")
-	if !ok {
-		return
-	}
-	switch s {
-	case "mmap":
-		defaultFileIo = func() fileIo {
-			return &mmapFileIo{}
-		}
-	case "classic":
-		defaultFileIo = func() fileIo {
-			return classicFileIo{}
-		}
-	default:
-		panic(s)
-	}
+var defaultFileIo = func() fileIo {
+	return classicFileIo{}
 }
 
 func (fs *fileClientImpl) OpenTorrent(

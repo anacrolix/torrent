@@ -25,7 +25,7 @@ import (
 // How many consecutive bytes to allow discarding from responses. This number is based on
 // https://archive.org/download/BloodyPitOfHorror/BloodyPitOfHorror.asr.srt. It seems that
 // archive.org might be using a webserver implementation that refuses to do partial responses to
-// small files.
+// small files. TODO: Make this configurable.
 const MaxDiscardBytes = 48 << 10
 
 // Output debug information to stdout.

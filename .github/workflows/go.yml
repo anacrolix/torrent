@@ -4,8 +4,6 @@ on: [push, pull_request]
 
 jobs:
   test:
-    env:
-      FUSE_FORCE_BACKEND: osxfuse
     timeout-minutes: 20
     runs-on: ${{ matrix.os }}
     strategy:
@@ -27,7 +25,7 @@ jobs:
         run: |
           cd storage/possum/lib
           cargo build --lib
-      - run: brew install macfuse fuse-t
+      - run: brew install macfuse fuse-t && echo 'FUSE_FORCE_BACKEND=fuse-t' >> $GITHUB_ENV
         if: matrix.os == 'macos-latest'
       - run: sudo apt install fuse
         if: matrix.os == 'ubuntu-latest'

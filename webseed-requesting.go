@@ -438,10 +438,6 @@ func (cl *Client) yieldKeyAndValue(
 	t := key.t
 	url := key.url
 	hostKey := t.webSeeds[url].hostKey
-	if ar.next >= ar.end {
-		// This request is done, so don't yield it.
-		return true
-	}
 	// Don't spawn requests before old requests are cancelled.
 	if false {
 		if ar.cancelled.Load() {

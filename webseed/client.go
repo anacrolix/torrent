@@ -132,6 +132,7 @@ func (ws *Client) StartNewRequest(ctx context.Context, r RequestSpec, debugLogge
 						"url", req.URL,
 						"part-length", humanize.IBytes(uint64(e.Length)),
 						"part-file-offset", humanize.IBytes(uint64(e.Start)),
+						"file-length", humanize.IBytes(uint64(part.fileLength)),
 						"CF-Cache-Status", resp.Header.Get("CF-Cache-Status"),
 					)
 				}
@@ -229,7 +230,7 @@ func (me *Client) recvPartResult(ctx context.Context, w io.Writer, part requestP
 					part.req.URL,
 					part.req.Header.Get("Range"))
 			}
-			me.Logger.Debug("resp status ok but requested range",
+			me.Logger.Info("resp status ok but requested range",
 				"url", part.req.URL.String(),
 				"range", part.req.Header.Get("Range"))
 		}

@@ -150,7 +150,10 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex, logger *slog.Logger
 	}
 	if ws.hasOverlappingRequests(begin, end) {
 		if webseed.PrintDebug {
-			logger.Warn("webseedPeer.spawnRequest: request overlaps existing", "new", &wsReq)
+			logger.Warn(
+				"webseedPeer.spawnRequest: request overlaps existing",
+				"new", &wsReq,
+				"torrent", ws.peer.t)
 		}
 		ws.peer.t.cl.dumpCurrentWebseedRequests()
 	}

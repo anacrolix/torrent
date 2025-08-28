@@ -46,13 +46,13 @@ func pieceOrderLess(i, j *PieceRequestOrderItem) multiless.Computation {
 // iterator.
 type RequestPieceFunc func(ih metainfo.Hash, pieceIndex int, orderState PieceRequestOrderState) bool
 
-// Calls f with requestable pieces in order.
+// Calls f with requestable pieces in order. Returns false if iteration should stop.
 func GetRequestablePieces(
 	input Input, pro *PieceRequestOrder,
 	// Pieces submitted to this callback passed Piece.Request and so are ready for immediate
 	// download.
 	requestPiece RequestPieceFunc,
-) {
+) bool {
 	// Storage capacity left for this run, keyed by the storage capacity pointer on the storage
 	// TorrentImpl. A nil value means no capacity limit.
 	var storageLeft *int64
@@ -63,7 +63,7 @@ func GetRequestablePieces(
 		allTorrentsUnverifiedBytes int64
 		maxUnverifiedBytes         = input.MaxUnverifiedBytes()
 	)
-	pro.tree.Scan(func(item PieceRequestOrderItem) bool {
+	for item := range pro.tree.Scan {
 		ih := item.Key.InfoHash.Value()
 		t := input.Torrent(ih)
 		piece := t.Piece(item.Key.Index)
@@ -72,7 +72,7 @@ func GetRequestablePieces(
 		// highest priority pieces, even if they're complete or in an undesirable state.
 		if storageLeft != nil {
 			if *storageLeft < pieceLength {
-				return false
+				break
 			}
 			*storageLeft -= pieceLength
 		}
@@ -84,12 +84,14 @@ func GetRequestablePieces(
 			}
 		} else if !piece.CountUnverified() {
 			// The piece is pristine, and we're not considering it for requests.
-			return true
+			continue
 		}
 		allTorrentsUnverifiedBytes += pieceLength
-		return maxUnverifiedBytes == 0 || allTorrentsUnverifiedBytes < maxUnverifiedBytes
-	})
-	return
+		if maxUnverifiedBytes != 0 && allTorrentsUnverifiedBytes >= maxUnverifiedBytes {
+			break
+		}
+	}
+	return true
 }
 
 type Input interface {

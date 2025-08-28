@@ -368,7 +368,7 @@ func (cl *Client) iterPossibleWebseedRequests() iter.Seq2[webseedUniqueRequestKe
 	return func(yield func(webseedUniqueRequestKey, aprioriMapValue) bool) {
 		for key, value := range cl.pieceRequestOrder {
 			input := key.getRequestStrategyInput(cl)
-			requestStrategy.GetRequestablePieces(
+			if !requestStrategy.GetRequestablePieces(
 				input,
 				value.pieces,
 				func(ih metainfo.Hash, pieceIndex int, orderState requestStrategy.PieceRequestOrderState) bool {
@@ -411,10 +411,11 @@ func (cl *Client) iterPossibleWebseedRequests() iter.Seq2[webseedUniqueRequestKe
 					}
 					return true
 				},
-			)
+			) {
+				break
+			}
 		}
 	}
-
 }
 
 func (cl *Client) updateWebseedRequestsWithReason(reason updateRequestReason) {

@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"math/rand"
+	"net"
 	"runtime/pprof"
 	"strings"
 	"sync"
@@ -188,7 +189,7 @@ func (me *webseedPeer) hasOverlappingRequests(begin, end RequestIndex) bool {
 		if req.cancelled.Load() {
 			continue
 		}
-		if begin < req.end && end >= req.begin {
+		if begin < req.end && end > req.begin {
 			return true
 		}
 	}
@@ -208,6 +209,10 @@ func (ws *webseedPeer) readChunksErrorLevel(err error, req *webseedRequest) slog
 			// It's fine, we'll sleep for a bit. But it's still interesting.
 			return slog.LevelInfo
 		}
+	}
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		return slog.LevelInfo
 	}
 	// Error if we aren't also using and/or have peers...?
 	return slog.LevelWarn

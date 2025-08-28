@@ -244,7 +244,15 @@ func (cl *Client) updateWebseedRequests() {
 	}
 }
 
-var shortenWebseedRequests = os.Getenv("TORRENT_SHORTEN_WEBSEED_REQUESTS") != ""
+var shortenWebseedRequests = true
+
+func init() {
+	s, ok := os.LookupEnv("TORRENT_SHORTEN_WEBSEED_REQUESTS")
+	if !ok {
+		return
+	}
+	shortenWebseedRequests = s != ""
+}
 
 func (t *Torrent) getWebseedRequestEnd(begin RequestIndex, debugLogger *slog.Logger) RequestIndex {
 	chunkEnd := t.endRequestForAlignedWebseedResponse(begin)

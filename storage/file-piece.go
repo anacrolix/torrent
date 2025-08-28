@@ -171,7 +171,7 @@ func (me *filePieceImpl) MarkComplete() (err error) {
 	if err != nil {
 		return
 	}
-	if me.pieceCompletion().Persistent() {
+	if pieceCompletionIsPersistent(me.pieceCompletion()) {
 		err := me.Flush()
 		if err != nil {
 			me.logger().Warn("error flushing completed piece", "piece", me.p.Index(), "err", err)

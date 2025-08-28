@@ -23,8 +23,19 @@ type PieceCompletion interface {
 	PieceCompletionGetSetter
 	// Piece completion is maintained between storage instances. We can use this to avoid flushing
 	// pieces when they're marked complete if there's some other mechanism to ensure correctness.
-	Persistent() bool
 	Close() error
+}
+
+type PieceCompletionPersistenter interface {
+	Persistent() bool
+}
+
+func pieceCompletionIsPersistent(pc PieceCompletion) bool {
+	if p, ok := pc.(PieceCompletionPersistenter); ok {
+		return p.Persistent()
+	}
+	// Default is true. That's assumes flushing is required every time a piece is completed.
+	return true
 }
 
 // Optional interface with optimized Get for ranges. Use GetPieceCompletionRange wrapper to abstract

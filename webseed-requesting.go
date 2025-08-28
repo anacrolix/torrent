@@ -138,7 +138,7 @@ func (cl *Client) updateWebseedRequests() {
 				// Then existing requests
 				compareBool(l.existingWebseedRequest == nil, r.existingWebseedRequest == nil),
 				// Prefer not competing with active peer connections.
-				compareBool(len(l.t.conns) > 0, len(r.t.conns) > 0),
+				cmp.Compare(len(l.t.conns), len(r.t.conns)),
 				// Try to complete partial slices first.
 				-compareBool(l.mightHavePartialFiles, r.mightHavePartialFiles),
 				// No need to prefer longer files anymore now that we're using slices?
@@ -147,8 +147,6 @@ func (cl *Client) updateWebseedRequests() {
 				// Easier to debug than infohashes...
 				cmp.Compare(l.t.info.Name, r.t.info.Name),
 				bytes.Compare(l.t.canonicalShortInfohash()[:], r.t.canonicalShortInfohash()[:]),
-				// It's possible for 2 heap elements to have the same slice index from the same
-				// torrent, but they'll differ in existingWebseedRequest and be sorted before this.
 				// Doing earlier chunks first means more compact files for partial file hashing.
 				cmp.Compare(l.sliceIndex, r.sliceIndex),
 			)

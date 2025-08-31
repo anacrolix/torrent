@@ -3631,8 +3631,11 @@ func (t *Torrent) fileMightBePartial(fileIndex int) bool {
 	return t.piecesMightBePartial(f.BeginPieceIndex(), f.EndPieceIndex())
 }
 
+// Expand the piece range to include all pieces of the files in the original range.
 func (t *Torrent) expandPieceRangeToFullFiles(beginPieceIndex, endPieceIndex pieceIndex) (expandedBegin, expandedEnd pieceIndex) {
-	// Expand the piece range to include all pieces of the files in the original range.
+	if beginPieceIndex == endPieceIndex {
+		return beginPieceIndex, endPieceIndex
+	}
 	firstFile := t.getFile(t.piece(beginPieceIndex).beginFile)
 	lastFile := t.getFile(t.piece(endPieceIndex-1).endFile - 1)
 	expandedBegin = firstFile.BeginPieceIndex()
@@ -3648,7 +3651,7 @@ func (t *Torrent) filesInPieceRangeMightBePartial(begin, end pieceIndex) bool {
 
 // Pieces in the range [begin, end) may have partially complete files. Note we only check for dirty chunks and either all or no pieces being complete.
 func (t *Torrent) filesInRequestRangeMightBePartial(beginRequest, endRequest RequestIndex) bool {
-	if beginRequest == endRequest {
+	if beginRequest >= endRequest {
 		return false
 	}
 	beginPiece := t.pieceIndexOfRequestIndex(beginRequest)

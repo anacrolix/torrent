@@ -64,6 +64,9 @@ func (cl *Client) updateWebseedRequests() {
 	aprioriMap := cl.aprioriMap
 	clear(aprioriMap)
 	for uniqueKey, value := range cl.iterPossibleWebseedRequests() {
+		//if len(aprioriMap) >= webseedHostRequestConcurrency {
+		//	break
+		//}
 		if g.MapContains(existingRequests, uniqueKey) {
 			continue
 		}
@@ -109,7 +112,7 @@ func (cl *Client) updateWebseedRequests() {
 			},
 			key.t.filesInRequestRangeMightBePartial(
 				value.startRequest,
-				key.t.endRequestForAlignedWebseedResponse(value.startRequest),
+				key.t.endRequestForAlignedWebseedResponse(key.sliceIndex),
 			),
 		})
 	}
@@ -123,7 +126,7 @@ func (cl *Client) updateWebseedRequests() {
 		wr := value.existingWebseedRequest
 		heapSlice = append(heapSlice, webseedRequestHeapElem{
 			key,
-			existingRequests[key],
+			value,
 			key.t.filesInRequestRangeMightBePartial(wr.next, wr.end),
 		})
 	}
@@ -187,6 +190,7 @@ func (cl *Client) updateWebseedRequests() {
 			url:        elem.url,
 			t:          elem.t,
 			startIndex: elem.startRequest,
+			sliceIndex: elem.sliceIndex,
 		})
 		delete(unwantedExistingRequests, requestKey)
 	}
@@ -231,10 +235,10 @@ func (cl *Client) updateWebseedRequests() {
 				AddSource: true,
 			})).With(
 				"webseedUrl", request.url,
-				"webseedChunkIndex", request.sliceIndex())
+				"webseedChunkIndex", request.sliceIndex)
 
 			begin := request.startIndex
-			end := t.getWebseedRequestEnd(begin, debugLogger)
+			end := t.getWebseedRequestEnd(begin, request.sliceIndex, debugLogger)
 			panicif.LessThanOrEqual(end, begin)
 
 			peer.spawnRequest(begin, end, debugLogger)
@@ -252,8 +256,8 @@ func init() {
 	shortenWebseedRequests = s != ""
 }
 
-func (t *Torrent) getWebseedRequestEnd(begin RequestIndex, debugLogger *slog.Logger) RequestIndex {
-	chunkEnd := t.endRequestForAlignedWebseedResponse(begin)
+func (t *Torrent) getWebseedRequestEnd(begin RequestIndex, slice webseedSliceIndex, debugLogger *slog.Logger) RequestIndex {
+	chunkEnd := t.endRequestForAlignedWebseedResponse(slice)
 	if !shortenWebseedRequests {
 		// Pending fix to pendingPieces matching piece request order due to missing initial pieces
 		// checks?
@@ -279,12 +283,10 @@ func (t *Torrent) getWebseedRequestEnd(begin RequestIndex, debugLogger *slog.Log
 var webseedRequestChunkSize = initUIntFromEnv[uint64]("TORRENT_WEBSEED_REQUEST_CHUNK_SIZE", 64<<20, 64)
 
 // Can return the same as start if the request is at the end of the torrent.
-func (t *Torrent) endRequestForAlignedWebseedResponse(start RequestIndex) RequestIndex {
+func (t *Torrent) endRequestForAlignedWebseedResponse(slice webseedSliceIndex) RequestIndex {
 	end := min(
 		t.maxEndRequest(),
-		// This needs to go up to the next boundary, even if start is on a boundary. wtf do you call
-		// that?
-		roundToNextMultiple(start+1, t.chunksPerAlignedWebseedResponse()))
+		RequestIndex(slice+1)*t.chunksPerAlignedWebseedResponse())
 	return end
 }
 
@@ -314,18 +316,15 @@ type webseedRequestPlan struct {
 type plannedWebseedRequest struct {
 	url        webseedUrlKey
 	t          *Torrent
+	sliceIndex webseedSliceIndex
 	startIndex RequestIndex
-}
-
-func (me *plannedWebseedRequest) sliceIndex() webseedSliceIndex {
-	return me.t.requestIndexToWebseedSliceIndex(me.startIndex)
 }
 
 func (me *plannedWebseedRequest) toChunkedWebseedRequestKey() webseedUniqueRequestKey {
 	return webseedUniqueRequestKey{
 		url:        me.url,
 		t:          me.t,
-		sliceIndex: me.sliceIndex(),
+		sliceIndex: me.sliceIndex,
 	}
 }
 

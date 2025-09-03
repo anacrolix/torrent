@@ -197,6 +197,7 @@ func (cl *Client) updateWebseedRequests() {
 
 	// Cancel any existing requests that are no longer wanted.
 	for _, value := range unwantedExistingRequests {
+		// Should we skip cancelling requests that are ended and just haven't cleaned up yet?
 		value.existingWebseedRequest.Cancel("deprioritized")
 	}
 
@@ -446,7 +447,11 @@ func (cl *Client) yieldKeyAndValue(
 			return true
 		}
 	}
-	p := t.piece(t.pieceIndexOfRequestIndex(ar.next))
+	priority := PiecePriorityNone
+	if ar.next < ar.end {
+		p := t.piece(t.pieceIndexOfRequestIndex(ar.next))
+		priority = p.effectivePriority()
+	}
 	return yield(
 		webseedUniqueRequestKey{
 			t:          t,
@@ -455,7 +460,7 @@ func (cl *Client) yieldKeyAndValue(
 		},
 		webseedRequestOrderValue{
 			aprioriMapValue{
-				priority:     p.effectivePriority(),
+				priority:     priority,
 				costKey:      hostKey,
 				startRequest: ar.next,
 			},

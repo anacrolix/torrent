@@ -95,6 +95,7 @@ func (me *Client) SetInfo(info *metainfo.Info, fileIndex *segments.Index) {
 	if !strings.HasSuffix(me.Url, "/") && info.IsDir() {
 		// In my experience, this is a non-conforming webseed. For example the
 		// http://ia600500.us.archive.org/1/items URLs in archive.org torrents.
+		me.Logger.Warn("webseed URL does not end with / and torrent is a directory")
 		return
 	}
 	me.fileIndex = fileIndex
@@ -110,6 +111,8 @@ func (ws *Client) UrlForFileIndex(fileIndex int) string {
 func (ws *Client) StartNewRequest(ctx context.Context, r RequestSpec, debugLogger *slog.Logger) Request {
 	ctx, cancel := context.WithCancelCause(ctx)
 	var requestParts []requestPart
+	panicif.Nil(ws.fileIndex)
+	panicif.Nil(ws.info)
 	for i, e := range ws.fileIndex.LocateIter(r) {
 		req, err := newRequest(
 			ctx,

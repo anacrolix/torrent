@@ -3142,7 +3142,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	if t.haveInfo() {
 		ws.onGotInfo(t.info)
 	}
-	t.webSeeds[urlKey] = &ws
+	g.MapMustAssignNew(t.webSeeds, urlKey, &ws)
 	ws.peer.onNeedUpdateRequests("Torrent.addWebSeed")
 	return true
 }

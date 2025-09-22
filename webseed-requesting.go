@@ -239,6 +239,7 @@ func (cl *Client) updateWebseedRequests() {
 				"webseedChunkIndex", request.sliceIndex)
 
 			begin := request.startIndex
+			// TODO: Requests aren't limited by the pieces a peer has.
 			end := t.getWebseedRequestEnd(begin, request.sliceIndex, debugLogger)
 			panicif.LessThanOrEqual(end, begin)
 
@@ -396,6 +397,9 @@ func (cl *Client) iterPossibleWebseedRequests() iter.Seq2[webseedUniqueRequestKe
 					webseedSliceIndex := t.requestIndexToWebseedSliceIndex(firstRequest)
 					for url, ws := range t.webSeeds {
 						if ws.suspended() {
+							continue
+						}
+						if !ws.peer.peerHasPiece(pieceIndex) {
 							continue
 						}
 						// Return value from this function (RequestPieceFunc) doesn't terminate

@@ -14,7 +14,8 @@ type torrentTrackerAnnouncer interface {
 	Stop()
 }
 
-func regularTrackerScraperStatusLine(lastAnnounce trackerAnnounceResult) string {
+func regularTrackerScraperStatusLine(state announceState) string {
+	lastAnnounce := state.lastOk
 	var w bytes.Buffer
 	fmt.Fprintf(&w, "next ann: %v, last ann: %v",
 		func() string {
@@ -28,8 +29,8 @@ func regularTrackerScraperStatusLine(lastAnnounce trackerAnnounceResult) string 
 			}
 		}(),
 		func() string {
-			if lastAnnounce.Err != nil {
-				return lastAnnounce.Err.Error()
+			if state.Err != nil {
+				return state.Err.Error()
 			}
 			if lastAnnounce.Completed.IsZero() {
 				return "never"

@@ -110,8 +110,7 @@ type Torrent struct {
 	// Read-locked for using storage, and write-locked for Closing.
 	storageLock sync.RWMutex
 
-	// TODO: Only announce stuff is used?
-	metainfo metainfo.MetaInfo
+	announceList metainfo.AnnounceList
 
 	// The info dict. nil if we don't have it (yet).
 	info *metainfo.Info
@@ -1000,7 +999,7 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 		CreationDate: time.Now().Unix(),
 		Comment:      "dynamic metainfo from client",
 		CreatedBy:    "https://github.com/anacrolix/torrent",
-		AnnounceList: t.metainfo.UpvertedAnnounceList().Clone(),
+		AnnounceList: t.announceList.Clone(),
 		InfoBytes: func() []byte {
 			if t.haveInfo() {
 				return t.metadataBytes
@@ -1232,8 +1231,8 @@ func (t *Torrent) countBytesHashed(n int64) {
 
 func (t *Torrent) hashPiece(piece pieceIndex) (
 	correct bool,
-	// These are peers that sent us blocks that differ from what we hash here. TODO: Track Peer not
-	// bannable addr for peer types that are rebuked differently.
+// These are peers that sent us blocks that differ from what we hash here. TODO: Track Peer not
+// bannable addr for peer types that are rebuked differently.
 	differingPeers map[bannableAddr]struct{},
 	err error,
 ) {
@@ -1307,7 +1306,7 @@ func sumExactly(dst []byte, sum func(b []byte) []byte) {
 }
 
 func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash) (
-	// These are peers that sent us blocks that differ from what we hash here.
+// These are peers that sent us blocks that differ from what we hash here.
 	differingPeers map[bannableAddr]struct{},
 	err error,
 ) {
@@ -1351,8 +1350,8 @@ func (t *Torrent) havePiece(index pieceIndex) bool {
 }
 
 func (t *Torrent) maybeDropMutuallyCompletePeer(
-	// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's
-	// okay?
+// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's
+// okay?
 	p *PeerConn,
 ) {
 	if !t.cl.config.DropMutuallyCompletePeers {
@@ -1869,8 +1868,8 @@ func appendMissingTrackerTiers(existing [][]string, minNumTiers int) (ret [][]st
 }
 
 func (t *Torrent) addTrackers(announceList [][]string) {
-	fullAnnounceList := &t.metainfo.AnnounceList
-	t.metainfo.AnnounceList = appendMissingTrackerTiers(*fullAnnounceList, len(announceList))
+	fullAnnounceList := &t.announceList
+	t.announceList = appendMissingTrackerTiers(*fullAnnounceList, len(announceList))
 	for tierIndex, trackerURLs := range announceList {
 		(*fullAnnounceList)[tierIndex] = appendMissingStrings((*fullAnnounceList)[tierIndex], trackerURLs)
 	}
@@ -1888,7 +1887,7 @@ func (t *Torrent) modifyTrackers(announceList [][]string) {
 	}
 	workers.Wait()
 
-	clear(t.metainfo.AnnounceList)
+	clear(t.announceList)
 	t.addTrackers(announceList)
 }
 
@@ -2182,8 +2181,7 @@ func (t *Torrent) startMissingTrackerScrapers() {
 	if t.cl.config.DisableTrackers {
 		return
 	}
-	t.startScrapingTracker(t.metainfo.Announce)
-	for _, tier := range t.metainfo.AnnounceList {
+	for _, tier := range t.announceList {
 		for _, url := range tier {
 			t.startScrapingTracker(url)
 		}

@@ -163,7 +163,7 @@ func TestMergingTrackersByAddingSpecs(t *testing.T) {
 	spec.Trackers = [][]string{{"http://a"}, {"udp://b"}}
 	_, new, _ = cl.AddTorrentSpec(&spec)
 	assert.False(t, new)
-	assert.EqualValues(t, [][]string{{"http://a"}, {"udp://b"}}, T.metainfo.AnnounceList)
+	assert.EqualValues(t, [][]string{{"http://a"}, {"udp://b"}}, T.announceList)
 	// Because trackers are disabled in TestingConfig.
 	assert.EqualValues(t, 0, len(T.trackerAnnouncers))
 }
@@ -471,7 +471,7 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 	require.NoError(t, err)
 	// Nodes are not added or exposed in Torrent's metainfo. We just randomly
 	// check if the announce-list is here instead. TODO: Add nodes.
-	assert.Len(t, tt.metainfo.AnnounceList, 5)
+	assert.Len(t, tt.announceList, 5)
 	// There are 6 nodes in the torrent file.
 	for sum() != int64(6*len(cl.dhtServers)) {
 		time.Sleep(time.Millisecond)

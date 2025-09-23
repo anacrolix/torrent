@@ -33,8 +33,10 @@ type ClientTrackerConfig struct {
 	TrackerDialContext func(ctx context.Context, network, addr string) (net.Conn, error)
 	// Defines ListenPacket func to use for UDP tracker announcements
 	TrackerListenPacket func(network, addr string) (net.PacketConn, error)
-	// Takes a tracker's hostname and requests DNS A and AAAA records.
-	// Used in case DNS lookups require a special setup (i.e., dns-over-https)
+	// Deprecated. Takes a tracker's hostname and requests DNS A and AAAA records. Used in case DNS lookups
+	// require a special setup (i.e., dns-over-https). TODO: Wire back into UDP tracker client
+	// implementation, or deprecate in favour of a Client DNS resolver. It was done manually before
+	// calling the Announce.Do wrapper.
 	LookupTrackerIp func(*url.URL) ([]net.IP, error)
 }
 

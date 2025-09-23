@@ -100,7 +100,9 @@ type Client struct {
 	acceptLimiter map[ipStr]int
 	numHalfOpen   int
 
-	websocketTrackers  websocketTrackers
+	websocketTrackers        websocketTrackers
+	regularTrackerAnnouncers map[string]*trackerAnnouncer
+
 	numWebSeedRequests map[webseedHostKeyHandle]int
 
 	activeAnnounceLimiter limiter.Instance

@@ -141,7 +141,8 @@ type Torrent struct {
 	// Whether we want to know more peers.
 	wantPeersEvent missinggo.Event
 	// An announcer for each tracker URL.
-	trackerAnnouncers map[torrentTrackerAnnouncerKey]torrentTrackerAnnouncer
+	trackerAnnouncers                 map[torrentTrackerAnnouncerKey]torrentTrackerAnnouncer
+	regularTrackerLastAnnounceResults map[torrentTrackerAnnouncerKey]trackerAnnounceResult
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
 	numDHTAnnounces int
 
@@ -2156,16 +2157,13 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr string, sh
 				return nil
 			}
 		}
-		newAnnouncer := &trackerScraper{
-			shortInfohash:   shortInfohash,
-			u:               *u,
-			t:               t,
-			lookupTrackerIp: t.cl.config.LookupTrackerIp,
-			stopCh:          make(chan struct{}),
-			logger:          t.slogger().With("name", "tracker", "urlKey", u.String()),
+		t.cl.startTrackerAnnouncer(u, urlStr)
+		return regularTrackerAnnouncer{
+			u: u,
+			getLastAnnounceResult: func() trackerAnnounceResult {
+				return t.regularTrackerLastAnnounceResults[announcerKey]
+			},
 		}
-		go newAnnouncer.Run()
-		return newAnnouncer
 	}()
 	if sl == nil {
 		return

@@ -139,8 +139,8 @@ type Torrent struct {
 	// the swarm.
 	peers prioritizedPeers
 	// An announcer for each tracker URL.
-	trackerAnnouncers                 map[torrentTrackerAnnouncerKey]torrentTrackerAnnouncer
-	regularTrackerLastAnnounceResults map[torrentTrackerAnnouncerKey]trackerAnnounceResult
+	trackerAnnouncers           map[torrentTrackerAnnouncerKey]torrentTrackerAnnouncer
+	regularTrackerAnnounceState map[torrentTrackerAnnouncerKey]announceState
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
 	numDHTAnnounces int
 
@@ -2156,8 +2156,8 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr string, sh
 		t.cl.startTrackerAnnouncer(u, urlStr)
 		return regularTrackerAnnouncer{
 			u: u,
-			getLastAnnounceResult: func() trackerAnnounceResult {
-				return t.regularTrackerLastAnnounceResults[announcerKey]
+			getAnnounceState: func() announceState {
+				return t.regularTrackerAnnounceState[announcerKey]
 			},
 		}
 	}()

@@ -15,10 +15,14 @@ import (
 	trHttp "github.com/anacrolix/torrent/tracker/http"
 )
 
+// Designed in a way to allow switching to an event model if required. If multiple slots are allowed
+// per tracker it would be handled here. Currently handles only regular trackers but lets see if we
+// can get websocket trackers to use this too.
 type trackerAnnouncer struct {
 	trackerClient tracker.Client
 	torrentClient *Client
-	u             url.URL
+	urlStr        string
+	urlHost       string
 	logger        *slog.Logger
 	cond          chansync.BroadcastCond
 }
@@ -27,18 +31,18 @@ func (me *trackerAnnouncer) Run() {
 	me.torrentClient.lock()
 	for {
 		next := me.getNextAnnounce()
-		after := time.Until(next.Value.When)
-		me.logger.Debug("next announce", "after", after, "when", next.Value.When)
-		if next.Ok && after <= 0 {
-			me.announce(next.Value)
-			continue
+		var afterChan <-chan time.Time
+		if next.Ok {
+			after := time.Until(next.Value.When)
+			me.logger.Debug("next announce", "after", after, "next", next.Value)
+			if next.Ok && after <= 0 {
+				me.announce(next.Value)
+				continue
+			}
+			afterChan = time.After(after)
 		}
 		cond := me.cond.Signaled()
 		me.torrentClient.unlock()
-		var afterChan <-chan time.Time
-		if next.Ok {
-			afterChan = time.After(after)
-		}
 		select {
 		case <-me.torrentClient.closed.Done():
 			return
@@ -49,16 +53,20 @@ func (me *trackerAnnouncer) Run() {
 	}
 }
 
-func (me *trackerAnnouncer) announce(next nextAnnounce) {
+func (me *trackerAnnouncer) announce(next nextAnnounceSorter) {
 	t := me.torrentClient.torrentsByShortHash[next.ShortInfohash]
 	req := t.announceRequest(next.AnnounceEvent, next.ShortInfohash)
 	ctx, cancel := context.WithTimeout(t.closedCtx, tracker.DefaultTrackerAnnounceTimeout)
 	defer cancel()
+	// A logger that includes the nice torrent group so we know what the announce is for.
+	logger := me.logger.With(
+		t.slogGroup(),
+		"short infohash", next.ShortInfohash)
 	me.torrentClient.unlock()
-	me.logger.Debug("announcing", "short infohash", next.ShortInfohash)
+	logger.Debug("announcing", "req", req)
 	resp, err := me.trackerClient.Announce(ctx, req, me.getAnnounceOpts())
 	now := time.Now()
-	me.logger.Debug("announced", "resp", resp, "err", err)
+	logger.Debug("announced", "resp", resp, "err", err)
 	me.torrentClient.lock()
 	me.updateAnnounceState(next.ShortInfohash, t, func(state *announceState) {
 		state.Err = err
@@ -77,10 +85,10 @@ func (me *trackerAnnouncer) announce(next nextAnnounce) {
 		if ctx.Err() != nil {
 			level = slog.LevelDebug
 		}
-		me.logger.Log(ctx, level, "announce failed", "err", err)
+		logger.Log(ctx, level, "announce failed", "err", err)
 		return
 	} else {
-		me.logger.Debug("announce returned", "numPeers", len(resp.Peers))
+		logger.Debug("announce returned", "numPeers", len(resp.Peers))
 	}
 	t.addPeers(peerInfos(nil).AppendFromTracker(resp.Peers))
 }
@@ -88,7 +96,7 @@ func (me *trackerAnnouncer) announce(next nextAnnounce) {
 func (me *trackerAnnouncer) updateAnnounceState(ih shortInfohash, t *Torrent, update func(state *announceState)) {
 	key := torrentTrackerAnnouncerKey{
 		shortInfohash: ih,
-		url:           me.u.String(),
+		url:           me.urlStr,
 	}
 	as := t.regularTrackerAnnounceState[key]
 	update(&as)
@@ -100,18 +108,18 @@ func (me *trackerAnnouncer) getAnnounceOpts() trHttp.AnnounceOpt {
 	cfg := me.torrentClient.config
 	return trHttp.AnnounceOpt{
 		UserAgent:           cfg.HTTPUserAgent,
-		HostHeader:          me.u.Host,
+		HostHeader:          me.urlHost,
 		ClientIp4:           cfg.PublicIp4,
 		ClientIp6:           cfg.PublicIp6,
 		HttpRequestDirector: cfg.HttpRequestDirector,
 	}
 }
 
-func (me *trackerAnnouncer) getNextAnnounce() (best g.Option[nextAnnounce]) {
+func (me *trackerAnnouncer) getNextAnnounce() (best g.Option[nextAnnounceSorter]) {
 	for ih, t := range me.torrentClient.torrentsByShortHash {
 		key := torrentTrackerAnnouncerKey{
 			shortInfohash: ih,
-			url:           me.u.String(),
+			url:           me.urlStr,
 		}
 		if !g.MapContains(t.trackerAnnouncers, key) {
 			continue
@@ -124,47 +132,64 @@ func (me *trackerAnnouncer) getNextAnnounce() (best g.Option[nextAnnounce]) {
 	return
 }
 
-func (me *trackerAnnouncer) torrentNextAnnounce(ih [20]byte) nextAnnounce {
+func (me *trackerAnnouncer) torrentNextAnnounce(ih [20]byte) nextAnnounceSorter {
 	t := me.torrentClient.torrentsByShortHash[ih]
 	key := torrentTrackerAnnouncerKey{
 		shortInfohash: ih,
-		url:           me.u.String(),
+		url:           me.urlStr,
 	}
+	state := t.regularTrackerAnnounceState[key]
 	event, when := t.nextAnnounceEvent(key)
-	return nextAnnounce{
-		ShortInfohash: ih,
-		AnnounceEvent: event,
-		When:          when,
-		NeedPeers:     false, // TODO
+	return nextAnnounceSorter{
+		ShortInfohash:            ih,
+		t:                        t,
+		AnnounceEvent:            event,
+		When:                     when,
+		LastAnnounceFailed:       state.Err != nil,
+		NeedData:                 t.needData(),
+		WantPeers:                t.wantPeers(),
+		HasActiveWebseedRequests: t.hasActiveWebseedRequests(),
 	}
 }
 
 // Make zero/default unhandled AnnounceEvent sort last.
 var eventOrdering = map[tracker.AnnounceEvent]int{
-	tracker.Started:   -4, // Get peers ASAP
-	tracker.Stopped:   -3, // Stop unwanted peers ASAP
-	tracker.Completed: -2, // Maybe prevent seeders from connecting to us
+	tracker.Started: -4, // Get peers ASAP
+	tracker.Stopped: -3, // Stop unwanted peers ASAP
+	// Maybe prevent seeders from connecting to us. We want to send this before Stopped, but also we
+	// don't want people connecting to us if we are stopped and can only get out a single message.
+	// Really we should send this before Stopped...
+	tracker.Completed: -2,
 	tracker.None:      -1, // Regular maintenance
 }
 
-func (me *trackerAnnouncer) compareNextAnnounce(a, b nextAnnounce) int {
+func (me *trackerAnnouncer) compareNextAnnounce(a, b nextAnnounceSorter) int {
+	// What about pushing back based on last announce failure? Some infohashes aren't liked by
+	// trackers.
 	return cmp.Or(
 		a.When.Compare(b.When),
-		-compareBool(a.NeedPeers, b.NeedPeers),
+		-compareBool(a.WantPeers, b.WantPeers),
+		-compareBool(a.NeedData, b.NeedData),
+		-compareBool(a.HasActiveWebseedRequests, b.HasActiveWebseedRequests),
 		cmp.Compare(eventOrdering[a.AnnounceEvent], eventOrdering[b.AnnounceEvent]),
 	)
 }
 
-type nextAnnounce struct {
-	ShortInfohash [20]byte
-	AnnounceEvent tracker.AnnounceEvent
-	When          time.Time
-	NeedPeers     bool
+type nextAnnounceSorter struct {
+	ShortInfohash shortInfohash
+	t             *Torrent
+
+	When                     time.Time
+	AnnounceEvent            tracker.AnnounceEvent
+	NeedData                 bool
+	WantPeers                bool
+	HasActiveWebseedRequests bool
+	LastAnnounceFailed       bool
 }
 
 func (me *Torrent) nextAnnounceEvent(key torrentTrackerAnnouncerKey) (event tracker.AnnounceEvent, when time.Time) {
 	state := me.regularTrackerAnnounceState[key]
-	// Extend when if there was an error on the last attempt.
+	// Extend `when` if there was an error on the last attempt.
 	defer func() {
 		if state.Err != nil {
 			minWhen := time.Now().Add(time.Minute)
@@ -199,6 +224,8 @@ func (cl *Client) startTrackerAnnouncer(u *url.URL, urlStr string) {
 	if g.MapContains(cl.regularTrackerAnnouncers, urlStr) {
 		return
 	}
+	// Parts of the old Announce code, here for reference, to help with mapping configuration to the
+	// new global client tracker implementation.
 	/*
 		res, err := tracker.Announce{
 			Context:             ctx,
@@ -263,7 +290,8 @@ func (cl *Client) startTrackerAnnouncer(u *url.URL, urlStr string) {
 	ta := &trackerAnnouncer{
 		trackerClient: tc,
 		torrentClient: cl,
-		u:             *u, // Paranoid, I don't trust Go mutability
+		urlStr:        urlStr,
+		urlHost:       u.Host,
 		logger:        cl.slogger.With("tracker", u.String()),
 	}
 	g.MakeMapIfNil(&cl.regularTrackerAnnouncers)

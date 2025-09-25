@@ -40,10 +40,3 @@ func regularTrackerScraperStatusLine(state announceState) string {
 	)
 	return w.String()
 }
-
-type trackerAnnounceResult struct {
-	Err       error
-	NumPeers  int
-	Interval  time.Duration
-	Completed time.Time
-}

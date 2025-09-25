@@ -1,3 +1,7 @@
 package torrent
 
-type shortInfohash = [20]byte
+import (
+	"github.com/anacrolix/torrent/types/infohash"
+)
+
+type shortInfohash = infohash.T

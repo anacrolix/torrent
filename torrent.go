@@ -138,8 +138,6 @@ type Torrent struct {
 	// them. That encourages us to reconnect to peers that are well known in
 	// the swarm.
 	peers prioritizedPeers
-	// Whether we want to know more peers.
-	wantPeersEvent missinggo.Event
 	// An announcer for each tracker URL.
 	trackerAnnouncers map[torrentTrackerAnnouncerKey]torrentTrackerAnnouncer
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
@@ -1992,23 +1990,17 @@ func (t *Torrent) dropConnection(c *PeerConn) {
 	}
 }
 
-// Peers as in contact information for dialing out.
+// Peers as in contact information for dialing out. We should try to get some peers, even if we
+// don't currently need them so as not to waste announces or have unnecessary latency or events.
 func (t *Torrent) wantPeers() bool {
 	if t.closed.IsSet() {
 		return false
 	}
-	if t.peers.Len() > t.cl.config.TorrentPeersLowWater {
-		return false
-	}
-	return t.wantOutgoingConns()
+	return t.peers.Len() <= t.cl.config.TorrentPeersLowWater
 }
 
 func (t *Torrent) updateWantPeersEvent() {
-	if t.wantPeers() {
-		t.wantPeersEvent.Set()
-	} else {
-		t.wantPeersEvent.Clear()
-	}
+	// Currently nothing depends on this event, but it might be useful in future.
 }
 
 // Returns whether the client should make effort to seed the torrent.

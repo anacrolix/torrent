@@ -31,6 +31,7 @@ type PieceRequestOrder struct {
 }
 
 type PieceRequestOrderKey struct {
+	// It should be the canonical short hash.
 	InfoHash unique.Handle[metainfo.Hash]
 	Index    int
 }

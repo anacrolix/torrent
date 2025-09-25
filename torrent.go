@@ -1780,10 +1780,10 @@ func (t *Torrent) afterSetPieceCompletion(piece pieceIndex, changed bool) {
 	p := t.piece(piece)
 	cmpl := p.completion()
 	complete := cmpl.Ok && cmpl.Complete
+	p.t.updatePieceRequestOrderPiece(piece)
 	if complete {
 		t.openNewConns()
 	}
-	p.t.updatePieceRequestOrderPiece(piece)
 	t.deferUpdateComplete()
 	if complete && len(p.dirtiers) != 0 {
 		t.logger.Printf("marked piece %v complete but still has dirtiers", piece)
@@ -1842,6 +1842,7 @@ func (t *Torrent) needData() bool {
 	if !t.haveInfo() {
 		return true
 	}
+	t.checkPendingPiecesMatchesRequestOrder()
 	return !t._pendingPieces.IsEmpty()
 }
 

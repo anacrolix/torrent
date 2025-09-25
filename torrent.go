@@ -2778,14 +2778,18 @@ func (t *Torrent) finishHash(index pieceIndex) {
 	// Do we really need to spell out that it's a copy error? If it's a failure to hash the hash
 	// will just be wrong.
 	correct, failedPeers, copyErr := t.hashPiece(index)
+	t.storageLock.RUnlock()
+	level := slog.LevelDebug
 	switch copyErr {
 	case nil, io.EOF:
 	default:
-		t.logger.WithNames("hashing").Levelf(
-			log.Warning,
-			"error hashing piece %v: %v", index, copyErr)
+		level = slog.LevelWarn
 	}
-	t.storageLock.RUnlock()
+	t.slogger().Log(context.Background(), level, "finished hashing piece",
+		"piece", index,
+		"correct", correct,
+		"failedPeers", failedPeers,
+		"err", copyErr)
 	t.cl.lock()
 	if correct {
 		if len(failedPeers) > 0 {

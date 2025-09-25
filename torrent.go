@@ -3549,7 +3549,20 @@ func (t *Torrent) Complete() chansync.ReadOnlyFlag {
 }
 
 func (t *Torrent) slogger() *slog.Logger {
-	return t._slogger
+	return t._slogger.With(t.slogGroup())
+}
+
+// Returns a group attr describing the Torrent.
+func (t *Torrent) slogGroup() slog.Attr {
+	var name any
+	opt := t.bestName()
+	if opt.Ok {
+		name = opt.Value
+	}
+	return slog.Group("torrent",
+		"name", name,
+		"ih", *t.canonicalShortInfohash(),
+	)
 }
 
 // Get a chunk buffer from the pool. It should be returned when it's no longer in use. Do we
@@ -3567,13 +3580,6 @@ func (t *Torrent) putChunkBuffer(b []byte) {
 func (t *Torrent) withSlogger(base *slog.Logger) *slog.Logger {
 	return base.With(slog.Group(
 		"torrent",
-		"name", lazyLogValuer(func() any {
-			opt := t.bestName()
-			if opt.Ok {
-				return opt.Value
-			}
-			return nil
-		}),
 		"ih", *t.canonicalShortInfohash()))
 }
 

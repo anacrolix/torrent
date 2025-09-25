@@ -1,7 +1,9 @@
 package shared
 
 import (
+	"encoding/json"
 	"fmt"
+	"log/slog"
 )
 
 const (
@@ -33,4 +35,25 @@ func (e AnnounceEvent) String() string {
 		return ""
 	}
 	return announceEventStrings[e]
+}
+
+// I think this is necessary for when we convert a type to JSON for logging.
+var _ slog.LogValuer = AnnounceEvent(0)
+
+func (me AnnounceEvent) LogValue() slog.Value {
+	return slog.StringValue(me.String())
+}
+
+// MarshalJSON implements json.Marshaler to ensure AnnounceEvent is serialized as a string in JSON
+func (me AnnounceEvent) MarshalJSON() ([]byte, error) {
+	return json.Marshal(me.String())
+}
+
+// UnmarshalJSON implements json.Unmarshaler to deserialize AnnounceEvent from a string in JSON
+func (me *AnnounceEvent) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+	return me.UnmarshalText([]byte(str))
 }

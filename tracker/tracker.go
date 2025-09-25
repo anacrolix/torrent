@@ -30,7 +30,7 @@ type AnnounceResponse = trHttp.AnnounceResponse
 
 type Peer = trHttp.Peer
 
-type AnnounceEvent = udp.AnnounceEvent
+type AnnounceEvent = shared.AnnounceEvent
 
 var ErrBadScheme = errors.New("unknown scheme")
 

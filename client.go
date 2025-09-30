@@ -101,7 +101,7 @@ type Client struct {
 	numHalfOpen   int
 
 	websocketTrackers        websocketTrackers
-	regularTrackerAnnouncers map[string]*trackerAnnouncer
+	regularTrackerAnnouncers map[string]*clientTrackerAnnouncer
 
 	numWebSeedRequests map[webseedHostKeyHandle]int
 

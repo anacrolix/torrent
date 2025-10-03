@@ -10,6 +10,7 @@ import (
 
 	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
+	"github.com/anacrolix/torrent/types/infohash"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -26,7 +27,7 @@ type GetPeersOpts struct {
 	MaxCount generics.Option[uint]
 }
 
-type InfoHash = [20]byte
+type InfoHash = infohash.T
 
 type PeerInfo struct {
 	AnnounceAddr

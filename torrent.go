@@ -138,7 +138,7 @@ type Torrent struct {
 	// them. That encourages us to reconnect to peers that are well known in
 	// the swarm.
 	peers prioritizedPeers
-	// An announcer for each tracker URL.
+	// An announcer for each tracker URL. Note this includes non-regular trackers too.
 	trackerAnnouncers           map[torrentTrackerAnnouncerKey]torrentTrackerAnnouncer
 	regularTrackerAnnounceState map[torrentTrackerAnnouncerKey]announceState
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
@@ -210,8 +210,11 @@ type Torrent struct {
 
 type torrentTrackerAnnouncerKey struct {
 	shortInfohash [20]byte
-	url           string
+	url           trackerAnnouncerKey
 }
+
+// Has the modified scheme for announcer-per-IP protocol and suchforth.
+type trackerAnnouncerKey string
 
 type outgoingConnAttemptKey = *PeerInfo
 
@@ -1230,8 +1233,8 @@ func (t *Torrent) countBytesHashed(n int64) {
 
 func (t *Torrent) hashPiece(piece pieceIndex) (
 	correct bool,
-// These are peers that sent us blocks that differ from what we hash here. TODO: Track Peer not
-// bannable addr for peer types that are rebuked differently.
+	// These are peers that sent us blocks that differ from what we hash here. TODO: Track Peer not
+	// bannable addr for peer types that are rebuked differently.
 	differingPeers map[bannableAddr]struct{},
 	err error,
 ) {
@@ -1305,7 +1308,7 @@ func sumExactly(dst []byte, sum func(b []byte) []byte) {
 }
 
 func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash) (
-// These are peers that sent us blocks that differ from what we hash here.
+	// These are peers that sent us blocks that differ from what we hash here.
 	differingPeers map[bannableAddr]struct{},
 	err error,
 ) {
@@ -1353,8 +1356,8 @@ func (t *Torrent) havePiece(index pieceIndex) bool {
 }
 
 func (t *Torrent) maybeDropMutuallyCompletePeer(
-// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's
-// okay?
+	// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's
+	// okay?
 	p *PeerConn,
 ) {
 	if !t.cl.config.DropMutuallyCompletePeers {
@@ -2000,8 +2003,20 @@ func (t *Torrent) wantPeers() bool {
 	return t.peers.Len() <= t.cl.config.TorrentPeersLowWater
 }
 
+// This used to update a chansync/event for wanting peers for the per-Torrent tracker announcers,
+// but now those are client-level and not persistent.
 func (t *Torrent) updateWantPeersEvent() {
-	// Currently nothing depends on this event, but it might be useful in future.
+	t.cl.unlockHandlers.deferUpdateTrackerNextAnnounceValues(t)
+}
+
+func (t *Torrent) updateTrackerNextAnnounceValues() {
+	// Note this uses the map that only contains regular tracker URLs.
+	for key := range t.regularTrackerAnnounceState {
+		panicif.Zero(key.url)
+		announcer := t.cl.regularTrackerAnnouncers[key.url]
+		panicif.Nil(announcer)
+		announcer.updateTorrentNextAnnounceValues(t)
+	}
 }
 
 // Returns whether the client should make effort to seed the torrent.
@@ -2121,15 +2136,13 @@ func (t *Torrent) startScrapingTracker(_url string) {
 		t.startScrapingTracker(u.String())
 		return
 	}
-	if t.infoHash.Ok {
-		t.startScrapingTrackerWithInfohash(u, _url, t.infoHash.Value)
-	}
-	if t.infoHashV2.Ok {
-		t.startScrapingTrackerWithInfohash(u, _url, *t.infoHashV2.Value.ToShort())
+	announcerKey := trackerAnnouncerKey(_url)
+	for ih := range t.iterShortInfohashes() {
+		t.startScrapingTrackerWithInfohash(u, announcerKey, ih)
 	}
 }
 
-func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr string, shortInfohash [20]byte) {
+func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr trackerAnnouncerKey, shortInfohash [20]byte) {
 	announcerKey := torrentTrackerAnnouncerKey{
 		shortInfohash: shortInfohash,
 		url:           urlStr,
@@ -2168,6 +2181,14 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr string, sh
 	if g.MapInsert(t.trackerAnnouncers, announcerKey, sl).Ok {
 		panic("tracker announcer already exists")
 	}
+	t.initRegularTrackerAnnounceState(announcerKey)
+}
+
+// We need a key in regularTrackerAnnounceState to ensure we propagate next announce state values.
+func (t *Torrent) initRegularTrackerAnnounceState(key torrentTrackerAnnouncerKey) {
+	// da faaaaak. Need to zero initialize the state if it doesn't exist.
+	g.MakeMapIfNil(&t.regularTrackerAnnounceState)
+	t.regularTrackerAnnounceState[key] = t.regularTrackerAnnounceState[key]
 }
 
 // Adds and starts tracker scrapers for tracker URLs that aren't already
@@ -3488,6 +3509,14 @@ func (t *Torrent) canonicalShortInfohash() *infohash.T {
 	return t.infoHashV2.UnwrapPtr().ToShort()
 }
 
+func (t *Torrent) iterShortInfohashes() iter.Seq[shortInfohash] {
+	return func(yield func(shortInfohash) bool) {
+		t.eachShortInfohash(func(short [20]byte) {
+			yield(short)
+		})
+	}
+}
+
 func (t *Torrent) eachShortInfohash(each func(short [20]byte)) {
 	if t.infoHash.Value == *t.infoHashV2.Value.ToShort() {
 		// This includes zero values, since they both should not be zero. Plus Option should not
@@ -3736,4 +3765,8 @@ func (t *Torrent) maxEndRequest() RequestIndex {
 // Avoids needing or indexing the pieces slice.
 func (p *Torrent) chunkIndexSpec(piece pieceIndex, chunk chunkIndexType) ChunkSpec {
 	return chunkIndexSpec(pp.Integer(chunk), p.pieceLength(piece), p.chunkSize)
+}
+
+func (t *Torrent) progressUnitFloat() float64 {
+	return 1 - float64(t.bytesMissingLocked())/float64(t.info.TotalLength())
 }

@@ -1,9 +1,11 @@
 package shared
 
 import (
+	"encoding"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 )
 
 const (
@@ -16,13 +18,16 @@ const (
 type AnnounceEvent int32
 
 func (me *AnnounceEvent) UnmarshalText(text []byte) error {
-	for key, str := range announceEventStrings {
-		if string(text) == str {
-			*me = AnnounceEvent(key)
-			return nil
-		}
+	i := slices.Index(announceEventStrings, string(text))
+	if i == -1 {
+		return fmt.Errorf("unknown announce event string: %q", text)
 	}
-	return fmt.Errorf("unknown event")
+	*me = AnnounceEvent(i)
+	return nil
+}
+
+func (me AnnounceEvent) MarshalText() ([]byte, error) {
+	return []byte(announceEventStrings[me]), nil
 }
 
 var announceEventStrings = []string{"", "completed", "started", "stopped"}
@@ -32,13 +37,20 @@ func (e AnnounceEvent) String() string {
 	// https://github.com/anacrolix/torrent/issues/416#issuecomment-751427001. Return a safe default
 	// in case event values are not sanitized.
 	if e < 0 || int(e) >= len(announceEventStrings) {
-		return ""
+		return fmt.Sprintf("<unknown announce event %d>", e)
 	}
-	return announceEventStrings[e]
+	s := announceEventStrings[e]
+	if e == None && s == "" {
+		s = "<regular>"
+	}
+	return s
 }
 
 // I think this is necessary for when we convert a type to JSON for logging.
-var _ slog.LogValuer = AnnounceEvent(0)
+var _ interface {
+	slog.LogValuer
+	encoding.TextMarshaler
+} = None
 
 func (me AnnounceEvent) LogValue() slog.Value {
 	return slog.StringValue(me.String())

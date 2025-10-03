@@ -63,7 +63,8 @@ type Client struct {
 	connStats AllConnStats
 	counters  TorrentStatCounters
 
-	_mu lockWithDeferreds
+	_mu            lockWithDeferreds
+	unlockHandlers clientUnlockHandlers
 	// Used in constrained situations when the lock is held.
 	roaringIntIterator roaring.IntIterator
 	event              sync.Cond
@@ -101,7 +102,7 @@ type Client struct {
 	numHalfOpen   int
 
 	websocketTrackers        websocketTrackers
-	regularTrackerAnnouncers map[string]*clientTrackerAnnouncer
+	regularTrackerAnnouncers map[trackerAnnouncerKey]*clientTrackerAnnouncer
 
 	numWebSeedRequests map[webseedHostKeyHandle]int
 
@@ -212,7 +213,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 			fmt.Fprintf(
 				w,
 				"%f%% of %d bytes (%s)",
-				100*(1-float64(t.bytesMissingLocked())/float64(t.info.TotalLength())),
+				100*t.progressUnitFloat(),
 				t.length(),
 				humanize.Bytes(uint64(t.length())))
 		} else {
@@ -221,6 +222,13 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		fmt.Fprint(w, "\n")
 		t.writeStatus(w)
 		fmt.Fprintln(w)
+	}
+	cl.writeRegularTrackerAnnouncerStatus(w)
+}
+
+func (cl *Client) writeRegularTrackerAnnouncerStatus(w io.Writer) {
+	for _, ta := range cl.regularTrackerAnnouncers {
+		ta.writeStatus(w)
 	}
 }
 
@@ -261,12 +269,12 @@ func (cl *Client) announceKey() int32 {
 // Performs infallible parts of Client initialization. *Client and *ClientConfig must not be nil.
 func (cl *Client) init(cfg *ClientConfig) {
 	cl.config = cfg
+	cl._mu.client = cl
 	cfg.setRateLimiterBursts()
 	g.MakeMap(&cl.dopplegangerAddrs)
 	g.MakeMap(&cl.torrentsByShortHash)
 	g.MakeMap(&cl.torrents)
 	cl.torrentsByShortHash = make(map[metainfo.Hash]*Torrent)
-	cl.activeAnnounceLimiter.SlotsPerKey = 2
 	cl.event.L = cl.locker()
 	cl.ipBlockList = cfg.IPBlocklist
 	cl.httpClient = &http.Client{

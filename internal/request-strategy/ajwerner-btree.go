@@ -40,7 +40,6 @@ func (a *ajwernerBtree) Add(item PieceRequestOrderItem) {
 
 func (a *ajwernerBtree) Scan(f func(PieceRequestOrderItem) bool) {
 	it := a.btree.Iterator()
-	it.First()
 	for it.First(); it.Valid(); it.Next() {
 		if !f(it.Cur()) {
 			break

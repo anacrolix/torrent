@@ -18,6 +18,7 @@ type lockWithDeferreds struct {
 	uniqueActions map[any]struct{}
 	// Currently unlocking, defers should not occur?
 	allowDefers bool
+	client      *Client
 }
 
 func (me *lockWithDeferreds) Lock() {
@@ -29,6 +30,7 @@ func (me *lockWithDeferreds) Lock() {
 func (me *lockWithDeferreds) Unlock() {
 	panicif.False(me.allowDefers)
 	me.allowDefers = false
+	me.client.unlockHandlers.run()
 	startLen := len(me.unlockActions)
 	var i int
 	for i = 0; i < len(me.unlockActions); i++ {

@@ -4,71 +4,189 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
+	"math"
 	"net/url"
 	"time"
 
-	"github.com/anacrolix/chansync"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
+	"github.com/anacrolix/torrent/internal/indexed"
 	"github.com/anacrolix/torrent/tracker"
 	trHttp "github.com/anacrolix/torrent/tracker/http"
 )
 
 // Designed in a way to allow switching to an event model if required. If multiple slots are allowed
-// per tracker it would be handled here. Currently handles only regular trackers but lets see if we
-// can get websocket trackers to use this too.
+// per tracker it would be handled here. Currently, handles only regular trackers but let's see if
+// we can get websocket trackers to use this too.
 type clientTrackerAnnouncer struct {
-	trackerClient tracker.Client
-	torrentClient *Client
-	urlStr        string
-	urlHost       string
-	logger        *slog.Logger
-	cond          chansync.BroadcastCond
+	trackerClient   tracker.Client
+	torrentClient   *Client
+	urlStr          trackerAnnouncerKey
+	urlHost         string
+	logger          *slog.Logger
+	nextAnnounces   *indexed.Map[shortInfohash, announceValues]
+	activeAnnounces int
+	timer           *time.Timer
+	timerWhen       time.Time
 }
 
-func (me *clientTrackerAnnouncer) Run() {
+func (me *clientTrackerAnnouncer) writeStatus(w io.Writer) {
+	f := func(format string, args ...any) {
+		fmt.Fprintf(w, format, args...)
+	}
+	f("Tracker: %q\n", me.urlStr)
+	f("urlHost: %q, active announces %v, timer next: %v\n", me.urlHost, me.activeAnnounces, time.Until(me.timerWhen))
+	f("Next announces:\n")
+	sw := statusWriter{w: w}
+	for r := range me.nextAnnounces.Iter() {
+		t := me.torrentClient.torrentsByShortHash[r.PrimaryKey]
+		sw.as(r.PrimaryKey, time.Until(r.Values.When), r.Values.AnnounceEvent, r.Values.NeedData, r.Values.WantPeers, r.Values.HasActiveWebseedRequests)
+		sw.f("%d%%", int(100*t.progressUnitFloat()))
+		sw.nl()
+	}
+	f("\n")
+}
+
+type nextAnnounceRecord = indexed.Record[shortInfohash, announceValues]
+
+func (me *clientTrackerAnnouncer) init() {
+	me.nextAnnounces = indexed.NewMap[shortInfohash, announceValues](
+		func(l, r nextAnnounceRecord) int {
+			return cmp.Or(
+				compareBool(l.Values.active, r.Values.active),
+				compareNextAnnounce(nextAnnounceRecordToSorter(l), nextAnnounceRecordToSorter(r)),
+			)
+		},
+	)
+	me.timer = time.AfterFunc(0, me.timerFunc)
+	me.timerWhen = time.Now()
+}
+
+func (me *clientTrackerAnnouncer) timerFunc() {
+	me.timerWhen = time.Time{}
 	me.torrentClient.lock()
-	for {
-		next := me.getNextAnnounce()
-		var afterChan <-chan time.Time
-		if next.Ok {
-			after := time.Until(next.Value.When)
-			me.logger.Debug("next announce", "after", after, "next", next.Value)
-			if next.Ok && after <= 0 {
-				me.announce(next.Value)
-				continue
-			}
-			afterChan = time.After(after)
-		}
-		cond := me.cond.Signaled()
-		me.torrentClient.unlock()
-		select {
-		case <-me.torrentClient.closed.Done():
-			return
-		case <-afterChan:
-		case <-cond:
-		}
-		me.torrentClient.lock()
+	me.step()
+	me.torrentClient.unlock()
+}
+
+func (me *clientTrackerAnnouncer) step() {
+	me.dispatchAnnounces()
+	// We *are* the Sen... Timer.
+	panicif.True(me.resetTimer(me.nextTimerDelay()))
+}
+
+func (me *clientTrackerAnnouncer) resetTimer(d time.Duration) bool {
+	me.timerWhen = time.Now().Add(d)
+	return me.timer.Reset(d)
+}
+
+func nextAnnounceRecordToSorter(r nextAnnounceRecord) nextAnnounceSorter {
+	return nextAnnounceSorter{
+		ShortInfohash:  r.PrimaryKey,
+		announceValues: r.Values,
 	}
 }
 
-func (me *clientTrackerAnnouncer) announce(next nextAnnounceSorter) {
-	t := me.torrentClient.torrentsByShortHash[next.ShortInfohash]
-	req := t.announceRequest(next.AnnounceEvent, next.ShortInfohash)
+type torrentTrackerEvent struct {
+	t      *Torrent
+	urlStr string
+}
+
+func (me *clientTrackerAnnouncer) addedRegularTracker(event torrentTrackerEvent) {
+	me.updateTorrentNextAnnounceValues(event.t)
+}
+
+const maxConcurrentAnnouncesPerTracker = 2
+
+// Returns true if an announce was dispatched and should be tried again.
+func (me *clientTrackerAnnouncer) dispatchAnnounces() {
+	for {
+		if me.activeAnnounces >= maxConcurrentAnnouncesPerTracker {
+			return
+		}
+		nextOpt := me.getNextAnnounce()
+		if !nextOpt.Ok {
+			return
+		}
+		next := nextOpt.Value
+		after := time.Until(next.When)
+		me.logger.Debug("next announce", "after", after, "next", next)
+		if after > 0 {
+			return
+		}
+		me.startAnnounce(next.ShortInfohash)
+	}
+}
+
+func (me *clientTrackerAnnouncer) startAnnounce(ih shortInfohash) {
+	values := me.nextAnnounces.Get(ih).Unwrap()
+	panicif.True(values.active)
+	go me.singleAnnouncer(ih, values.AnnounceEvent)
+	values.active = true
+	me.activeAnnounces++
+	me.nextAnnounces.Upsert(ih, values)
+}
+
+func (me *clientTrackerAnnouncer) finishedAnnounce(ih shortInfohash) {
+	me.nextAnnounces.Update(ih, func(values *announceValues) {
+		panicif.False(values.active)
+		values.active = false
+		values.nextAnnounceValues = me.makeNextAnnounceValues(ih)
+	})
+	panicif.LessThanOrEqual(me.activeAnnounces, 0)
+	me.activeAnnounces--
+	me.updateTimer()
+}
+
+func (me *clientTrackerAnnouncer) updateTorrentNextAnnounceValues(t *Torrent) {
+	for ih := range t.iterShortInfohashes() {
+		values := me.makeNextAnnounceValues(ih)
+		// Avoid clobbering active (non sorting state).
+		me.nextAnnounces.CreateOrUpdate(ih, func(existed bool, av *announceValues) {
+			av.nextAnnounceValues = values
+		})
+	}
+	me.updateTimer()
+}
+
+func (me *clientTrackerAnnouncer) nextTimerDelay() time.Duration {
+	next := me.getNextAnnounce()
+	var d time.Duration = math.MaxInt64
+	if next.Ok {
+		d = time.Until(next.Value.When)
+	}
+	return d
+}
+
+func (me *clientTrackerAnnouncer) updateTimer() {
+	if !me.timer.Stop() {
+		return
+	}
+	// We should have been the one to stop it above, so we are responsible for starting it.
+	panicif.True(me.resetTimer(me.nextTimerDelay()))
+}
+
+func (me *clientTrackerAnnouncer) singleAnnouncer(ih shortInfohash, event tracker.AnnounceEvent) {
+	me.torrentClient.lock()
+	defer me.torrentClient.unlock()
+	defer me.finishedAnnounce(ih)
+	t := me.torrentClient.torrentsByShortHash[ih]
+	req := t.announceRequest(event, ih)
 	ctx, cancel := context.WithTimeout(t.closedCtx, tracker.DefaultTrackerAnnounceTimeout)
 	defer cancel()
 	// A logger that includes the nice torrent group so we know what the announce is for.
 	logger := me.logger.With(
 		t.slogGroup(),
-		"short infohash", next.ShortInfohash)
+		"short infohash", ih)
 	me.torrentClient.unlock()
 	logger.Debug("announcing", "req", req)
 	resp, err := me.trackerClient.Announce(ctx, req, me.getAnnounceOpts())
 	now := time.Now()
 	logger.Debug("announced", "resp", resp, "err", err)
 	me.torrentClient.lock()
-	me.updateAnnounceState(next.ShortInfohash, t, func(state *announceState) {
+	me.updateAnnounceState(ih, t, func(state *announceState) {
 		state.Err = err
 		state.lastAttemptCompleted = now
 		if err == nil {
@@ -93,6 +211,8 @@ func (me *clientTrackerAnnouncer) announce(next nextAnnounceSorter) {
 	t.addPeers(peerInfos(nil).AppendFromTracker(resp.Peers))
 }
 
+// Updates the announce state, shared by clientTrackerAnnouncer and Torrent, but it lives in Torrent
+// for now.
 func (me *clientTrackerAnnouncer) updateAnnounceState(ih shortInfohash, t *Torrent, update func(state *announceState)) {
 	key := torrentTrackerAnnouncerKey{
 		shortInfohash: ih,
@@ -115,24 +235,21 @@ func (me *clientTrackerAnnouncer) getAnnounceOpts() trHttp.AnnounceOpt {
 	}
 }
 
-func (me *clientTrackerAnnouncer) getNextAnnounce() (best g.Option[nextAnnounceSorter]) {
-	for ih, t := range me.torrentClient.torrentsByShortHash {
-		key := torrentTrackerAnnouncerKey{
-			shortInfohash: ih,
-			url:           me.urlStr,
+func (me *clientTrackerAnnouncer) getNextAnnounce() (_ g.Option[nextAnnounceSorter]) {
+	for record := range me.nextAnnounces.Iter() {
+		if record.Values.active {
+			break
 		}
-		if !g.MapContains(t.trackerAnnouncers, key) {
-			continue
-		}
-		cur := me.torrentNextAnnounce(ih)
-		if !best.Ok || me.compareNextAnnounce(cur, best.Value) < 0 {
-			best.Set(cur)
-		}
+		return g.Some(nextAnnounceSorter{
+			ShortInfohash:  record.PrimaryKey,
+			announceValues: record.Values,
+		})
 	}
 	return
 }
 
-func (me *clientTrackerAnnouncer) torrentNextAnnounce(ih [20]byte) nextAnnounceSorter {
+func (me *clientTrackerAnnouncer) makeNextAnnounceValues(ih [20]byte) nextAnnounceValues {
+	panicif.Nil(me.torrentClient)
 	t := me.torrentClient.torrentsByShortHash[ih]
 	key := torrentTrackerAnnouncerKey{
 		shortInfohash: ih,
@@ -140,9 +257,7 @@ func (me *clientTrackerAnnouncer) torrentNextAnnounce(ih [20]byte) nextAnnounceS
 	}
 	state := t.regularTrackerAnnounceState[key]
 	event, when := t.nextAnnounceEvent(key)
-	return nextAnnounceSorter{
-		ShortInfohash:            ih,
-		t:                        t,
+	return nextAnnounceValues{
 		AnnounceEvent:            event,
 		When:                     when,
 		LastAnnounceFailed:       state.Err != nil,
@@ -163,10 +278,11 @@ var eventOrdering = map[tracker.AnnounceEvent]int{
 	tracker.None:      -1, // Regular maintenance
 }
 
-func (me *clientTrackerAnnouncer) compareNextAnnounce(a, b nextAnnounceSorter) int {
+func compareNextAnnounce(a, b nextAnnounceSorter) int {
 	// What about pushing back based on last announce failure? Some infohashes aren't liked by
 	// trackers.
 	return cmp.Or(
+		compareBool(a.active, b.active),
 		a.When.Compare(b.When),
 		-compareBool(a.WantPeers, b.WantPeers),
 		-compareBool(a.NeedData, b.NeedData),
@@ -175,16 +291,23 @@ func (me *clientTrackerAnnouncer) compareNextAnnounce(a, b nextAnnounceSorter) i
 	)
 }
 
-type nextAnnounceSorter struct {
-	ShortInfohash shortInfohash
-	t             *Torrent
-
+type nextAnnounceValues struct {
 	When                     time.Time
 	AnnounceEvent            tracker.AnnounceEvent
 	NeedData                 bool
 	WantPeers                bool
 	HasActiveWebseedRequests bool
 	LastAnnounceFailed       bool
+}
+
+type announceValues struct {
+	active bool
+	nextAnnounceValues
+}
+
+type nextAnnounceSorter struct {
+	ShortInfohash shortInfohash
+	announceValues
 }
 
 func (me *Torrent) nextAnnounceEvent(key torrentTrackerAnnouncerKey) (event tracker.AnnounceEvent, when time.Time) {
@@ -200,7 +323,7 @@ func (me *Torrent) nextAnnounceEvent(key torrentTrackerAnnouncerKey) (event trac
 	}()
 	last := state.lastOk
 	if last.Completed.IsZero() {
-		return tracker.Started, time.Now()
+		return tracker.Started, time.Time{}
 	}
 	// TODO: Shorten and modify intervals here. Check for completion/stopped etc.
 	return tracker.None, last.Completed.Add(last.Interval)
@@ -219,8 +342,8 @@ type announceState struct {
 	lastAttemptCompleted time.Time
 }
 
-func (cl *Client) startTrackerAnnouncer(u *url.URL, urlStr string) {
-	panicif.NotEq(u.String(), urlStr)
+func (cl *Client) startTrackerAnnouncer(u *url.URL, urlStr trackerAnnouncerKey) {
+	panicif.NotEq(u.String(), string(urlStr))
 	if g.MapContains(cl.regularTrackerAnnouncers, urlStr) {
 		return
 	}
@@ -274,7 +397,7 @@ func (cl *Client) startTrackerAnnouncer(u *url.URL, urlStr string) {
 			HttpRequestDirector: me.HttpRequestDirector,
 		})
 	*/
-	tc, err := tracker.NewClient(urlStr, tracker.NewClientOpts{
+	tc, err := tracker.NewClient(string(urlStr), tracker.NewClientOpts{
 		Http: trHttp.NewClientOpts{
 			Proxy:       cl.config.HTTPProxy,
 			DialContext: cl.config.TrackerDialContext,
@@ -296,7 +419,7 @@ func (cl *Client) startTrackerAnnouncer(u *url.URL, urlStr string) {
 	}
 	g.MakeMapIfNil(&cl.regularTrackerAnnouncers)
 	g.MapMustAssignNew(cl.regularTrackerAnnouncers, urlStr, ta)
-	go ta.Run()
+	ta.init()
 }
 
 type regularTrackerAnnouncer struct {

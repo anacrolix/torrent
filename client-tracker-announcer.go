@@ -32,6 +32,8 @@ type clientTrackerAnnouncer struct {
 	timerWhen       time.Time
 }
 
+type nextAnnouncesRecord = indexed.Record[shortInfohash, announceValues]
+
 func (me *clientTrackerAnnouncer) writeStatus(w io.Writer) {
 	f := func(format string, args ...any) {
 		fmt.Fprintf(w, format, args...)
@@ -39,29 +41,65 @@ func (me *clientTrackerAnnouncer) writeStatus(w io.Writer) {
 	f("Tracker: %q\n", me.urlStr)
 	f("urlHost: %q, active announces %v, timer next: %v\n", me.urlHost, me.activeAnnounces, time.Until(me.timerWhen))
 	f("Next announces:\n")
-	sw := statusWriter{w: w}
+	sw := statusWriter{w: newIndentWriter(w, "  ")}
+	tab := sw.tab()
+	tab.cols("ShortInfohash", "Overdue", "Next", "Event", "NeedData", "WantPeers", "Webseeds", "Progress", "active")
+	tab.row()
 	for r := range me.nextAnnounces.Iter() {
 		t := me.torrentClient.torrentsByShortHash[r.PrimaryKey]
-		sw.as(r.PrimaryKey, time.Until(r.Values.When), r.Values.AnnounceEvent, r.Values.NeedData, r.Values.WantPeers, r.Values.HasActiveWebseedRequests)
-		sw.f("%d%%", int(100*t.progressUnitFloat()))
-		sw.nl()
+		tab.cols(
+			r.PrimaryKey,
+			r.Values.overdue,
+			time.Until(r.Values.When),
+			r.Values.AnnounceEvent,
+			r.Values.NeedData,
+			r.Values.WantPeers,
+			r.Values.HasActiveWebseedRequests,
+		)
+		tab.f("%d%%", int(100*t.progressUnitFloat()))
+		tab.cols(r.Values.active)
+		tab.row()
 	}
-	f("\n")
+	tab.end()
+	sw.nl()
 }
 
 type nextAnnounceRecord = indexed.Record[shortInfohash, announceValues]
 
 func (me *clientTrackerAnnouncer) init() {
 	me.nextAnnounces = indexed.NewMap[shortInfohash, announceValues](
-		func(l, r nextAnnounceRecord) int {
-			return cmp.Or(
-				compareBool(l.Values.active, r.Values.active),
-				compareNextAnnounce(nextAnnounceRecordToSorter(l), nextAnnounceRecordToSorter(r)),
-			)
-		},
+		compareNextAnnounce,
 	)
 	me.timer = time.AfterFunc(0, me.timerFunc)
 	me.timerWhen = time.Now()
+}
+
+// This moves values that have When that have passed, so we compete on other parts of the priority
+// if there is more than one pending. This can be done with another index, and have values move back
+// the other way to simplify things.
+func (me *clientTrackerAnnouncer) updateOverdue() {
+	now := time.Now()
+	it := me.nextAnnounces.Iterator()
+	start := nextAnnounceRecord{}
+	start.Values.overdue = false
+	var overdue []shortInfohash
+	// Avoid skipping lots of items with zero times because of trailing comparisons.
+	it.SeekGE(start)
+	//it.Next()
+	for ; it.Valid(); it.Next() {
+		vs := it.Cur().Values
+		panicif.True(vs.overdue && !vs.active)
+		if vs.When.After(now) {
+			break
+		}
+		overdue = append(overdue, it.Cur().PrimaryKey)
+	}
+	for _, ih := range overdue {
+		me.nextAnnounces.Update(ih, func(values *announceValues) {
+			println("setting overdue:", ih.String(), values.When.String())
+			values.overdue = true
+		})
+	}
 }
 
 func (me *clientTrackerAnnouncer) timerFunc() {
@@ -133,6 +171,7 @@ func (me *clientTrackerAnnouncer) finishedAnnounce(ih shortInfohash) {
 	me.nextAnnounces.Update(ih, func(values *announceValues) {
 		panicif.False(values.active)
 		values.active = false
+		values.overdue = false
 		values.nextAnnounceValues = me.makeNextAnnounceValues(ih)
 	})
 	panicif.LessThanOrEqual(me.activeAnnounces, 0)
@@ -236,6 +275,7 @@ func (me *clientTrackerAnnouncer) getAnnounceOpts() trHttp.AnnounceOpt {
 }
 
 func (me *clientTrackerAnnouncer) getNextAnnounce() (_ g.Option[nextAnnounceSorter]) {
+	me.updateOverdue()
 	for record := range me.nextAnnounces.Iter() {
 		if record.Values.active {
 			break
@@ -278,16 +318,17 @@ var eventOrdering = map[tracker.AnnounceEvent]int{
 	tracker.None:      -1, // Regular maintenance
 }
 
-func compareNextAnnounce(a, b nextAnnounceSorter) int {
+func compareNextAnnounce(ar, br nextAnnounceRecord) int {
 	// What about pushing back based on last announce failure? Some infohashes aren't liked by
 	// trackers.
 	return cmp.Or(
-		compareBool(a.active, b.active),
-		a.When.Compare(b.When),
-		-compareBool(a.WantPeers, b.WantPeers),
-		-compareBool(a.NeedData, b.NeedData),
-		-compareBool(a.HasActiveWebseedRequests, b.HasActiveWebseedRequests),
-		cmp.Compare(eventOrdering[a.AnnounceEvent], eventOrdering[b.AnnounceEvent]),
+		compareBool(ar.Values.active, br.Values.active),
+		-compareBool(ar.Values.overdue, br.Values.overdue),
+		ar.Values.When.Compare(br.Values.When),
+		-compareBool(ar.Values.WantPeers, br.Values.WantPeers),
+		-compareBool(ar.Values.NeedData, br.Values.NeedData),
+		-compareBool(ar.Values.HasActiveWebseedRequests, br.Values.HasActiveWebseedRequests),
+		cmp.Compare(eventOrdering[ar.Values.AnnounceEvent], eventOrdering[br.Values.AnnounceEvent]),
 	)
 }
 
@@ -301,7 +342,8 @@ type nextAnnounceValues struct {
 }
 
 type announceValues struct {
-	active bool
+	active  bool
+	overdue bool
 	nextAnnounceValues
 }
 

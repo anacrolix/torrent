@@ -1,6 +1,7 @@
 package indexed
 
 import (
+	"cmp"
 	"iter"
 
 	"github.com/ajwerner/btree"
@@ -8,6 +9,21 @@ import (
 	"github.com/anacrolix/missinggo/v2/panicif"
 )
 
+//
+//type PrimaryKey[T any] interface {
+//	comparable
+//	Compare(other T) int
+//}
+
+type PrimaryKey[T any] interface {
+	comparable
+	// Or do we ask the user to provide a comparator, expecting that cmp.Compare works for builtins?
+	Compare(other T) int
+}
+
+type RecordCmpFunc[K, V any] func(a, b Record[K, V]) int
+
+// I think we should just inline this and require PrimaryKey to be implemented to extract K.
 type Record[K, V any] struct {
 	PrimaryKey K
 	Values     V
@@ -15,6 +31,7 @@ type Record[K, V any] struct {
 
 // Not sure if this is specific to map or something else yet. But it's a pattern I keep using.
 type indexImpl[R any] struct {
+	// This could be made a pointer into the base eventually?
 	index btree.Set[R]
 	cmp   func(R, R) int
 }
@@ -47,7 +64,7 @@ func (me *indexImpl[R]) Add(r R) {
 // Minimizes duplication of primary key by only storing it in the primary map.
 type Map[K comparable, V any] struct {
 	m      map[K]V
-	single index[Record[K, V]]
+	single *indexImpl[Record[K, V]]
 }
 
 type index[R any] interface {
@@ -57,19 +74,22 @@ type index[R any] interface {
 	Iter() iter.Seq[R]
 }
 
-type IndexHelper[R any] interface {
-	Compare(R, R) int
+func orComparePrimaryKey[K PrimaryKey[K], V any](first RecordCmpFunc[K, V]) RecordCmpFunc[K, V] {
+	return func(a, b Record[K, V]) int {
+		return cmp.Or(first(a, b), a.PrimaryKey.Compare(b.PrimaryKey))
+	}
 }
 
 // Single index map
-func NewMap[K comparable, V any](
+func NewMap[K PrimaryKey[K], V any](
 	cmp func(Record[K, V], Record[K, V]) int,
 ) *Map[K, V] {
+	fullCmp := orComparePrimaryKey(cmp)
 	ret := &Map[K, V]{
 		m: make(map[K]V),
 		single: &indexImpl[Record[K, V]]{
-			index: btree.MakeSet[Record[K, V]](cmp),
-			cmp:   cmp,
+			index: btree.MakeSet[Record[K, V]](fullCmp),
+			cmp:   fullCmp,
 		},
 	}
 	return ret
@@ -121,4 +141,10 @@ func (me *Map[K, V]) Iter() iter.Seq[Record[K, V]] {
 func (me *Map[K, V]) Get(pk K) g.Option[V] {
 	v, ok := me.m[pk]
 	return g.OptionFromTuple(v, ok)
+}
+
+type Iterator[K, V any] = btree.SetIterator[Record[K, V]]
+
+func (me *Map[K, V]) Iterator() Iterator[K, V] {
+	return Iterator[K, V](me.single.index.Iterator())
 }

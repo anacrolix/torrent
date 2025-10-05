@@ -138,6 +138,16 @@ func (me *Map[K, V]) Iter() iter.Seq[Record[K, V]] {
 	return me.single.Iter()
 }
 
+func (me *Map[K, V]) IterPrimaryKeys() iter.Seq[K] {
+	return func(yield func(K) bool) {
+		for r := range me.Iter() {
+			if !yield(r.PrimaryKey) {
+				return
+			}
+		}
+	}
+}
+
 func (me *Map[K, V]) Get(pk K) g.Option[V] {
 	v, ok := me.m[pk]
 	return g.OptionFromTuple(v, ok)

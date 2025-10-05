@@ -34,6 +34,7 @@ import (
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
+	"github.com/anacrolix/torrent/internal/extracmp"
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/webtorrent"
 	"github.com/cespare/xxhash"
@@ -191,7 +192,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	fmt.Fprintln(w)
 	slices.SortFunc(torrentsSlice, func(a, b *Torrent) int {
 		return cmp.Or(
-			compareBool(a.haveInfo(), b.haveInfo()),
+			extracmp.CompareBool(a.haveInfo(), b.haveInfo()),
 			func() int {
 				if a.haveInfo() && b.haveInfo() {
 					return -cmp.Compare(a.bytesLeft(), b.bytesLeft())

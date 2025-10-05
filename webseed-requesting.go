@@ -19,6 +19,7 @@ import (
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/missinggo/v2/panicif"
+	"github.com/anacrolix/torrent/internal/extracmp"
 	"github.com/davecgh/go-spew/spew"
 
 	"github.com/anacrolix/torrent/internal/request-strategy"
@@ -83,7 +84,7 @@ func (cl *Client) updateWebseedRequests() {
 			// webseed requests in favour of peer conns unless there's nothing else to do.
 			if cmp.Or(
 				cmp.Compare(value.priority, cur.priority),
-				compareBool(hasPeerConnRequest(cur.startRequest), hasPeerConnRequest(value.startRequest)),
+				extracmp.CompareBool(hasPeerConnRequest(cur.startRequest), hasPeerConnRequest(value.startRequest)),
 				cmp.Compare(cur.startRequest, value.startRequest),
 			) <= 0 {
 				continue
@@ -139,11 +140,11 @@ func (cl *Client) updateWebseedRequests() {
 				// Prefer highest priority
 				-cmp.Compare(l.priority, r.priority),
 				// Then existing requests
-				compareBool(l.existingWebseedRequest == nil, r.existingWebseedRequest == nil),
+				extracmp.CompareBool(l.existingWebseedRequest == nil, r.existingWebseedRequest == nil),
 				// Prefer not competing with active peer connections.
 				cmp.Compare(len(l.t.conns), len(r.t.conns)),
 				// Try to complete partial slices first.
-				-compareBool(l.mightHavePartialFiles, r.mightHavePartialFiles),
+				-extracmp.CompareBool(l.mightHavePartialFiles, r.mightHavePartialFiles),
 				// No need to prefer longer files anymore now that we're using slices?
 				//// Longer files first.
 				//-cmp.Compare(l.longestFile().Unwrap(), r.longestFile().Unwrap()),

@@ -78,6 +78,8 @@ type tableWriter struct {
 	statusWriter
 }
 
+// Flushes/ends a column. Probably want to check we don't have buffered data before starting new
+// table elements.
 func (me *tableWriter) col() {
 	me.curRow = append(me.curRow, me.buf.String())
 	me.buf.Reset()

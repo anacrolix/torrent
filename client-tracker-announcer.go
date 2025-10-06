@@ -12,6 +12,7 @@ import (
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
+	"github.com/anacrolix/torrent/internal/extracmp"
 	"github.com/anacrolix/torrent/internal/indexed"
 	"github.com/anacrolix/torrent/tracker"
 	trHttp "github.com/anacrolix/torrent/tracker/http"
@@ -26,13 +27,11 @@ type clientTrackerAnnouncer struct {
 	urlStr          trackerAnnouncerKey
 	urlHost         string
 	logger          *slog.Logger
-	nextAnnounces   *indexed.Map[shortInfohash, announceValues]
+	nextAnnounces   *indexed.Map[shortInfohash, nextAnnounceRecord]
 	activeAnnounces int
 	timer           *time.Timer
 	timerWhen       time.Time
 }
-
-type nextAnnouncesRecord = indexed.Record[shortInfohash, announceValues]
 
 func (me *clientTrackerAnnouncer) writeStatus(w io.Writer) {
 	f := func(format string, args ...any) {
@@ -43,31 +42,45 @@ func (me *clientTrackerAnnouncer) writeStatus(w io.Writer) {
 	f("Next announces:\n")
 	sw := statusWriter{w: newIndentWriter(w, "  ")}
 	tab := sw.tab()
-	tab.cols("ShortInfohash", "Overdue", "Next", "Event", "NeedData", "WantPeers", "Webseeds", "Progress", "active")
+	tab.cols("ShortInfohash", "Overdue", "Next", "Event", "NeedData", "WantPeers", "Webseeds", "Progress", "active", "status line")
 	tab.row()
 	for r := range me.nextAnnounces.Iter() {
-		t := me.torrentClient.torrentsByShortHash[r.PrimaryKey]
+		t := me.torrentClient.torrentsByShortHash[r.ShortInfohash]
+		torrentKey := me.torrentTrackerAnnouncerKey(r.ShortInfohash)
 		tab.cols(
-			r.PrimaryKey,
-			r.Values.overdue,
-			time.Until(r.Values.When),
-			r.Values.AnnounceEvent,
-			r.Values.NeedData,
-			r.Values.WantPeers,
-			r.Values.HasActiveWebseedRequests,
+			r.ShortInfohash,
+			r.overdue,
+			time.Until(r.When),
+			r.AnnounceEvent,
+			r.NeedData,
+			r.WantPeers,
+			r.HasActiveWebseedRequests,
+			fmt.Sprintf("%d%%", int(100*t.progressUnitFloat())),
+			r.active,
+			regularTrackerScraperStatusLine(t.regularTrackerAnnounceState[torrentKey]),
 		)
-		tab.f("%d%%", int(100*t.progressUnitFloat()))
-		tab.cols(r.Values.active)
 		tab.row()
 	}
 	tab.end()
 	sw.nl()
 }
 
-type nextAnnounceRecord = indexed.Record[shortInfohash, announceValues]
+type announceValues = torrentNextAnnounceInput
 
 func (me *clientTrackerAnnouncer) init() {
-	me.nextAnnounces = indexed.NewMap[shortInfohash, announceValues](
+	me.nextAnnounces = indexed.NewMap(
+		indexed.TableOps[shortInfohash, nextAnnounceRecord]{
+			PrimaryKey: func(r *nextAnnounceRecord) *shortInfohash {
+				return &r.ShortInfohash
+			},
+			OnModified: func(record nextAnnounceRecord) nextAnnounceRecord {
+				record.overdue = time.Until(record.When) <= 0
+				return record
+			},
+			ComparePrimaryKey: func(a, b shortInfohash) int {
+				return a.Compare(b)
+			},
+		},
 		compareNextAnnounce,
 	)
 	me.timer = time.AfterFunc(0, me.timerFunc)
@@ -81,24 +94,24 @@ func (me *clientTrackerAnnouncer) updateOverdue() {
 	now := time.Now()
 	it := me.nextAnnounces.Iterator()
 	start := nextAnnounceRecord{}
-	start.Values.overdue = false
+	start.overdue = false
 	var overdue []shortInfohash
 	// Avoid skipping lots of items with zero times because of trailing comparisons.
 	it.SeekGE(start)
 	//it.Next()
 	for ; it.Valid(); it.Next() {
-		vs := it.Cur().Values
+		vs := it.Cur()
 		panicif.True(vs.overdue && !vs.active)
 		if vs.When.After(now) {
 			break
 		}
-		overdue = append(overdue, it.Cur().PrimaryKey)
+		overdue = append(overdue, it.Cur().ShortInfohash)
 	}
 	for _, ih := range overdue {
-		me.nextAnnounces.Update(ih, func(values *announceValues) {
-			println("setting overdue:", ih.String(), values.When.String())
-			values.overdue = true
-		})
+		panicif.False(me.nextAnnounces.Update(ih, func(r nextAnnounceRecord) nextAnnounceRecord {
+			r.overdue = true
+			return r
+		}))
 	}
 }
 
@@ -118,13 +131,6 @@ func (me *clientTrackerAnnouncer) step() {
 func (me *clientTrackerAnnouncer) resetTimer(d time.Duration) bool {
 	me.timerWhen = time.Now().Add(d)
 	return me.timer.Reset(d)
-}
-
-func nextAnnounceRecordToSorter(r nextAnnounceRecord) nextAnnounceSorter {
-	return nextAnnounceSorter{
-		ShortInfohash:  r.PrimaryKey,
-		announceValues: r.Values,
-	}
 }
 
 type torrentTrackerEvent struct {
@@ -159,20 +165,20 @@ func (me *clientTrackerAnnouncer) dispatchAnnounces() {
 }
 
 func (me *clientTrackerAnnouncer) startAnnounce(ih shortInfohash) {
-	values := me.nextAnnounces.Get(ih).Unwrap()
-	panicif.True(values.active)
-	go me.singleAnnouncer(ih, values.AnnounceEvent)
-	values.active = true
+	next := me.nextAnnounces.Get(ih).Unwrap()
+	panicif.True(next.active)
+	go me.singleAnnouncer(ih, next.AnnounceEvent)
+	next.active = true
 	me.activeAnnounces++
-	me.nextAnnounces.Upsert(ih, values)
+	me.nextAnnounces.Upsert(next)
 }
 
 func (me *clientTrackerAnnouncer) finishedAnnounce(ih shortInfohash) {
-	me.nextAnnounces.Update(ih, func(values *announceValues) {
-		panicif.False(values.active)
-		values.active = false
-		values.overdue = false
-		values.nextAnnounceValues = me.makeNextAnnounceValues(ih)
+	me.nextAnnounces.Update(ih, func(r nextAnnounceRecord) nextAnnounceRecord {
+		panicif.False(r.active)
+		r.active = false
+		r.torrentNextAnnounceInput = me.makeNextAnnounceValues(ih)
+		return r
 	})
 	panicif.LessThanOrEqual(me.activeAnnounces, 0)
 	me.activeAnnounces--
@@ -182,10 +188,14 @@ func (me *clientTrackerAnnouncer) finishedAnnounce(ih shortInfohash) {
 func (me *clientTrackerAnnouncer) updateTorrentNextAnnounceValues(t *Torrent) {
 	for ih := range t.iterShortInfohashes() {
 		values := me.makeNextAnnounceValues(ih)
-		// Avoid clobbering active (non sorting state).
-		me.nextAnnounces.CreateOrUpdate(ih, func(existed bool, av *announceValues) {
-			av.nextAnnounceValues = values
-		})
+		// Avoid clobbering derived and unrelated values (overdue and active).
+		me.nextAnnounces.CreateOrUpdate(
+			ih,
+			func(existed bool, av nextAnnounceRecord) nextAnnounceRecord {
+				av.torrentNextAnnounceInput = values
+				return av
+			},
+		)
 	}
 	me.updateTimer()
 }
@@ -274,30 +284,31 @@ func (me *clientTrackerAnnouncer) getAnnounceOpts() trHttp.AnnounceOpt {
 	}
 }
 
-func (me *clientTrackerAnnouncer) getNextAnnounce() (_ g.Option[nextAnnounceSorter]) {
+func (me *clientTrackerAnnouncer) getNextAnnounce() (_ g.Option[nextAnnounceRecord]) {
 	me.updateOverdue()
 	for record := range me.nextAnnounces.Iter() {
-		if record.Values.active {
+		if record.active {
 			break
 		}
-		return g.Some(nextAnnounceSorter{
-			ShortInfohash:  record.PrimaryKey,
-			announceValues: record.Values,
-		})
+		return g.Some(record)
 	}
 	return
 }
 
-func (me *clientTrackerAnnouncer) makeNextAnnounceValues(ih [20]byte) nextAnnounceValues {
-	panicif.Nil(me.torrentClient)
-	t := me.torrentClient.torrentsByShortHash[ih]
-	key := torrentTrackerAnnouncerKey{
+func (me *clientTrackerAnnouncer) torrentTrackerAnnouncerKey(ih [20]byte) torrentTrackerAnnouncerKey {
+	return torrentTrackerAnnouncerKey{
 		shortInfohash: ih,
 		url:           me.urlStr,
 	}
+}
+
+func (me *clientTrackerAnnouncer) makeNextAnnounceValues(ih [20]byte) torrentNextAnnounceInput {
+	panicif.Nil(me.torrentClient)
+	t := me.torrentClient.torrentsByShortHash[ih]
+	key := me.torrentTrackerAnnouncerKey(ih)
 	state := t.regularTrackerAnnounceState[key]
 	event, when := t.nextAnnounceEvent(key)
-	return nextAnnounceValues{
+	return torrentNextAnnounceInput{
 		AnnounceEvent:            event,
 		When:                     when,
 		LastAnnounceFailed:       state.Err != nil,
@@ -318,33 +329,38 @@ var eventOrdering = map[tracker.AnnounceEvent]int{
 	tracker.None:      -1, // Regular maintenance
 }
 
-func compareNextAnnounce(ar, br nextAnnounceRecord) int {
+func compareNextAnnounce(ar, br nextAnnounceRecord) (ret int) {
 	// What about pushing back based on last announce failure? Some infohashes aren't liked by
 	// trackers.
+	whenCmp := 0
+	if !ar.overdue {
+		whenCmp = ar.When.Compare(br.When)
+	}
 	return cmp.Or(
-		compareBool(ar.Values.active, br.Values.active),
-		-compareBool(ar.Values.overdue, br.Values.overdue),
-		ar.Values.When.Compare(br.Values.When),
-		-compareBool(ar.Values.WantPeers, br.Values.WantPeers),
-		-compareBool(ar.Values.NeedData, br.Values.NeedData),
-		-compareBool(ar.Values.HasActiveWebseedRequests, br.Values.HasActiveWebseedRequests),
-		cmp.Compare(eventOrdering[ar.Values.AnnounceEvent], eventOrdering[br.Values.AnnounceEvent]),
+		extracmp.CompareBool(ar.active, br.active),
+		-extracmp.CompareBool(ar.overdue, br.overdue),
+		whenCmp,
+		-extracmp.CompareBool(ar.WantPeers, br.WantPeers),
+		-extracmp.CompareBool(ar.NeedData, br.NeedData),
+		-extracmp.CompareBool(ar.HasActiveWebseedRequests, br.HasActiveWebseedRequests),
+		cmp.Compare(eventOrdering[ar.AnnounceEvent], eventOrdering[br.AnnounceEvent]),
 	)
 }
 
-type nextAnnounceValues struct {
+type nextAnnounceRecord struct {
+	ShortInfohash shortInfohash
+	active        bool
+	overdue       bool
+	torrentNextAnnounceInput
+}
+
+type torrentNextAnnounceInput struct {
 	When                     time.Time
 	AnnounceEvent            tracker.AnnounceEvent
 	NeedData                 bool
 	WantPeers                bool
 	HasActiveWebseedRequests bool
 	LastAnnounceFailed       bool
-}
-
-type announceValues struct {
-	active  bool
-	overdue bool
-	nextAnnounceValues
 }
 
 type nextAnnounceSorter struct {
@@ -365,7 +381,8 @@ func (me *Torrent) nextAnnounceEvent(key torrentTrackerAnnouncerKey) (event trac
 	}()
 	last := state.lastOk
 	if last.Completed.IsZero() {
-		return tracker.Started, time.Time{}
+		// Returning now should be fine as sorting should occur on "overdue" derived value.
+		return tracker.Started, time.Now()
 	}
 	// TODO: Shorten and modify intervals here. Check for completion/stopped etc.
 	return tracker.None, last.Completed.Add(last.Interval)

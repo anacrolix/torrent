@@ -2167,6 +2167,7 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr trackerAnn
 			}
 		}
 		t.cl.startTrackerAnnouncer(u, urlStr)
+		t.initRegularTrackerAnnounceState(announcerKey)
 		return regularTrackerAnnouncer{
 			u: u,
 			getAnnounceState: func() announceState {
@@ -2181,7 +2182,6 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr trackerAnn
 	if g.MapInsert(t.trackerAnnouncers, announcerKey, sl).Ok {
 		panic("tracker announcer already exists")
 	}
-	t.initRegularTrackerAnnounceState(announcerKey)
 }
 
 // We need a key in regularTrackerAnnounceState to ensure we propagate next announce state values.

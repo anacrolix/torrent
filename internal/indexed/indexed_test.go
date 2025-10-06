@@ -6,11 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/torrent/internal/extracmp"
 	"github.com/go-quicktest/qt"
+	"golang.org/x/exp/constraints"
 )
 
-type overdueRecordValues struct {
+type overdueRecord struct {
+	rowid   overdueRecordPrimaryKey
 	active  bool
 	overdue bool
 	when    time.Time
@@ -22,17 +25,22 @@ func (me overdueRecordPrimaryKey) Compare(other overdueRecordPrimaryKey) int {
 	return cmp.Compare(me, other)
 }
 
-type overdueRecord = Record[overdueRecordPrimaryKey, overdueRecordValues]
-
 func TestOverdue(t *testing.T) {
-	a := NewMap(func(l, r overdueRecord) int {
-		return cmp.Or(
-			extracmp.CompareBool(l.Values.active, r.Values.active),
-			-extracmp.CompareBool(l.Values.overdue, r.Values.overdue),
-			l.Values.when.Compare(r.Values.when))
-	})
+	var a = NewMap(
+		TableOps[overdueRecordPrimaryKey, overdueRecord]{
+			PrimaryKey: func(r *overdueRecord) *overdueRecordPrimaryKey {
+				return &r.rowid
+			},
+			ComparePrimaryKey: overdueRecordPrimaryKey.Compare,
+		},
+		func(l, r overdueRecord) int {
+			return cmp.Or(
+				extracmp.CompareBool(l.active, r.active),
+				-extracmp.CompareBool(l.overdue, r.overdue),
+				l.when.Compare(r.when))
+		})
 	qt.Assert(t, qt.CmpEquals(nil, slices.Collect(a.Iter())))
-	rows := []overdueRecordValues{
+	rows := []overdueRecord{
 		{overdue: true},
 		{overdue: true, when: time.Now().Add(-time.Minute)},
 		{overdue: true, when: time.Now().Add(time.Minute)},
@@ -42,28 +50,54 @@ func TestOverdue(t *testing.T) {
 		{overdue: false},
 		{overdue: false, active: true},
 	}
-	for id, row := range rows {
-		a.Upsert(overdueRecordPrimaryKey(id), row)
+	for i := range rows {
+		rows[i].rowid = overdueRecordPrimaryKey(i)
+		a.Create(rows[i])
 	}
 	itered := slices.Collect(a.Iter())
 	qt.Assert(t, qt.HasLen(itered, len(rows)))
 	iteredPks := slices.Collect(a.IterPrimaryKeys())
 	qt.Assert(t, qt.CmpEquals([]overdueRecordPrimaryKey{0, 5, 1, 2, 6, 3, 4, 7}, iteredPks))
 	it := a.Iterator()
-	it.SeekGE(overdueRecord{Values: overdueRecordValues{overdue: false}})
+	it.SeekGE(overdueRecord{overdue: false})
 	var overdue []overdueRecordPrimaryKey
 	for ; it.Valid(); it.Next() {
-		if it.Cur().Values.when.After(time.Now()) {
+		if it.Cur().when.After(time.Now()) {
 			break
 		}
-		overdue = append(overdue, it.Cur().PrimaryKey)
+		overdue = append(overdue, it.Cur().rowid)
 	}
 	qt.Assert(t, qt.CmpEquals(overdue, []overdueRecordPrimaryKey{6, 3}))
 	qt.Assert(t, qt.Equals(it.Value(), struct{}{}))
 	for _, pk := range overdue {
-		a.Update(pk, func(values *overdueRecordValues) {
-			values.overdue = true
+		a.Update(pk, func(r overdueRecord) overdueRecord {
+			r.overdue = true
+			return r
 		})
 	}
 	qt.Assert(t, qt.CmpEquals([]overdueRecordPrimaryKey{0, 5, 6, 1, 3, 2, 4, 7}, slices.Collect(a.IterPrimaryKeys())))
+}
+
+type orderedPrimaryKey[T constraints.Ordered] struct {
+	inner T
+}
+
+func (me orderedPrimaryKey[T]) Compare(other orderedPrimaryKey[T]) int {
+	return cmp.Compare(me.inner, other.inner)
+}
+
+func TestCreateOrUpdate(t *testing.T) {
+	a := NewMap(
+		// Should we keep primary key separate? Hmm...
+		TableOps[int, int]{
+			PrimaryKey: func(r *int) *int {
+				return r
+			},
+		},
+		func(l, r int) int { return 0 },
+	)
+	a.CreateOrUpdate(1, func(existed bool, r int) int {
+		panicif.NotEq(r, 1)
+		return r
+	})
 }

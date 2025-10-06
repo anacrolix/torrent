@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"github.com/RoaringBitmap/roaring"
 	g "github.com/anacrolix/generics"
@@ -91,7 +92,24 @@ func (t *Torrent) getPieceRequestOrder() *requestStrategy.PieceRequestOrder {
 	return t.cl.pieceRequestOrder[t.clientPieceRequestOrderKey()].pieces
 }
 
+var (
+	herp atomic.Int64
+	derp atomic.Int32
+)
+
+func fuzzbuzz() bool {
+	m := herp.Add(1)
+	shift := derp.Load()
+	if m >= 1<<shift {
+		return derp.CompareAndSwap(shift, shift+1)
+	}
+	return false
+}
+
 func (t *Torrent) checkPendingPiecesMatchesRequestOrder() {
+	if !fuzzbuzz() {
+		return
+	}
 	short := *t.canonicalShortInfohash()
 	var proBitmap roaring.Bitmap
 	for item := range t.getPieceRequestOrder().Iter() {

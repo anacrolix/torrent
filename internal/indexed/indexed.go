@@ -1,33 +1,13 @@
 package indexed
 
 import (
-	"cmp"
+	"fmt"
 	"iter"
 
 	"github.com/ajwerner/btree"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
 )
-
-//
-//type PrimaryKey[T any] interface {
-//	comparable
-//	Compare(other T) int
-//}
-
-type PrimaryKey[T any] interface {
-	comparable
-	// Or do we ask the user to provide a comparator, expecting that cmp.Compare works for builtins?
-	Compare(other T) int
-}
-
-type RecordCmpFunc[K, V any] func(a, b Record[K, V]) int
-
-// I think we should just inline this and require PrimaryKey to be implemented to extract K.
-type Record[K, V any] struct {
-	PrimaryKey K
-	Values     V
-}
 
 // Not sure if this is specific to map or something else yet. But it's a pattern I keep using.
 type indexImpl[R any] struct {
@@ -58,103 +38,127 @@ func (me *indexImpl[R]) Delete(r R) bool {
 
 func (me *indexImpl[R]) Add(r R) {
 	_, overwrote := me.index.Upsert(r)
-	panicif.True(overwrote)
-}
-
-// Minimizes duplication of primary key by only storing it in the primary map.
-type Map[K comparable, V any] struct {
-	m      map[K]V
-	single *indexImpl[Record[K, V]]
-}
-
-type index[R any] interface {
-	Delete(r R) bool
-	Add(r R)
-	Compare(R, R) int
-	Iter() iter.Seq[R]
-}
-
-func orComparePrimaryKey[K PrimaryKey[K], V any](first RecordCmpFunc[K, V]) RecordCmpFunc[K, V] {
-	return func(a, b Record[K, V]) int {
-		return cmp.Or(first(a, b), a.PrimaryKey.Compare(b.PrimaryKey))
+	if overwrote {
+		panic(fmt.Sprintf("already in index: %v", r))
 	}
 }
 
+// Minimizes duplication of primary key by only storing it in the primary map. R could be row or Record, I see no difference.
+type Map[K PrimaryKey[K], R Record[K]] struct {
+	ops    TableOps[K, R]
+	m      map[K]R
+	single *indexImpl[R]
+}
+
 // Single index map
-func NewMap[K PrimaryKey[K], V any](
-	cmp func(Record[K, V], Record[K, V]) int,
-) *Map[K, V] {
-	fullCmp := orComparePrimaryKey(cmp)
-	ret := &Map[K, V]{
-		m: make(map[K]V),
-		single: &indexImpl[Record[K, V]]{
-			index: btree.MakeSet[Record[K, V]](fullCmp),
+func NewMap[K PrimaryKey[K], R Record[K]](
+	ops TableOps[K, R],
+	cmp func(R, R) int,
+) *Map[K, R] {
+	panicif.Nil(ops.PrimaryKey)
+	panicif.Nil(ops.ComparePrimaryKey)
+	fullCmp := ops.indexFullCompare(cmp)
+	ret := &Map[K, R]{
+		ops: ops,
+		m:   make(map[K]R),
+		single: &indexImpl[R]{
+			index: btree.MakeSet[R](fullCmp),
 			cmp:   fullCmp,
 		},
 	}
 	return ret
 }
 
-func (me *Map[K, V]) Upsert(pk K, values V) g.Option[V] {
-	newRecord := Record[K, V]{pk, values}
-	oldValues, ok := me.m[pk]
-	me.m[pk] = values
+// Creates new record, returns true if it was created, false if a record with the same primary key
+// already exists.
+func (me *Map[K, R]) Create(record R) bool {
+	pk := *me.ops.PrimaryKey(&record)
+	if g.MapContains(me.m, pk) {
+		return false
+	}
+	me.onModified(&record)
+	me.m[pk] = record
+	me.single.Add(record)
+	return true
+}
+
+// Creates or replaces record, returning the old record if it existed.
+func (me *Map[K, R]) Upsert(record R) g.Option[R] {
+	pk := *me.primaryKey(&record)
+	me.onModified(&record)
+	old, ok := me.m[pk]
+	me.m[pk] = record
 	if ok {
-		oldRecord := Record[K, V]{pk, oldValues}
-		if me.single.Compare(newRecord, oldRecord) != 0 {
-			me.single.Delete(oldRecord)
-			me.single.Add(newRecord)
+		if me.single.Compare(record, old) != 0 {
+			me.single.Delete(old)
+			me.single.Add(record)
 		}
 	} else {
-		me.single.Add(newRecord)
+		me.single.Add(record)
 	}
-	return g.OptionFromTuple(oldValues, ok)
+	return g.OptionFromTuple(old, ok)
 }
 
-func (me *Map[K, V]) CreateOrUpdate(pk K, updateFunc func(existed bool, values *V)) {
-	values, existed := me.m[pk]
+// Creates or updates record.
+func (me *Map[K, R]) CreateOrUpdate(pk K, updateFunc func(existed bool, r R) R) {
+	oldRecord, existed := me.m[pk]
 	if existed {
-		me.single.Delete(Record[K, V]{pk, values})
+		me.single.Delete(oldRecord)
+		panicif.NotEq(*me.primaryKey(&oldRecord), pk)
+	} else {
+		*me.primaryKey(&oldRecord) = pk
 	}
-	updateFunc(existed, &values)
-	newRecord := Record[K, V]{pk, values}
-	me.m[pk] = values
+	newRecord := updateFunc(existed, oldRecord)
+	me.onModified(&newRecord)
+	panicif.NotEq(*me.primaryKey(&newRecord), pk)
+	me.m[pk] = newRecord
 	me.single.Add(newRecord)
 }
 
-func (me *Map[K, V]) Update(pk K, updateFunc func(values *V)) (exists bool) {
-	values, exists := me.m[pk]
-	if exists {
-		me.single.Delete(Record[K, V]{pk, values})
-		updateFunc(&values)
+func (me *Map[K, R]) Update(pk K, updateFunc func(record R) R) (exists bool) {
+	old, exists := me.m[pk]
+	if !exists {
+		return
 	}
-	newRecord := Record[K, V]{pk, values}
-	me.m[pk] = values
-	me.single.Add(newRecord)
+	me.single.Delete(old)
+	new := updateFunc(old)
+	me.onModified(&new)
+	me.m[pk] = new
+	me.single.Add(new)
 	return
 }
 
-func (me *Map[K, V]) Iter() iter.Seq[Record[K, V]] {
+func (me *Map[K, R]) Iter() iter.Seq[R] {
 	return me.single.Iter()
 }
 
-func (me *Map[K, V]) IterPrimaryKeys() iter.Seq[K] {
+func (me *Map[K, R]) IterPrimaryKeys() iter.Seq[K] {
 	return func(yield func(K) bool) {
 		for r := range me.Iter() {
-			if !yield(r.PrimaryKey) {
+			if !yield(*me.primaryKey(&r)) {
 				return
 			}
 		}
 	}
 }
 
-func (me *Map[K, V]) Get(pk K) g.Option[V] {
+func (me *Map[K, R]) Get(pk K) g.Option[R] {
 	v, ok := me.m[pk]
 	return g.OptionFromTuple(v, ok)
 }
 
-type Iterator[K, V any] = btree.SetIterator[Record[K, V]]
+type Iterator[K, V any] = btree.SetIterator[V]
 
-func (me *Map[K, V]) Iterator() Iterator[K, V] {
-	return Iterator[K, V](me.single.index.Iterator())
+func (me *Map[K, R]) Iterator() Iterator[K, R] {
+	return Iterator[K, R](me.single.index.Iterator())
+}
+
+func (me *Map[K, R]) onModified(r *R) {
+	if me.ops.OnModified != nil {
+		*r = me.ops.OnModified(*r)
+	}
+}
+
+func (me *Map[K, R]) primaryKey(r *R) *K {
+	return me.ops.PrimaryKey(r)
 }

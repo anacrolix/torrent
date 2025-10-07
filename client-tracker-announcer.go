@@ -27,7 +27,8 @@ type clientTrackerAnnouncer struct {
 	urlStr          trackerAnnouncerKey
 	urlHost         string
 	logger          *slog.Logger
-	nextAnnounces   *indexed.Map[shortInfohash, nextAnnounceRecord]
+	announceData    *indexed.Map[shortInfohash, nextAnnounceRecord]
+	nextAnnounce    indexed.Index[nextAnnounceRecord]
 	activeAnnounces int
 	timer           *time.Timer
 	timerWhen       time.Time
@@ -44,7 +45,7 @@ func (me *clientTrackerAnnouncer) writeStatus(w io.Writer) {
 	tab := sw.tab()
 	tab.cols("ShortInfohash", "Overdue", "Next", "Event", "NeedData", "WantPeers", "Webseeds", "Progress", "active", "status line")
 	tab.row()
-	for r := range me.nextAnnounces.Iter() {
+	for r := range me.nextAnnounce.Iter() {
 		t := me.torrentClient.torrentsByShortHash[r.ShortInfohash]
 		torrentKey := me.torrentTrackerAnnouncerKey(r.ShortInfohash)
 		tab.cols(
@@ -68,7 +69,7 @@ func (me *clientTrackerAnnouncer) writeStatus(w io.Writer) {
 type announceValues = torrentNextAnnounceInput
 
 func (me *clientTrackerAnnouncer) init() {
-	me.nextAnnounces = indexed.NewMap(
+	me.announceData = indexed.NewMap(
 		indexed.TableOps[shortInfohash, nextAnnounceRecord]{
 			PrimaryKey: func(r *nextAnnounceRecord) *shortInfohash {
 				return &r.ShortInfohash
@@ -81,8 +82,8 @@ func (me *clientTrackerAnnouncer) init() {
 				return a.Compare(b)
 			},
 		},
-		compareNextAnnounce,
 	)
+	me.nextAnnounce = me.announceData.AddIndex(compareNextAnnounce)
 	me.timer = time.AfterFunc(0, me.timerFunc)
 	me.timerWhen = time.Now()
 }
@@ -91,24 +92,15 @@ func (me *clientTrackerAnnouncer) init() {
 // if there is more than one pending. This can be done with another index, and have values move back
 // the other way to simplify things.
 func (me *clientTrackerAnnouncer) updateOverdue() {
-	now := time.Now()
-	it := me.nextAnnounces.Iterator()
-	start := nextAnnounceRecord{}
-	start.overdue = false
 	var overdue []shortInfohash
 	// Avoid skipping lots of items with zero times because of trailing comparisons.
-	it.SeekGE(start)
-	//it.Next()
-	for ; it.Valid(); it.Next() {
-		vs := it.Cur()
-		panicif.True(vs.overdue && !vs.active)
-		if vs.When.After(now) {
-			break
-		}
-		overdue = append(overdue, it.Cur().ShortInfohash)
+	end := nextAnnounceRecord{}
+	end.When = time.Now().Add(1)
+	for r := range me.nextAnnounce.IterRange(nextAnnounceRecord{}, end) {
+		overdue = append(overdue, r.ShortInfohash)
 	}
 	for _, ih := range overdue {
-		panicif.False(me.nextAnnounces.Update(ih, func(r nextAnnounceRecord) nextAnnounceRecord {
+		panicif.False(me.announceData.Update(ih, func(r nextAnnounceRecord) nextAnnounceRecord {
 			r.overdue = true
 			return r
 		}))
@@ -165,16 +157,16 @@ func (me *clientTrackerAnnouncer) dispatchAnnounces() {
 }
 
 func (me *clientTrackerAnnouncer) startAnnounce(ih shortInfohash) {
-	next := me.nextAnnounces.Get(ih).Unwrap()
+	next := me.announceData.Get(ih).Unwrap()
 	panicif.True(next.active)
 	go me.singleAnnouncer(ih, next.AnnounceEvent)
 	next.active = true
 	me.activeAnnounces++
-	me.nextAnnounces.Upsert(next)
+	me.announceData.Upsert(next)
 }
 
 func (me *clientTrackerAnnouncer) finishedAnnounce(ih shortInfohash) {
-	me.nextAnnounces.Update(ih, func(r nextAnnounceRecord) nextAnnounceRecord {
+	me.announceData.Update(ih, func(r nextAnnounceRecord) nextAnnounceRecord {
 		panicif.False(r.active)
 		r.active = false
 		r.torrentNextAnnounceInput = me.makeNextAnnounceValues(ih)
@@ -189,7 +181,7 @@ func (me *clientTrackerAnnouncer) updateTorrentNextAnnounceValues(t *Torrent) {
 	for ih := range t.iterShortInfohashes() {
 		values := me.makeNextAnnounceValues(ih)
 		// Avoid clobbering derived and unrelated values (overdue and active).
-		me.nextAnnounces.CreateOrUpdate(
+		me.announceData.CreateOrUpdate(
 			ih,
 			func(existed bool, av nextAnnounceRecord) nextAnnounceRecord {
 				av.torrentNextAnnounceInput = values
@@ -286,7 +278,7 @@ func (me *clientTrackerAnnouncer) getAnnounceOpts() trHttp.AnnounceOpt {
 
 func (me *clientTrackerAnnouncer) getNextAnnounce() (_ g.Option[nextAnnounceRecord]) {
 	me.updateOverdue()
-	for record := range me.nextAnnounces.Iter() {
+	for record := range me.announceData.Iter() {
 		if record.active {
 			break
 		}

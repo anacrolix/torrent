@@ -1,70 +1,44 @@
 package indexed
 
 import (
-	"fmt"
 	"iter"
+	"maps"
+	"slices"
 
 	"github.com/ajwerner/btree"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
 )
 
-// Not sure if this is specific to map or something else yet. But it's a pattern I keep using.
-type indexImpl[R any] struct {
-	// This could be made a pointer into the base eventually?
-	index btree.Set[R]
-	cmp   func(R, R) int
-}
-
-func (me *indexImpl[R]) Iter() iter.Seq[R] {
-	return func(yield func(R) bool) {
-		it := me.index.Iterator()
-		for it.Next(); it.Valid(); it.Next() {
-			r := it.Cur()
-			if !yield(r) {
-				return
-			}
-		}
-	}
-}
-
-func (me *indexImpl[R]) Compare(l, r R) int {
-	return me.cmp(l, r)
-}
-
-func (me *indexImpl[R]) Delete(r R) bool {
-	return me.index.Delete(r)
-}
-
-func (me *indexImpl[R]) Add(r R) {
-	_, overwrote := me.index.Upsert(r)
-	if overwrote {
-		panic(fmt.Sprintf("already in index: %v", r))
-	}
-}
-
 // Minimizes duplication of primary key by only storing it in the primary map. R could be row or Record, I see no difference.
 type Map[K PrimaryKey[K], R Record[K]] struct {
-	ops    TableOps[K, R]
-	m      map[K]R
-	single *indexImpl[R]
+	ops     TableOps[K, R]
+	m       map[K]R
+	indices []*indexImpl[R]
+}
+
+func (me *Map[K, R]) AddIndex(cmp RecordCmpFunc[R]) Index[R] {
+	fullCmp := me.ops.indexFullCompare(cmp)
+	newIndex := &indexImpl[R]{
+		index: btree.MakeSet[R](fullCmp),
+		cmp:   fullCmp,
+	}
+	for _, r := range me.m {
+		newIndex.Add(r)
+	}
+	me.indices = append(me.indices, newIndex)
+	return newIndex
 }
 
 // Single index map
 func NewMap[K PrimaryKey[K], R Record[K]](
 	ops TableOps[K, R],
-	cmp func(R, R) int,
 ) *Map[K, R] {
 	panicif.Nil(ops.PrimaryKey)
 	panicif.Nil(ops.ComparePrimaryKey)
-	fullCmp := ops.indexFullCompare(cmp)
 	ret := &Map[K, R]{
 		ops: ops,
 		m:   make(map[K]R),
-		single: &indexImpl[R]{
-			index: btree.MakeSet[R](fullCmp),
-			cmp:   fullCmp,
-		},
 	}
 	return ret
 }
@@ -78,8 +52,24 @@ func (me *Map[K, R]) Create(record R) bool {
 	}
 	me.onModified(&record)
 	me.m[pk] = record
-	me.single.Add(record)
+	me.addToIndices(record)
 	return true
+}
+
+func (me *Map[K, R]) addToIndices(r R) {
+	for index := range me.iterIndices() {
+		index.Add(r)
+	}
+}
+
+func (me *Map[K, R]) deleteFromIndices(r R) {
+	for index := range me.iterIndices() {
+		index.Delete(r)
+	}
+}
+
+func (me *Map[K, R]) iterIndices() iter.Seq[*indexImpl[R]] {
+	return slices.Values(me.indices)
 }
 
 // Creates or replaces record, returning the old record if it existed.
@@ -88,14 +78,8 @@ func (me *Map[K, R]) Upsert(record R) g.Option[R] {
 	me.onModified(&record)
 	old, ok := me.m[pk]
 	me.m[pk] = record
-	if ok {
-		if me.single.Compare(record, old) != 0 {
-			me.single.Delete(old)
-			me.single.Add(record)
-		}
-	} else {
-		me.single.Add(record)
-	}
+	me.deleteFromIndices(record)
+	me.addToIndices(record)
 	return g.OptionFromTuple(old, ok)
 }
 
@@ -103,7 +87,7 @@ func (me *Map[K, R]) Upsert(record R) g.Option[R] {
 func (me *Map[K, R]) CreateOrUpdate(pk K, updateFunc func(existed bool, r R) R) {
 	oldRecord, existed := me.m[pk]
 	if existed {
-		me.single.Delete(oldRecord)
+		me.deleteFromIndices(oldRecord)
 		panicif.NotEq(*me.primaryKey(&oldRecord), pk)
 	} else {
 		*me.primaryKey(&oldRecord) = pk
@@ -112,7 +96,7 @@ func (me *Map[K, R]) CreateOrUpdate(pk K, updateFunc func(existed bool, r R) R) 
 	me.onModified(&newRecord)
 	panicif.NotEq(*me.primaryKey(&newRecord), pk)
 	me.m[pk] = newRecord
-	me.single.Add(newRecord)
+	me.addToIndices(newRecord)
 }
 
 func (me *Map[K, R]) Update(pk K, updateFunc func(record R) R) (exists bool) {
@@ -120,16 +104,16 @@ func (me *Map[K, R]) Update(pk K, updateFunc func(record R) R) (exists bool) {
 	if !exists {
 		return
 	}
-	me.single.Delete(old)
+	me.deleteFromIndices(old)
 	new := updateFunc(old)
 	me.onModified(&new)
 	me.m[pk] = new
-	me.single.Add(new)
+	me.addToIndices(new)
 	return
 }
 
 func (me *Map[K, R]) Iter() iter.Seq[R] {
-	return me.single.Iter()
+	return maps.Values(me.m)
 }
 
 func (me *Map[K, R]) IterPrimaryKeys() iter.Seq[K] {
@@ -147,12 +131,6 @@ func (me *Map[K, R]) Get(pk K) g.Option[R] {
 	return g.OptionFromTuple(v, ok)
 }
 
-type Iterator[K, V any] = btree.SetIterator[V]
-
-func (me *Map[K, R]) Iterator() Iterator[K, R] {
-	return Iterator[K, R](me.single.index.Iterator())
-}
-
 func (me *Map[K, R]) onModified(r *R) {
 	if me.ops.OnModified != nil {
 		*r = me.ops.OnModified(*r)
@@ -161,4 +139,14 @@ func (me *Map[K, R]) onModified(r *R) {
 
 func (me *Map[K, R]) primaryKey(r *R) *K {
 	return me.ops.PrimaryKey(r)
+}
+
+func (me *Map[K, R]) IterIndexPrimaryKeys(index Index[R]) iter.Seq[K] {
+	return func(yield func(K) bool) {
+		for r := range index.Iter() {
+			if !yield(*me.primaryKey(&r)) {
+				return
+			}
+		}
+	}
 }

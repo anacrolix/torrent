@@ -32,7 +32,8 @@ func TestOverdue(t *testing.T) {
 				return &r.rowid
 			},
 			ComparePrimaryKey: overdueRecordPrimaryKey.Compare,
-		},
+		})
+	idx := a.AddIndex(
 		func(l, r overdueRecord) int {
 			return cmp.Or(
 				extracmp.CompareBool(l.active, r.active),
@@ -56,26 +57,20 @@ func TestOverdue(t *testing.T) {
 	}
 	itered := slices.Collect(a.Iter())
 	qt.Assert(t, qt.HasLen(itered, len(rows)))
-	iteredPks := slices.Collect(a.IterPrimaryKeys())
+	iteredPks := slices.Collect(a.IterIndexPrimaryKeys(idx))
 	qt.Assert(t, qt.CmpEquals([]overdueRecordPrimaryKey{0, 5, 1, 2, 6, 3, 4, 7}, iteredPks))
-	it := a.Iterator()
-	it.SeekGE(overdueRecord{overdue: false})
 	var overdue []overdueRecordPrimaryKey
-	for ; it.Valid(); it.Next() {
-		if it.Cur().when.After(time.Now()) {
-			break
-		}
-		overdue = append(overdue, it.Cur().rowid)
+	for r := range idx.IterRange(overdueRecord{}, overdueRecord{when: time.Now().Add(1)}) {
+		overdue = append(overdue, r.rowid)
 	}
 	qt.Assert(t, qt.CmpEquals(overdue, []overdueRecordPrimaryKey{6, 3}))
-	qt.Assert(t, qt.Equals(it.Value(), struct{}{}))
 	for _, pk := range overdue {
 		a.Update(pk, func(r overdueRecord) overdueRecord {
 			r.overdue = true
 			return r
 		})
 	}
-	qt.Assert(t, qt.CmpEquals([]overdueRecordPrimaryKey{0, 5, 6, 1, 3, 2, 4, 7}, slices.Collect(a.IterPrimaryKeys())))
+	qt.Assert(t, qt.CmpEquals([]overdueRecordPrimaryKey{0, 5, 6, 1, 3, 2, 4, 7}, slices.Collect(a.IterIndexPrimaryKeys(idx))))
 }
 
 type orderedPrimaryKey[T constraints.Ordered] struct {
@@ -93,8 +88,8 @@ func TestCreateOrUpdate(t *testing.T) {
 			PrimaryKey: func(r *int) *int {
 				return r
 			},
+			ComparePrimaryKey: cmp.Compare[int],
 		},
-		func(l, r int) int { return 0 },
 	)
 	a.CreateOrUpdate(1, func(existed bool, r int) int {
 		panicif.NotEq(r, 1)

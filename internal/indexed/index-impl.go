@@ -7,6 +7,18 @@ import (
 	"github.com/ajwerner/btree"
 )
 
+// Not sure if this is specific to map or something else yet. But it's a pattern I keep using.
+type indexImpl[R any] struct {
+	// This could be made a pointer into the base eventually?
+	index btree.Set[R]
+	cmp   func(R, R) int
+}
+
+func (me *indexImpl[R]) Init(cmp CompareFunc[R]) {
+	me.cmp = cmp
+	me.index = btree.MakeSet(cmp)
+}
+
 func (me *indexImpl[R]) Iterator() Iterator[R] {
 	return Iterator[R](me.index.Iterator())
 }
@@ -21,13 +33,6 @@ func (me *indexImpl[R]) IterRange(gte, lt R) iter.Seq[R] {
 			}
 		}
 	}
-}
-
-// Not sure if this is specific to map or something else yet. But it's a pattern I keep using.
-type indexImpl[R any] struct {
-	// This could be made a pointer into the base eventually?
-	index btree.Set[R]
-	cmp   func(R, R) int
 }
 
 func (me *indexImpl[R]) Iter() iter.Seq[R] {

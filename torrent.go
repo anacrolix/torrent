@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"bytes"
+	"cmp"
 	"container/heap"
 	"context"
 	"crypto/sha1"
@@ -209,8 +210,14 @@ type Torrent struct {
 }
 
 type torrentTrackerAnnouncerKey struct {
-	shortInfohash [20]byte
+	ShortInfohash shortInfohash
 	url           trackerAnnouncerKey
+}
+
+func (me torrentTrackerAnnouncerKey) Compare(other torrentTrackerAnnouncerKey) int {
+	return cmp.Or(
+		me.ShortInfohash.Compare(me.ShortInfohash),
+		cmp.Compare(me.url, other.url))
 }
 
 // Has the modified scheme for announcer-per-IP protocol and suchforth.
@@ -2015,7 +2022,7 @@ func (t *Torrent) updateTrackerNextAnnounceValues() {
 		panicif.Zero(key.url)
 		announcer := t.cl.regularTrackerAnnouncers[key.url]
 		panicif.Nil(announcer)
-		announcer.updateTorrentNextAnnounceValues(t)
+		announcer.updateTorrentInput(t)
 	}
 }
 
@@ -2144,7 +2151,7 @@ func (t *Torrent) startScrapingTracker(_url string) {
 
 func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr trackerAnnouncerKey, shortInfohash [20]byte) {
 	announcerKey := torrentTrackerAnnouncerKey{
-		shortInfohash: shortInfohash,
+		ShortInfohash: shortInfohash,
 		url:           urlStr,
 	}
 	if _, ok := t.trackerAnnouncers[announcerKey]; ok {

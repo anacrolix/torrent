@@ -1331,6 +1331,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 		return err
 	case pp.RequestMetadataExtensionMsgType:
 		if !t.haveMetadataPiece(piece) {
+			c.protocolLogger.WithDefaultLevel(log.Debug).Printf("rejecting metadata piece %d", piece)
 			c.write(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d.Piece, nil))
 			return nil
 		}

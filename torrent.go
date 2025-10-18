@@ -1349,6 +1349,33 @@ func (t *Torrent) havePiece(index pieceIndex) bool {
 	return t.haveInfo() && t.pieceComplete(index)
 }
 
+// Mark a piece as complete without verifying it.
+func (t *Torrent) SetHavePiece(index int) error {
+	if t.info == nil {
+		return fmt.Errorf("no metadata")
+	}
+	if index < 0 || index >= t.numPieces() {
+		return fmt.Errorf("SetHavePiece: invalid piece index %d (have %d pieces)", index, t.numPieces())
+	}
+	t._completedPieces.Add(bitmap.BitIndex(index))
+	t.deferUpdateComplete()
+	return nil
+}
+
+// Mark all pieces as complete without verifying them.
+func (t *Torrent) SetHaveAllPieces() error {
+	if t.info == nil {
+		return fmt.Errorf("no metadata")
+	}
+	n := t.numPieces()
+	if n == 0 {
+		return fmt.Errorf("SetHaveAllPieces: torrent has no pieces")
+	}
+	t._completedPieces.AddRange(0, uint64(n))
+	t.deferUpdateComplete()
+	return nil
+}
+
 func (t *Torrent) maybeDropMutuallyCompletePeer(
 // I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's
 // okay?

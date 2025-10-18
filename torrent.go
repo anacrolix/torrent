@@ -1376,6 +1376,14 @@ func (t *Torrent) SetHaveAllPieces() error {
 	return nil
 }
 
+func (t *Torrent) Storage() *storage.Torrent {
+	return t.storage
+}
+
+func (t *Torrent) SetStorage(s *storage.Torrent) {
+	t.storage = s
+}
+
 func (t *Torrent) maybeDropMutuallyCompletePeer(
 // I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's
 // okay?

@@ -23,7 +23,7 @@ type fileTorrentImpl struct {
 	infoHash          metainfo.Hash
 	io                fileIo
 	// Save memory by pointing to the other data.
-	client *fileClientImpl
+	client *FileClientImpl
 }
 
 func (fts *fileTorrentImpl) logger() *slog.Logger {

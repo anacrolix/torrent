@@ -13,7 +13,7 @@ import (
 )
 
 // File-based storage for torrents, that isn't yet bound to a particular torrent.
-type fileClientImpl struct {
+type FileClientImpl struct {
 	opts NewFileClientOpts
 }
 
@@ -63,10 +63,10 @@ func NewFileOpts(opts NewFileClientOpts) ClientImplCloser {
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
 	}
-	return &fileClientImpl{opts}
+	return &FileClientImpl{opts}
 }
 
-func (me *fileClientImpl) Close() error {
+func (me *FileClientImpl) Close() error {
 	return me.opts.PieceCompletion.Close()
 }
 
@@ -74,7 +74,7 @@ var defaultFileIo = func() fileIo {
 	return classicFileIo{}
 }
 
-func (fs *fileClientImpl) OpenTorrent(
+func (fs *FileClientImpl) OpenTorrent(
 	ctx context.Context,
 	info *metainfo.Info,
 	infoHash metainfo.Hash,

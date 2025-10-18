@@ -129,6 +129,10 @@ type clientWebseedState struct {
 
 type ipStr string
 
+func (cl *Client) GetConfig() *ClientConfig {
+	return cl.config
+}
+
 func (cl *Client) BadPeerIPs() (ips []string) {
 	cl.rLock()
 	ips = cl.badPeerIPsLocked()

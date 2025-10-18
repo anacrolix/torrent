@@ -11,6 +11,7 @@ import (
 	"expvar"
 	"fmt"
 	"io"
+	_log "log"
 	"log/slog"
 	"math"
 	"net"
@@ -814,6 +815,7 @@ func doProtocolHandshakeOnDialResult(
 
 // Returns nil connection and nil error if no connection could be established for valid reasons.
 func (cl *Client) dialAndCompleteHandshake(opts outgoingConnOpts) (c *PeerConn, err error) {
+	_log.Printf("client dialAndCompleteHandshake\n")
 	// It would be better if dial rate limiting could be tested when considering to open connections
 	// instead. Doing it here means if the limit is low, and the half-open limit is high, we could
 	// end up with lots of outgoing connection attempts pending that were initiated on stale data.
@@ -968,6 +970,7 @@ func (cl *Client) incomingPeerPort() int {
 }
 
 func (cl *Client) initiateHandshakes(ctx context.Context, c *PeerConn, t *Torrent) (err error) {
+	_log.Printf("client initiateHandshakes\n")
 	if c.headerEncrypted {
 		var rw io.ReadWriter
 		rw, c.cryptoMethod, err = mse.InitiateHandshakeContext(
@@ -1040,13 +1043,16 @@ func (cl *Client) handshakeReceiverSecretKeys() mse.SecretKeyIter {
 
 // Do encryption and bittorrent handshakes as receiver.
 func (cl *Client) receiveHandshakes(c *PeerConn) (t *Torrent, err error) {
+	_log.Printf("client receiveHandshakes\n")
 	var rw io.ReadWriter
+	// FIXME err=EOF
 	rw, c.headerEncrypted, c.cryptoMethod, err = handleEncryption(
 		c.rw(),
 		cl.handshakeReceiverSecretKeys(),
 		cl.config.HeaderObfuscationPolicy,
 		cl.config.CryptoSelector,
 	)
+	_log.Printf("client receiveHandshakes: handleEncryption -> err=%s\n", err)
 	c.setRW(rw)
 	if err == nil || err == mse.ErrNoSecretKeyMatch {
 		if c.headerEncrypted {
@@ -1092,10 +1098,13 @@ func init() {
 }
 
 func (cl *Client) connBtHandshake(ctx context.Context, c *PeerConn, ih *metainfo.Hash, reservedBits PeerExtensionBits) (ret metainfo.Hash, err error) {
+	_log.Printf("client connBtHandshake\n")
 	res, err := pp.Handshake(ctx, c.rw(), ih, cl.peerID, reservedBits)
 	if err != nil {
+		_log.Printf("client connBtHandshake: pp.Handshake failed: %s\n", err)
 		return
 	}
+	_log.Printf("client connBtHandshake: pp.Handshake done\n")
 	successfulPeerWireProtocolHandshakePeerReservedBytes.Add(
 		hex.EncodeToString(res.PeerExtensionBits[:]), 1)
 	ret = res.Hash
@@ -1103,12 +1112,14 @@ func (cl *Client) connBtHandshake(ctx context.Context, c *PeerConn, ih *metainfo
 	c.PeerID = res.PeerID
 	c.completedHandshake = time.Now()
 	if cb := cl.config.Callbacks.CompletedHandshake; cb != nil {
+		_log.Printf("client connBtHandshake: calling cl.config.Callbacks.CompletedHandshake\n")
 		cb(c, res.Hash)
 	}
 	return
 }
 
 func (cl *Client) runReceivedConn(c *PeerConn) {
+	_log.Printf("client runReceivedConn\n")
 	err := c.conn.SetDeadline(time.Now().Add(cl.config.HandshakesTimeout))
 	if err != nil {
 		panic(err)
@@ -1302,6 +1313,7 @@ func (cl *Client) haveDhtServer() bool {
 
 // Process incoming ut_metadata message.
 func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerConn) error {
+	_log.Printf("client gotMetadataExtensionMsg\n")
 	var d pp.ExtendedMetadataRequestMsg
 	err := bencode.Unmarshal(payload, &d)
 	if _, ok := err.(bencode.ErrUnusedTrailingBytes); ok {
@@ -1717,6 +1729,7 @@ type newConnectionOpts struct {
 }
 
 func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerConn) {
+	_log.Printf("client newConnection\n")
 	if opts.network == "" {
 		panic(opts.remoteAddr)
 	}

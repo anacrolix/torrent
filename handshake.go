@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	_log "log"
 	"net"
 	"time"
 
@@ -40,10 +41,21 @@ func handleEncryption(
 	cryptoMethod mse.CryptoMethod,
 	err error,
 ) {
+	// FIXME err=EOF
+	_log.Printf("handshake handleEncryption\n")
 	// Tries to start an unencrypted stream.
 	if !policy.RequirePreferred || !policy.Preferred {
 		var protocol [len(pp.Protocol)]byte
-		_, err = io.ReadFull(rw, protocol[:])
+		// _, err = io.ReadFull(rw, protocol[:])
+		n := 0
+		n, err = io.ReadFull(rw, protocol[:])
+		_log.Printf("handshake handleEncryption: io.ReadFull read %d of %d bytes -> err=%v", n, len(pp.Protocol), err)
+
+		// // peek
+		// buf := make([]byte, 1024)
+		// rw.(io.Reader).Read(buf) // non-blocking read attempt
+		// _log.Printf("handshake handleEncryption: peek %d bytes: %x", n, buf[:n])
+
 		if err != nil {
 			return
 		}
@@ -67,6 +79,7 @@ func handleEncryption(
 	}
 	headerEncrypted = true
 	ret, cryptoMethod, err = mse.ReceiveHandshake(context.TODO(), rw, skeys, selector)
+	_log.Printf("handshake handleEncryption: mse.ReceiveHandshake -> err=%s\n", err)
 	return
 }
 

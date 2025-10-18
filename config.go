@@ -62,6 +62,7 @@ type ClientConfig struct {
 	// socket with uTP unless configured otherwise.
 	ListenHost              func(network string) string
 	ListenPort              int
+	// cfg.NoDefaultPortForwarding aka cfg.DisableUpnp
 	NoDefaultPortForwarding bool
 	UpnpID                  string
 	DisablePEX              bool `long:"disable-pex"`

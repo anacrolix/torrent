@@ -1357,8 +1357,10 @@ func (t *Torrent) SetHavePiece(index int) error {
 	if index < 0 || index >= t.numPieces() {
 		return fmt.Errorf("SetHavePiece: invalid piece index %d (have %d pieces)", index, t.numPieces())
 	}
+	t.cl.lock()
 	t._completedPieces.Add(bitmap.BitIndex(index))
 	t.deferUpdateComplete()
+	t.cl.unlock()
 	return nil
 }
 
@@ -1371,8 +1373,10 @@ func (t *Torrent) SetHaveAllPieces() error {
 	if n == 0 {
 		return fmt.Errorf("SetHaveAllPieces: torrent has no pieces")
 	}
+	t.cl.lock()
 	t._completedPieces.AddRange(0, uint64(n))
 	t.deferUpdateComplete()
+	t.cl.unlock()
 	return nil
 }
 

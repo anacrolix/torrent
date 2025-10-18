@@ -66,6 +66,10 @@ func NewFileOpts(opts NewFileClientOpts) ClientImplCloser {
 	return &FileClientImpl{opts}
 }
 
+func (me *FileClientImpl) GetOpts() NewFileClientOpts {
+	return me.opts
+}
+
 func (me *FileClientImpl) Close() error {
 	return me.opts.PieceCompletion.Close()
 }

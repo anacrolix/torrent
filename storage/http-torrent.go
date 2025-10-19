@@ -1,3 +1,5 @@
+// based on anacrolix-torrent/storage/file-torrent.go
+
 package storage
 
 import (
@@ -107,8 +109,10 @@ func (torrent *HttpTorrentImpl) getCompletion(piece int) Completion {
 }
 
 func (torrent *HttpTorrentImpl) Piece(p metainfo.Piece) PieceImpl {
+	httpClient := torrent.storage.HttpClient
+	httpContext := torrent.storage.HttpContext
 	// Create a view onto the file-based torrent storage.
-	_io := HttpTorrentImplIO{torrent}
+	_io := HttpTorrentImplIO{torrent, httpClient, httpContext}
 	// Return the appropriate segments of this.
 	return &HttpPieceImpl{
 		torrent,

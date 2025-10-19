@@ -1,6 +1,10 @@
+// based on anacrolix-torrent/storage/file-torrent-io.go
+
 package storage
 
 import (
+	"context"
+	"encoding/hex"
 	"fmt"
 	"io"
 	_log "log"
@@ -15,6 +19,8 @@ import (
 // Exposes file-based storage of a torrent, as one big ReadWriterAt.
 type HttpTorrentImplIO struct {
 	httpTorrent *HttpTorrentImpl
+	HttpClient  *http.Client
+	HttpContext context.Context
 }
 
 /*
@@ -53,11 +59,17 @@ func (tio HttpTorrentImplIO) readFileAt(file file, b []byte, off int64) (n int, 
 */
 
 func (tio HttpTorrentImplIO) ReadAt(buf []byte, off int64) (num int, err error) {
+	// metainfo.Info // type Info struct
 	info := tio.httpTorrent.info
 	if info == nil {
-		return 0, fmt.Errorf("torrent info not yet available")
+		return 0, fmt.Errorf("no torrent info")
 	}
 	storage := tio.httpTorrent.GetStorage()
+
+	// TODO what is infoHash for hybrid/v2 torrents?
+	// does it prefer v2 hash (btmh) like qBittorrent?
+	// qBittorrent prefers truncated v2 hash as "torrent ID"
+	// https://github.com/qbittorrent/qBittorrent/issues/18185#issuecomment-1345499634
 	btih := tio.httpTorrent.infoHash.String()
 
 	pieceLength := info.PieceLength
@@ -70,11 +82,42 @@ func (tio HttpTorrentImplIO) ReadAt(buf []byte, off int64) (num int, err error) 
 	pieceOffset := off % pieceLength
 	readRemaining := len(buf)
 
+	// no: piece.hash undefined (type metainfo.Piece has no field or method hash)
+	// piece := info.Piece(pieceIdx)
+
+	// add the piece hash to the piece filename
+	// to help other tools verify the cached piece files
+	pieceHash := ""
+	pieceHashSuffix := ""
+	if info.HasV1() {
+		// v1 or hybrid torrent
+		pieceHash = hex.EncodeToString(info.Pieces[pieceIdx*20 : (pieceIdx+1)*20])
+		pieceHashSuffix = "." + pieceHash
+	}
+	/*
+		else {
+			// v2 torrent
+			// TODO info -> file -> pieces root -> get merkle tree from peers (BEP 30)
+			// https://bittorrent.org/beps/bep_0030.html
+			// Tr_hashpiece
+			// not implemented:
+			// https://github.com/anacrolix/torrent/issues/175#issuecomment-1987015148
+			// Replying to hash request
+			// Asking for proof layers in outbound hash request
+			pieceHash = TODO
+			pieceHashSuffix = "." + pieceHash
+			// type FileTreeFile struct {
+			// 	Length     int64  `bencode:"length"`
+			// 	PiecesRoot string `bencode:"pieces root"`
+			// }
+		}
+	*/
+
 	_log.Printf("HttpTorrentImplIO.ReadAt: btih=%s pieceIdx=%d pieceOffset=%d len=%d\n",
 		btih, pieceIdx, pieceOffset, readRemaining)
 
 	// cachePiecePath := filepath.Join(storage.Opts.PieceCacheDir, btih, fmt.Sprintf("%d.piece", pieceIdx))
-	cachePiecePath := filepath.Join(storage.Opts.PieceCacheDir, btih, fmt.Sprintf("%d", pieceIdx))
+	cachePiecePath := filepath.Join(storage.Opts.PieceCacheDir, btih, fmt.Sprintf("%d%s", pieceIdx, pieceHashSuffix))
 	os.MkdirAll(filepath.Dir(cachePiecePath), 0o755)
 
 	// --- Try reading from local cache ---
@@ -124,6 +167,7 @@ func (tio HttpTorrentImplIO) ReadAt(buf []byte, off int64) (num int, err error) 
 		// length := endInFile - startInFile
 
 		filePath := path.Join(fi.Path...)
+		// cas filesystem https://github.com/milahu/cas-filesystem-spec
 		url := fmt.Sprintf("%s/cas/btih/%s/%s/%s",
 			storage.Opts.ContentURL,
 			btih,
@@ -131,10 +175,33 @@ func (tio HttpTorrentImplIO) ReadAt(buf []byte, off int64) (num int, err error) 
 			filePath)
 		_log.Printf("fetching range [%d:%d) from %s\n", startInFile, endInFile, url)
 
-		req, _ := http.NewRequest("GET", url, nil)
+		// based on anacrolix-torrent/tracker/http/http.go
+		// req, err := http.NewRequest("GET", url, nil)
+		req, err := http.NewRequestWithContext(storage.HttpContext, http.MethodGet, url, nil)
+		if err != nil {
+			return 0, fmt.Errorf("creating HTTP request: %w", err)
+		}
+
 		req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", startInFile, endInFile-1))
 
-		resp, err := http.DefaultClient.Do(req)
+		opt := storage.Opts
+
+		if opt.HTTPUserAgent != "" {
+			req.Header.Set("User-Agent", opt.HTTPUserAgent)
+		}
+
+		if opt.HttpRequestDirector != nil {
+			err = opt.HttpRequestDirector(req)
+			if err != nil {
+				return 0, fmt.Errorf("modifying HTTP request: %w", err)
+			}
+		}
+
+		// TODO why set the Host header?
+		// req.Host = opt.HostHeader
+		// req.Host = "localhost"
+
+		resp, err := storage.HttpClient.Do(req)
 		if err != nil {
 			return 0, fmt.Errorf("fetching piece %d: %w", pieceIdx, err)
 		}

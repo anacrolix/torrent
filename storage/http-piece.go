@@ -1,3 +1,5 @@
+// based on anacrolix-torrent/storage/file-piece.go
+
 package storage
 
 import (

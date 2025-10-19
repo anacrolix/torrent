@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	_log "log"
 	"log/slog"
 	"math/rand"
 	"net"
@@ -257,7 +256,6 @@ func (cn *PeerConn) utp() bool {
 }
 
 func (cn *PeerConn) onClose() {
-	_log.Printf("peerconn onClose\n")
 	if cn.pex.IsEnabled() {
 		cn.pex.Close()
 	}
@@ -273,7 +271,6 @@ func (cn *PeerConn) onClose() {
 // Writes a message into the write buffer. Returns whether it's okay to keep writing. Writing is
 // done asynchronously, so it may be that we're not able to honour backpressure from this method.
 func (cn *PeerConn) write(msg pp.Message) bool {
-	_log.Printf("peerconn write\n")
 	torrent.Add(fmt.Sprintf("messages written of type %s", msg.Type.String()), 1)
 	// We don't need to track bytes here because the connection's Writer has that behaviour injected
 	// (although there's some delay between us buffering the message, and the connection writer
@@ -286,7 +283,6 @@ func (cn *PeerConn) write(msg pp.Message) bool {
 }
 
 func (cn *PeerConn) requestMetadataPiece(index int) {
-	_log.Printf("peerconn requestMetadataPiece\n")
 	eID := cn.PeerExtensionIDs[pp.ExtensionNameMetadata]
 	if eID == pp.ExtensionDeleteNumber {
 		return
@@ -303,12 +299,10 @@ func (cn *PeerConn) requestMetadataPiece(index int) {
 }
 
 func (cn *PeerConn) requestedMetadataPiece(index int) bool {
-	_log.Printf("peerconn requestedMetadataPiece\n")
 	return index < len(cn.metadataRequests) && cn.metadataRequests[index]
 }
 
 func (cn *PeerConn) onPeerSentCancel(r Request) {
-	_log.Printf("peerconn onPeerSentCancel\n")
 	if !cn.havePeerRequest(r) {
 		torrent.Add("unexpected cancels received", 1)
 		return
@@ -330,7 +324,6 @@ func (me *PeerConn) havePeerRequest(r Request) bool {
 }
 
 func (cn *PeerConn) choke(msg messageWriter) (more bool) {
-	_log.Printf("peerconn choke\n")
 	if cn.choking {
 		return true
 	}
@@ -374,7 +367,6 @@ func (pc *PeerConn) writeInterested(interested bool) bool {
 // The final piece to actually commit to a request. Typically, this sends or begins handling the
 // request.
 func (me *PeerConn) _request(r Request) bool {
-	_log.Printf("peerconn _request\n")
 	return me.write(pp.Message{
 		Type:   pp.Request,
 		Index:  r.Index,
@@ -384,7 +376,6 @@ func (me *PeerConn) _request(r Request) bool {
 }
 
 func (me *PeerConn) handleCancel(r RequestIndex) {
-	_log.Printf("peerconn handleCancel\n")
 	me.write(makeCancelMessage(me.t.requestIndexToRequest(r)))
 	if me.remoteRejectsCancels() {
 		// Record that we expect to get a cancel ack.
@@ -411,7 +402,6 @@ func (me *PeerConn) remoteRejectsCancels() bool {
 }
 
 func (cn *PeerConn) fillWriteBuffer() {
-	_log.Printf("peerconn fillWriteBuffer\n")
 	if cn.messageWriter.writeBuffer.Len() > writeBufferLowWaterLen {
 		// Fully committing to our max requests requires sufficient space (see
 		// maxLocalToRemoteRequests). Flush what we have instead. We also prefer always to make
@@ -432,7 +422,6 @@ func (cn *PeerConn) fillWriteBuffer() {
 }
 
 func (cn *PeerConn) have(piece pieceIndex) {
-	_log.Printf("peerconn have\n")
 	if cn.sentHaves.Get(bitmap.BitIndex(piece)) {
 		return
 	}
@@ -444,7 +433,6 @@ func (cn *PeerConn) have(piece pieceIndex) {
 }
 
 func (cn *PeerConn) postBitfield() {
-	_log.Printf("peerconn postBitfield\n")
 	if cn.sentHaves.Len() != 0 {
 		panic("bitfield must be first have-related message sent")
 	}
@@ -470,7 +458,6 @@ func (cn *PeerConn) raisePeerMinPieces(newMin pieceIndex) {
 }
 
 func (cn *PeerConn) peerSentHave(piece pieceIndex) error {
-	_log.Printf("peerconn peerSentHave\n")
 	if cn.t.haveInfo() && piece >= cn.t.numPieces() || piece < 0 {
 		return errors.New("invalid piece")
 	}
@@ -587,7 +574,6 @@ func (cn *PeerConn) peerSentHaveNone() error {
 }
 
 func (c *PeerConn) requestPendingMetadata() {
-	_log.Printf("peerconn requestPendingMetadata\n")
 	if c.t.haveInfo() {
 		return
 	}
@@ -609,7 +595,6 @@ func (c *PeerConn) requestPendingMetadata() {
 }
 
 func (cn *PeerConn) wroteMsg(msg *pp.Message) {
-	_log.Printf("peerconn wroteMsg\n")
 	torrent.Add(fmt.Sprintf("messages written of type %s", msg.Type.String()), 1)
 	if msg.Type == pp.Extended {
 		for name, id := range cn.PeerExtensionIDs {
@@ -653,7 +638,6 @@ func (me *PeerConn) numPeerRequests() int {
 
 // startFetch is for testing purposes currently.
 func (c *PeerConn) onReadRequest(r Request, startFetch bool) error {
-	_log.Printf("peerconn onReadRequest\n")
 	requestedChunkLengths.Add(strconv.FormatUint(r.Length.Uint64(), 10), 1)
 	if c.havePeerRequest(r) {
 		torrent.Add("duplicate requests received", 1)
@@ -777,7 +761,6 @@ func (me *PeerConn) deleteReadyPeerRequest(r Request) {
 
 // Handles an outstanding peer request. It's either rejected, or buffered for the writer.
 func (c *PeerConn) servePeerRequest(r Request) {
-	_log.Printf("peerconn servePeerRequest\n")
 	defer func() {
 		// Prevent caller from stalling. It's either rejected or buffered.
 		panicif.True(MapContains(c.unreadPeerRequests, r))
@@ -809,7 +792,6 @@ func (c *PeerConn) servePeerRequest(r Request) {
 // If this is maintained correctly, we might be able to support optional synchronous reading for
 // chunk sending, the way it used to work.
 func (c *PeerConn) peerRequestDataReadFailed(err error, r Request) {
-	_log.Printf("peerconn peerRequestDataReadFailed\n")
 	torrent.Add("peer request data read failures", 1)
 	logLevel := log.Warning
 	if c.t.hasStorageCap() || c.t.closed.IsSet() {
@@ -856,7 +838,6 @@ func (c *PeerConn) useBestReject(r Request) {
 }
 
 func (c *PeerConn) readPeerRequestData(r Request) ([]byte, error) {
-	_log.Printf("peerconn readPeerRequestData\n")
 	b := make([]byte, r.Length)
 	p := c.t.info.Piece(int(r.Index))
 	n, err := c.t.readAt(b, p.Offset()+int64(r.Begin))
@@ -881,7 +862,6 @@ func (c *PeerConn) logProtocolBehaviour(level log.Level, format string, arg ...i
 // Processes incoming BitTorrent wire-protocol messages. The client lock is held upon entry and
 // exit. Returning will end the connection.
 func (c *PeerConn) mainReadLoop() (err error) {
-	_log.Printf("peerconn mainReadLoop\n")
 	defer func() {
 		if err != nil {
 			torrent.Add("connection.mainReadLoop returned with error", 1)
@@ -1054,7 +1034,6 @@ func (c *PeerConn) mainReadLoop() (err error) {
 }
 
 func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err error) {
-	_log.Printf("peerconn onReadExtendedMsg\n")
 	defer func() {
 		// TODO: Should we still do this?
 		if err != nil {
@@ -1202,7 +1181,6 @@ func (c *PeerConn) setRetryUploadTimer(delay time.Duration) {
 
 // Also handles choking and unchoking of the remote peer.
 func (c *PeerConn) upload(msg func(pp.Message) bool) bool {
-	_log.Printf("peerconn upload\n")
 	// Breaking or completing this loop means we don't want to upload to the peer anymore, and we
 	// choke them.
 another:
@@ -1235,7 +1213,6 @@ another:
 }
 
 func (cn *PeerConn) drop() {
-	_log.Printf("peerconn drop\n")
 	cn.t.dropConnection(cn)
 }
 
@@ -1263,7 +1240,6 @@ func (c *PeerConn) sendChunk(r Request, msg func(pp.Message) bool) (more bool) {
 }
 
 func (c *PeerConn) setTorrent(t *Torrent) {
-	_log.Printf("peerconn setTorrent\n")
 	panicif.NotNil(c.t)
 	c.t = t
 	c.initClosedCtx()
@@ -1289,7 +1265,6 @@ func (c *PeerConn) pexPeerFlags() pp.PexPeerFlags {
 // This returns the address to use if we want to dial the peer again. It incorporates the peer's
 // advertised listen port.
 func (c *PeerConn) dialAddr() PeerRemoteAddr {
-	_log.Printf("peerconn dialAddr\n")
 	if c.outgoing || c.PeerListenPort == 0 {
 		return c.RemoteAddr
 	}
@@ -1347,7 +1322,6 @@ func (pc *PeerConn) remoteDialAddrPort() (netip.AddrPort, error) {
 }
 
 func (pc *PeerConn) bitExtensionEnabled(bit pp.ExtensionBit) bool {
-	_log.Printf("peerconn bitExtensionEnabled\n")
 	return pc.t.cl.config.Extensions.GetBit(bit) && pc.PeerExtensionBytes.GetBit(bit)
 }
 
@@ -1390,7 +1364,6 @@ func (c *PeerConn) addBuiltinLtepProtocols(pex bool) {
 }
 
 func (pc *PeerConn) WriteExtendedMessage(extName pp.ExtensionName, payload []byte) error {
-	_log.Printf("peerconn WriteExtendedMessage\n")
 	pc.locker().Lock()
 	defer pc.locker().Unlock()
 	id := pc.PeerExtensionIDs[extName]
@@ -1652,7 +1625,6 @@ func (cn *PeerConn) cumInterest() time.Duration {
 
 func (cn *PeerConn) supportsExtension(ext pp.ExtensionName) bool {
 	_, ok := cn.PeerExtensionIDs[ext]
-	_log.Printf("peerconn supportsExtension: ext=%s ok=%s\n", ext, ok)
 	return ok
 }
 
@@ -1788,7 +1760,6 @@ func (cn *PeerConn) mustRequest(r RequestIndex) bool {
 }
 
 func (cn *PeerConn) request(r RequestIndex) (more bool, err error) {
-	_log.Printf("peerconn request\n")
 	if err := cn.shouldRequest(r); err != nil {
 		panic(err)
 	}
@@ -1816,7 +1787,6 @@ func (cn *PeerConn) request(r RequestIndex) (more bool, err error) {
 }
 
 func (me *PeerConn) cancel(r RequestIndex) {
-	_log.Printf("peerconn cancel\n")
 	if !me.deleteRequest(r) {
 		panic("request not existing should have been guarded")
 	}
@@ -1839,7 +1809,6 @@ func (cn *PeerConn) onNeedUpdateRequests(reason updateRequestReason) {
 
 // Returns true if it was valid to reject the request.
 func (c *PeerConn) remoteRejectedRequest(r RequestIndex) bool {
-	_log.Printf("peerconn remoteRejectedRequest\n")
 	if c.deleteRequest(r) {
 		c.decPeakRequests()
 	} else if !c.requestState.Cancelled.CheckedRemove(r) {

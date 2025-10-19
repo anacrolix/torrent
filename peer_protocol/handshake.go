@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	_log "log"
 	"math/bits"
 	"strings"
 	"unsafe"
@@ -133,7 +132,6 @@ func Handshake(
 ) (
 	res HandshakeResult, err error,
 ) {
-	_log.Printf("handshake Handshake: extensions=%s\n", extensions)
 	sock = ctxrw.WrapReadWriter(ctx, sock)
 	// Bytes to be sent to the peer. Should never block the sender.
 	postCh := make(chan []byte, 4)

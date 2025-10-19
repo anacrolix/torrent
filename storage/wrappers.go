@@ -28,18 +28,11 @@ func (cl Client) OpenTorrent(
 	if err != nil {
 		return nil, err
 	}
-	return &Torrent{
-		TorrentImpl: &TorrentImpl{
-			Piece: t.Piece,
-			Close: t.Close,
-		},
-	}, nil
+	return &Torrent{t}, nil
 }
 
 type Torrent struct {
-	// TorrentImpl
-	// allow overriding TorrentImpl methods
-	*TorrentImpl
+	TorrentImpl
 }
 
 // Deprecated. Use PieceWithHash, as this doesn't work with pure v2 torrents.

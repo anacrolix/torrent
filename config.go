@@ -108,6 +108,11 @@ type ClientConfig struct {
 	// Chooses the crypto method to use when receiving connections with header obfuscation.
 	CryptoSelector mse.CryptoSelector
 
+	// libtorrent: settings_pack::anonymous_mode
+	// Dont send the client version to peers in the extension handshake.
+	// Use a generic user-agent for HTTP requests.
+	AnonymousMode bool
+
 	IPBlocklist      iplist.Ranger
 	DisableIPv6      bool `long:"disable-ipv6"`
 	DisableIPv4      bool

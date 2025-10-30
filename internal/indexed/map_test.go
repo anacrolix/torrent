@@ -6,8 +6,6 @@ import (
 	"testing"
 	"time"
 
-	g "github.com/anacrolix/generics"
-	"github.com/anacrolix/generics/option"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/torrent/internal/extracmp"
 	"github.com/go-quicktest/qt"
@@ -38,16 +36,22 @@ func TestOverdue(t *testing.T) {
 	a.Init(func(a, b int) int {
 		return cmp.Compare(a, b)
 	})
-	var idx Table2[overdueRecord, int]
-	idx.Init(func(a, b MapRecord[overdueRecord, int]) int {
-		return cmp.Or(overdueRecordIndexCompare(a.Key, b.Key), cmp.Compare(a.Value, b.Value))
-	})
-	a.OnChange(func(old, new g.Option[MapRecord[int, overdueRecord]]) {
-		oldFlipped := option.Map(MapRecord[int, overdueRecord].Flip, old)
-		newFlipped := option.Map(MapRecord[int, overdueRecord].Flip, new)
-		idx.Change(oldFlipped, newFlipped)
-	})
-	qt.Assert(t, qt.CmpEquals(nil, slices.Collect(a.IterFirst())))
+	idx := NewFullMappedIndex(a, func(a, b Pair[overdueRecord, int]) int {
+		return cmp.Or(overdueRecordIndexCompare(a.Left, b.Left), cmp.Compare(a.Right, b.Right))
+	}, Pair[int, overdueRecord].Flip)
+	//var idx Table2[overdueRecord, int]
+	//idx.Init(func(a, b Pair[overdueRecord, int]) int {
+	//	return cmp.Or(overdueRecordIndexCompare(a.Left, b.Left), cmp.Compare(a.Right, b.Right))
+	//})
+	var min Pair[overdueRecord, int]
+	min.Left.overdue = true
+	idx.SetMinRecord(min)
+	//a.OnChange(func(old, new g.Option[Pair[int, overdueRecord]]) {
+	//	oldFlipped := option.Map(Pair[int, overdueRecord].Flip, old)
+	//	newFlipped := option.Map(Pair[int, overdueRecord].Flip, new)
+	//	idx.Change(oldFlipped, newFlipped)
+	//})
+	qt.Assert(t, qt.CmpEquals(nil, slices.Collect(a.Iter())))
 	rows := []overdueRecord{
 		{overdue: true},
 		{overdue: true, when: time.Now().Add(-time.Minute)},
@@ -61,12 +65,16 @@ func TestOverdue(t *testing.T) {
 	for i, row := range rows {
 		panicif.False(a.Create(i, row))
 	}
-	itered := slices.Collect(a.IterFirst())
+	itered := slices.Collect(MapPairIterLeft(a.Iter()))
 	qt.Assert(t, qt.HasLen(itered, len(rows)))
-	iteredPks := slices.Collect(idx.IterSecond())
+	iteredPks := slices.Collect(MapPairIterRight(idx.Iter()))
 	qt.Assert(t, qt.CmpEquals([]int{0, 5, 1, 2, 6, 3, 4, 7}, iteredPks))
 	var overdue []int
-	for rowid := range idx.IterFirstRangeToSecond(overdueRecord{}, overdueRecord{when: time.Now().Add(1)}) {
+	gte := idx.MinRecord()
+	gte.Left.overdue = false
+	lt := gte
+	lt.Left.when = time.Now().Add(1)
+	for rowid := range MapPairIterRight(IterRange(idx, gte, lt)) {
 		overdue = append(overdue, rowid)
 	}
 	qt.Assert(t, qt.CmpEquals(overdue, []int{6, 3}))
@@ -76,7 +84,7 @@ func TestOverdue(t *testing.T) {
 			return r
 		})
 	}
-	qt.Assert(t, qt.CmpEquals([]int{0, 5, 6, 1, 3, 2, 4, 7}, slices.Collect(idx.IterSecond())))
+	qt.Assert(t, qt.CmpEquals([]int{0, 5, 6, 1, 3, 2, 4, 7}, slices.Collect(MapPairIterRight(idx.Iter()))))
 }
 
 type orderedPrimaryKey[T constraints.Ordered] struct {
@@ -87,11 +95,13 @@ func (me orderedPrimaryKey[T]) Compare(other orderedPrimaryKey[T]) int {
 	return cmp.Compare(me.inner, other.inner)
 }
 
-func TestCreateOrUpdate(t *testing.T) {
+func TestEnsureAndUpdate(t *testing.T) {
 	var a Table[int]
 	a.Init(cmp.Compare[int])
-	a.CreateOrUpdate(1, func(r int) int {
-		panicif.NotEq(r, 0)
+	a.Create(1)
+	a.Update(1, func(r int) int {
+		// Check the record was created with the necessary key values for discovery.
+		panicif.NotEq(r, 1)
 		return r
 	})
 }

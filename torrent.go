@@ -13,6 +13,7 @@ import (
 	"iter"
 	"log/slog"
 	"maps"
+	"math"
 	"math/rand"
 	"net/netip"
 	"net/url"
@@ -216,11 +217,11 @@ type torrentTrackerAnnouncerKey struct {
 
 func (me torrentTrackerAnnouncerKey) Compare(other torrentTrackerAnnouncerKey) int {
 	return cmp.Or(
-		me.ShortInfohash.Compare(me.ShortInfohash),
+		me.ShortInfohash.Compare(other.ShortInfohash),
 		cmp.Compare(me.url, other.url))
 }
 
-// Has the modified scheme for announcer-per-IP protocol and suchforth.
+// Has the modified scheme for announcer-per-IP protocol and such-forth.
 type trackerAnnouncerKey string
 
 type outgoingConnAttemptKey = *PeerInfo
@@ -2013,17 +2014,17 @@ func (t *Torrent) wantPeers() bool {
 // This used to update a chansync/event for wanting peers for the per-Torrent tracker announcers,
 // but now those are client-level and not persistent.
 func (t *Torrent) updateWantPeersEvent() {
-	t.cl.unlockHandlers.deferUpdateTrackerNextAnnounceValues(t)
+	t.deferUpdateRegularTrackerAnnouncing()
 }
 
-func (t *Torrent) updateTrackerNextAnnounceValues() {
+// Regular tracker announcing is dispatched as a single "actor".
+func (t *Torrent) deferUpdateRegularTrackerAnnouncing() {
+	t.cl.unlockHandlers.deferUpdateTorrentRegularTrackerAnnouncing(t)
+}
+
+func (t *Torrent) updateRegularTrackerAnnouncing() {
 	// Note this uses the map that only contains regular tracker URLs.
-	for key := range t.regularTrackerAnnounceState {
-		panicif.Zero(key.url)
-		announcer := t.cl.regularTrackerAnnouncers[key.url]
-		panicif.Nil(announcer)
-		announcer.updateTorrentInput(t)
-	}
+	t.cl.regularTrackerAnnounceDispatcher.updateTorrentInput(t)
 }
 
 // Returns whether the client should make effort to seed the torrent.
@@ -2175,7 +2176,7 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr trackerAnn
 		}
 		t.cl.startTrackerAnnouncer(u, urlStr)
 		t.initRegularTrackerAnnounceState(announcerKey)
-		return regularTrackerAnnouncer{
+		return torrentRegularTrackerAnnouncer{
 			u: u,
 			getAnnounceState: func() announceState {
 				return t.regularTrackerAnnounceState[announcerKey]
@@ -2193,9 +2194,11 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr trackerAnn
 
 // We need a key in regularTrackerAnnounceState to ensure we propagate next announce state values.
 func (t *Torrent) initRegularTrackerAnnounceState(key torrentTrackerAnnouncerKey) {
-	// da faaaaak. Need to zero initialize the state if it doesn't exist.
 	g.MakeMapIfNil(&t.regularTrackerAnnounceState)
+	// da faaaaak. Need to zero initialize the state if it doesn't exist.
 	t.regularTrackerAnnounceState[key] = t.regularTrackerAnnounceState[key]
+	t.cl.regularTrackerAnnounceDispatcher.addKey(key)
+	t.deferUpdateRegularTrackerAnnouncing()
 }
 
 // Adds and starts tracker scrapers for tracker URLs that aren't already
@@ -3775,5 +3778,8 @@ func (p *Torrent) chunkIndexSpec(piece pieceIndex, chunk chunkIndexType) ChunkSp
 }
 
 func (t *Torrent) progressUnitFloat() float64 {
+	if !t.haveInfo() {
+		return math.NaN()
+	}
 	return 1 - float64(t.bytesMissingLocked())/float64(t.info.TotalLength())
 }

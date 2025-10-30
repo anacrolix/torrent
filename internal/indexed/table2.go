@@ -2,45 +2,42 @@ package indexed
 
 import (
 	"iter"
+
+	g "github.com/anacrolix/generics"
 )
 
 type Table2[K, V any] struct {
-	table[MapRecord[K, V]]
+	*Table[Pair[K, V]]
+}
+
+func (me *Table2[K, V]) Init(cmpFunc CompareFunc[Pair[K, V]]) {
+	g.InitNew(&me.Table)
+	me.Table.Init(cmpFunc)
 }
 
 func (me *Table2[K, V]) IterKeysFrom(start K) iter.Seq[K] {
 	return func(yield func(K) bool) {
-		for mr := range me.table.IterFrom(MapRecord[K, V]{Key: start}) {
-			if !yield(mr.Key) {
+		for mr := range me.table.IterFrom(Pair[K, V]{Left: start}) {
+			if !yield(mr.Left) {
 				return
 			}
 		}
 	}
 }
 
-func (me *Table2[K, V]) IterKeyRange(start, end K) iter.Seq2[K, V] {
+func Iter2[K, V any](me tableInterface[Pair[K, V]]) iter.Seq2[K, V] {
 	return func(yield func(K, V) bool) {
-		for r := range me.table.IterRange(MapRecord[K, V]{Key: start}, MapRecord[K, V]{Key: end}) {
-			if !yield(r.Key, r.Value) {
+		for r := range me.Iter() {
+			if !yield(r.Left, r.Right) {
 				return
 			}
 		}
 	}
 }
 
-func (me *Table2[K, V]) Iter() iter.Seq2[K, V] {
-	return func(yield func(K, V) bool) {
-		for r := range me.table.Iter() {
-			if !yield(r.Key, r.Value) {
-				return
-			}
-		}
-	}
-}
-
-func (me *Table2[K, V]) IterFirst() iter.Seq[K] {
+func IterFirst[K, V any](me tableInterface[Pair[K, V]]) iter.Seq[K] {
 	return func(yield func(K) bool) {
-		for first := range me.Iter() {
+		for first := range Iter2(me) {
 			if !yield(first) {
 				return
 			}
@@ -48,9 +45,9 @@ func (me *Table2[K, V]) IterFirst() iter.Seq[K] {
 	}
 }
 
-func (me *Table2[K, V]) IterSecond() iter.Seq[V] {
+func IterSecond[K, V any](me tableInterface[Pair[K, V]]) iter.Seq[V] {
 	return func(yield func(V) bool) {
-		for _, second := range me.Iter() {
+		for _, second := range Iter2(me) {
 			if !yield(second) {
 				return
 			}
@@ -59,16 +56,5 @@ func (me *Table2[K, V]) IterSecond() iter.Seq[V] {
 }
 
 func (me *Table2[K, V]) Create(first K, second V) bool {
-	return me.table.Create(MapRecord[K, V]{first, second})
-}
-
-// Beginnings of an index/map type?
-func (me *Table2[K, V]) IterFirstRangeToSecond(gte, lt K) iter.Seq[V] {
-	return func(yield func(V) bool) {
-		for r := range me.IterRange(MapRecord[K, V]{Key: gte}, MapRecord[K, V]{Key: lt}) {
-			if !yield(r.Value) {
-				return
-			}
-		}
-	}
+	return me.table.Create(Pair[K, V]{first, second})
 }

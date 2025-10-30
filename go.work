@@ -3,4 +3,5 @@ go 1.24.5
 use (
 	.
 	./storage/possum/lib/go
+	/Users/anacrolix/ags/generics
 )

@@ -102,8 +102,8 @@ type Client struct {
 	acceptLimiter map[ipStr]int
 	numHalfOpen   int
 
-	websocketTrackers        websocketTrackers
-	regularTrackerAnnouncers map[trackerAnnouncerKey]*clientTrackerAnnouncer
+	websocketTrackers                websocketTrackers
+	regularTrackerAnnounceDispatcher regularTrackerAnnounceDispatcher
 
 	numWebSeedRequests map[webseedHostKeyHandle]int
 
@@ -228,9 +228,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 }
 
 func (cl *Client) writeRegularTrackerAnnouncerStatus(w io.Writer) {
-	for _, ta := range cl.regularTrackerAnnouncers {
-		ta.writeStatus(w)
-	}
+	cl.regularTrackerAnnounceDispatcher.writeStatus(w)
 }
 
 func (cl *Client) getLoggers() (log.Logger, *slog.Logger) {
@@ -271,6 +269,8 @@ func (cl *Client) announceKey() int32 {
 func (cl *Client) init(cfg *ClientConfig) {
 	cl.config = cfg
 	cl._mu.client = cl
+	cl.initLogger()
+	cl.regularTrackerAnnounceDispatcher.init(cl)
 	cfg.setRateLimiterBursts()
 	g.MakeMap(&cl.dopplegangerAddrs)
 	g.MakeMap(&cl.torrentsByShortHash)
@@ -295,7 +295,6 @@ func (cl *Client) init(cfg *ClientConfig) {
 	g.MakeMap(&cl.numWebSeedRequests)
 
 	go cl.acceptLimitClearer()
-	cl.initLogger()
 	//cl.logger.Levelf(log.Critical, "test after init")
 
 	storageImpl := cfg.DefaultStorage

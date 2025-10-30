@@ -2,10 +2,10 @@ package torrent
 
 import (
 	"fmt"
-	"sync/atomic"
 
 	"github.com/RoaringBitmap/roaring"
 	g "github.com/anacrolix/generics"
+	"github.com/anacrolix/torrent/internal/amortize"
 	requestStrategy "github.com/anacrolix/torrent/internal/request-strategy"
 )
 
@@ -92,22 +92,8 @@ func (t *Torrent) getPieceRequestOrder() *requestStrategy.PieceRequestOrder {
 	return t.cl.pieceRequestOrder[t.clientPieceRequestOrderKey()].pieces
 }
 
-var (
-	herp atomic.Int64
-	derp atomic.Int32
-)
-
-func fuzzbuzz() bool {
-	m := herp.Add(1)
-	shift := derp.Load()
-	if m >= 1<<shift {
-		return derp.CompareAndSwap(shift, shift+1)
-	}
-	return false
-}
-
 func (t *Torrent) checkPendingPiecesMatchesRequestOrder() {
-	if !fuzzbuzz() {
+	if !amortize.Try() {
 		return
 	}
 	short := *t.canonicalShortInfohash()

@@ -5,7 +5,17 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"iter"
 )
+
+func indented(w io.Writer) iter.Seq[statusWriter] {
+	return func(yield func(sw statusWriter) bool) {
+		iw := newIndentWriter(w, "  ")
+		sw := statusWriter{iw}
+		yield(sw)
+		sw.nl()
+	}
+}
 
 type indentWriter struct {
 	indent   string
@@ -13,7 +23,7 @@ type indentWriter struct {
 	indented bool
 }
 
-func newIndentWriter(w io.Writer, indent string) io.Writer {
+func newIndentWriter(w io.Writer, indent string) *indentWriter {
 	ret := &indentWriter{
 		indent: indent,
 	}
@@ -50,7 +60,7 @@ type statusWriter struct {
 	w io.Writer
 }
 
-func (me *statusWriter) Write(b []byte) (n int, err error) {
+func (me statusWriter) Write(b []byte) (n int, err error) {
 	return me.w.Write(b)
 }
 
@@ -68,6 +78,10 @@ func (me *statusWriter) tab() *tableWriter {
 
 func (me *statusWriter) nl() {
 	fmt.Fprintln(me)
+}
+
+func (me *statusWriter) indented() iter.Seq[statusWriter] {
+	return indented(me)
 }
 
 type tableWriter struct {

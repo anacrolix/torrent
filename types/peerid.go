@@ -1,6 +1,7 @@
 package types
 
 import (
+	"encoding/json"
 	"fmt"
 )
 
@@ -19,7 +20,7 @@ func (me PeerID) String() string {
 //}
 
 func (me PeerID) MarshalJSON() ([]byte, error) {
-	return []byte(me.String()), nil
+	return json.Marshal(me.String())
 }
 
 // // Pretty prints the ID as hex, except parts that adhere to the PeerInfo ID

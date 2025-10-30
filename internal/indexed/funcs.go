@@ -8,7 +8,9 @@ import (
 	"github.com/anacrolix/torrent/internal/amortize"
 )
 
-func IterClusteredWhere[R any](t tableInterface[R], gte R, where func(r R) bool) iter.Seq[R] {
+// Iters from a point, assuming that where can only be true consecutively from that point and
+// nowhere else.
+func IterClusteredWhere[R any](t relation[R], gte R, where func(r R) bool) Iter[R] {
 	return func(yield func(R) bool) {
 		var first g.Option[R]
 		for r := range t.IterFrom(gte) {
@@ -26,7 +28,7 @@ func IterClusteredWhere[R any](t tableInterface[R], gte R, where func(r R) bool)
 	}
 }
 
-func checkWhereGotFirst[R any](me tableInterface[R], first g.Option[R], where func(r R) bool) {
+func checkWhereGotFirst[R any](me relation[R], first g.Option[R], where func(r R) bool) {
 	if !amortize.Try() {
 		return
 	}

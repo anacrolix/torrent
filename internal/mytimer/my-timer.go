@@ -34,18 +34,21 @@ func (me *Timer) Init(first TimeValue, f Func) {
 }
 
 func (me *Timer) update(when time.Time) {
+	me.mu.Lock()
+	defer me.mu.Unlock()
+	// Avoid hammering the scheduler with changes. I think this will work, and is probably cheaper
+	// than avoiding our object's lock.
+	if when.Equal(me.when) {
+		return
+	}
 	if !me.t.Stop() {
-		me.mu.Lock()
-		defer me.mu.Unlock()
+		// Timer callback might be active.
 		if !me.when.IsZero() {
+			// Timer callback is running.
 			return
 		}
 	}
 	me.reset(when)
-	//if me.t.Stop() || me.when.IsZero() {
-	//	// We stopped the timer or it wasn't active.
-	//	me.reset(when)
-	//}
 }
 
 func (me *Timer) reset(when time.Time) {

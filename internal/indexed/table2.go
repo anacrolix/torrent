@@ -6,7 +6,7 @@ import (
 	g "github.com/anacrolix/generics"
 )
 
-type Table2[K, V any] struct {
+type Table2[K, V comparable] struct {
 	*Table[Pair[K, V]]
 }
 

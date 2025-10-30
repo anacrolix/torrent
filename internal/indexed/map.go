@@ -9,8 +9,9 @@ import (
 type mapTriggerFunc[K, V any] func(key K, old, new g.Option[V])
 
 // A table where the record has a key and value. Currently maps onto Table2 using Pair, but perhaps
-// requiring the record implements a KeyValue interface would be better.
-type Map[K, V any] struct {
+// requiring the record implements a KeyValue interface would be better. K and V are Record to
+// propagate the comparable requirement for now.
+type Map[K, V Record] struct {
 	Table2[K, V]
 	keyCmp func(a, b K) int
 }

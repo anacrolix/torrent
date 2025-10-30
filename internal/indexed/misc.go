@@ -37,12 +37,12 @@ func (me *Iterator[R]) Value() R {
 }
 
 // A full index that doesn't require mapping records.
-func NewFullIndex[R any](from tableInterface[R], cmpFunc CompareFunc[R]) (index Index[R]) {
+func NewFullIndex[R comparable](from tableInterface[R], cmpFunc CompareFunc[R]) (index Index[R]) {
 	return NewFullMappedIndex(from, cmpFunc, func(r R) R { return r })
 }
 
 // An index on a mapped form of the upstream data. What about cross-table and partial indexes?
-func NewFullMappedIndex[F, T any](
+func NewFullMappedIndex[F, T comparable](
 	from tableInterface[F],
 	cmpFunc CompareFunc[T],
 	mapFunc func(F) T,

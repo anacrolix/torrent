@@ -1,15 +1,6 @@
 package indexed
 
-type PrimaryKey[T any] interface {
-	comparable
-}
-
-type RecordCmpFunc[R any] func(a, b R) int
-
-type Record[K PrimaryKey[K]] = any
-
-// Optional Record interface for triggering updates on modification. Convenience rather than
-// "forgetting" to include something in an update function or on insertion.
-type OnModified interface {
-	OnModified()
-}
+// Comparable for value-comparison on update function. I think it might be a reasonable requirement.
+// I could add others for the Table2 style, and Map, and allow some global functions to require
+// conforming record types.
+type Record comparable

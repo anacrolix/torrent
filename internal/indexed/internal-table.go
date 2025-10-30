@@ -10,7 +10,7 @@ import (
 	"github.com/anacrolix/torrent/internal/amortize"
 )
 
-type table[R any] struct {
+type table[R Record] struct {
 	minRecord     R
 	set           btree.Set[R]
 	cmp           CompareFunc[R]
@@ -145,6 +145,9 @@ func (me *table[R]) Update(r R, updateFunc func(r R) R) (existed bool) {
 		return false
 	}
 	newRecord := updateFunc(r)
+	if newRecord == r {
+		return
+	}
 	replaced, overwrote := me.set.Upsert(newRecord)
 	panicif.False(overwrote)
 	panicif.NotZero(me.cmp(r, replaced))

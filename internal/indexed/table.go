@@ -1,5 +1,5 @@
 package indexed
 
-type Table[R any] struct {
+type Table[R comparable] struct {
 	table[R]
 }

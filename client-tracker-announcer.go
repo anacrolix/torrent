@@ -55,8 +55,9 @@ type trackerClientsValue struct {
 // value fields.
 func nextAnnounceMinRecord() (gte nextAnnounceRecord) {
 	gte.overdue = true
-	gte.NeedData = true
-	gte.WantPeers = true
+	gte.torrent.Ok = true
+	gte.torrent.Value.NeedData = true
+	gte.torrent.Value.WantPeers = true
 	gte.AnnounceEvent = tracker.Started
 	return
 }
@@ -139,7 +140,7 @@ func (me *regularTrackerAnnounceDispatcher) updateTrackerAnnounceHead(url tracke
 	new := me.getTrackerNextAnnounce(url)
 	if new.Ok {
 		tr := g.OptionFromTuple(me.trackerAnnouncing.Get(url)).Value
-		fmt.Printf("tracker %v has %v announces\n", url, tr)
+		//fmt.Printf("tracker %v has %v announces\n", url, tr)
 		me.trackerAnnounceHead.CreateOrReplace(trackerAnnounceHeadRecord{
 			trackerRequests:    tr,
 			nextAnnounceRecord: new.Unwrap(),
@@ -257,10 +258,10 @@ func (me *regularTrackerAnnounceDispatcher) putNextAnnounceRecordCols(
 		r.overdue,
 		time.Until(r.When),
 		r.infohashActive,
-		r.WantPeers,
-		r.NeedData,
+		r.torrent.Value.WantPeers,
+		r.torrent.Value.NeedData,
 		fmt.Sprintf("%d%%", int(100*t.progressUnitFloat())),
-		r.HasActiveWebseedRequests,
+		r.torrent.Value.HasActiveWebseedRequests,
 		r.AnnounceEvent,
 		regularTrackerScraperStatusLine(t.regularTrackerAnnounceState[r.torrentTrackerAnnouncerKey]),
 	)
@@ -318,9 +319,9 @@ func (me *regularTrackerAnnounceDispatcher) addKey(key torrentTrackerAnnouncerKe
 		return
 	}
 	me.announceData.Create(key, nextAnnounceInput{
-		nextAnnounceTorrentInput: me.makeTorrentInput(me.torrentFromShortInfohash(key.ShortInfohash)),
-		nextAnnounceStateInput:   me.makeAnnounceStateInput(key),
-		infohashActive:           g.OptionFromTuple(me.infohashAnnouncing.Get(key.ShortInfohash)).Value.count,
+		torrent:                me.makeTorrentInput(me.torrentFromShortInfohash(key.ShortInfohash)),
+		nextAnnounceStateInput: me.makeAnnounceStateInput(key),
+		infohashActive:         g.OptionFromTuple(me.infohashAnnouncing.Get(key.ShortInfohash)).Value.count,
 	})
 	me.updateTimer()
 }
@@ -341,7 +342,7 @@ func (me *regularTrackerAnnounceDispatcher) dispatchAnnounces() {
 		// Check that torrent input synchronization is working. At this point, running in the
 		// dispatcher role, everything should be synced.
 		panicif.NotEq(
-			next.Value.nextAnnounceTorrentInput,
+			next.Value.torrent,
 			me.makeTorrentInput(me.torrentFromShortInfohash(next.Value.ShortInfohash)))
 		if !next.Value.overdue {
 			break
@@ -388,7 +389,7 @@ func (me *regularTrackerAnnounceDispatcher) finishedAnnounce(key torrentTrackerA
 		panicif.False(r.active)
 		r.active = false
 		// Should this be from the updateTorrentInput method?
-		r.nextAnnounceTorrentInput = me.makeTorrentInput(me.torrentFromShortInfohash(key.ShortInfohash))
+		r.torrent = me.makeTorrentInput(me.torrentFromShortInfohash(key.ShortInfohash))
 		return r
 	})
 	me.trackerAnnouncing.Update(key.url, func(i int) int {
@@ -414,7 +415,7 @@ func (me *regularTrackerAnnounceDispatcher) updateTorrentInput(t *Torrent) {
 		exists := me.announceData.Update(
 			key,
 			func(av nextAnnounceInput) nextAnnounceInput {
-				av.nextAnnounceTorrentInput = input
+				av.torrent = input
 				return av
 			},
 		)
@@ -522,12 +523,16 @@ func (me *regularTrackerAnnounceDispatcher) makeAnnounceStateInput(key torrentTr
 	}
 }
 
-func (me *regularTrackerAnnounceDispatcher) makeTorrentInput(t *Torrent) nextAnnounceTorrentInput {
-	return nextAnnounceTorrentInput{
+func (me *regularTrackerAnnounceDispatcher) makeTorrentInput(t *Torrent) (_ g.Option[nextAnnounceTorrentInput]) {
+	// No torrent means the client has lost interest and the dispatcher just does followup actions.
+	if t == nil {
+		return
+	}
+	return g.Some(nextAnnounceTorrentInput{
 		NeedData:                 t.needData(),
 		WantPeers:                t.wantPeers(),
 		HasActiveWebseedRequests: t.hasActiveWebseedRequests(),
-	}
+	})
 }
 
 // Make zero/default unhandled AnnounceEvent sort last.
@@ -569,9 +574,10 @@ func compareNextAnnounce(ar, br nextAnnounceInput) (ret int) {
 		-extracmp.CompareBool(ar.overdue, br.overdue),
 		whenCmp,
 		cmp.Compare(ar.infohashActive, br.infohashActive),
-		-extracmp.CompareBool(ar.WantPeers, br.WantPeers),
-		-extracmp.CompareBool(ar.NeedData, br.NeedData),
-		-extracmp.CompareBool(ar.HasActiveWebseedRequests, br.HasActiveWebseedRequests),
+		-extracmp.CompareBool(ar.torrent.Ok, br.torrent.Ok),
+		-extracmp.CompareBool(ar.torrent.Value.WantPeers, br.torrent.Value.WantPeers),
+		-extracmp.CompareBool(ar.torrent.Value.NeedData, br.torrent.Value.NeedData),
+		-extracmp.CompareBool(ar.torrent.Value.HasActiveWebseedRequests, br.torrent.Value.HasActiveWebseedRequests),
 		cmp.Compare(eventOrdering[ar.AnnounceEvent], eventOrdering[br.AnnounceEvent]),
 	)
 }
@@ -582,7 +588,7 @@ type nextAnnounceRecord struct {
 }
 
 type nextAnnounceInput struct {
-	nextAnnounceTorrentInput
+	torrent g.Option[nextAnnounceTorrentInput]
 	nextAnnounceStateInput
 	infohashActive int
 	overdue        bool

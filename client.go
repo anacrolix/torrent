@@ -1451,7 +1451,8 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 	ihHex := t.InfoHash().HexString()
 	t.logger = cl.logger.WithDefaultLevel(log.Debug).WithNames(ihHex).WithContextText(ihHex)
 	t.name()
-	t._slogger = t.withSlogger(cl.slogger)
+	// Take raw copy for now, use withSlogGroup to add name and IH on demand.
+	t._slogger = cl.slogger
 	if opts.ChunkSize == 0 {
 		opts.ChunkSize = defaultChunkSize
 	}

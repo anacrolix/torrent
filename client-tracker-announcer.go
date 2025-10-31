@@ -376,7 +376,6 @@ func (me *regularTrackerAnnounceDispatcher) startAnnounce(key torrentTrackerAnno
 		r.active = true
 		return r
 	}))
-	fmt.Printf("incrementing %v for %v\n", key.ShortInfohash, key.url)
 	me.alterInfohashConcurrency(key.ShortInfohash, func(existing int) int {
 		return existing + 1
 	})
@@ -398,7 +397,6 @@ func (me *regularTrackerAnnounceDispatcher) alterInfohashConcurrency(ih shortInf
 }
 
 func (me *regularTrackerAnnounceDispatcher) finishedAnnounce(key torrentTrackerAnnouncerKey) {
-	fmt.Printf("decrementing %v for %v\n", key.ShortInfohash, key.url)
 	me.alterInfohashConcurrency(key.ShortInfohash, func(existing int) int { return existing - 1 })
 	me.announceData.Update(key, func(r nextAnnounceInput) nextAnnounceInput {
 		panicif.False(r.active)
@@ -460,12 +458,22 @@ func (me *regularTrackerAnnounceDispatcher) singleAnnouncer(key torrentTrackerAn
 	// A logger that includes the nice torrent group so we know what the announce is for.
 	logger := me.logger.With(
 		t.slogGroup(),
-		"short infohash", ih)
+		"short infohash", ih,
+		"url", key.url,
+	)
 	me.torrentClient.unlock()
 	logger.Debug("announcing", "req", req)
 	resp, err := me.trackerClients[key.url].client.Announce(ctx, req, me.getAnnounceOpts())
 	now := time.Now()
-	logger.Debug("announced", "resp", resp, "err", err)
+	{
+		level := slog.LevelDebug
+		if err != nil && ctx.Err() == nil {
+			level = slog.LevelWarn
+		}
+		// numPeers is (.resp.Peers | length) with jq...
+		logger.Log(context.Background(), level, "announced", "resp", resp, "err", err)
+	}
+
 	me.torrentClient.lock()
 	me.updateAnnounceState(key, t, func(state *announceState) {
 		state.Err = err
@@ -479,16 +487,6 @@ func (me *regularTrackerAnnounceDispatcher) singleAnnouncer(key torrentTrackerAn
 			}
 		}
 	})
-	if err != nil {
-		level := slog.LevelWarn
-		if ctx.Err() != nil {
-			level = slog.LevelDebug
-		}
-		logger.Log(ctx, level, "announce failed", "err", err)
-		return
-	} else {
-		logger.Debug("announce returned", "numPeers", len(resp.Peers))
-	}
 	t.addPeers(peerInfos(nil).AppendFromTracker(resp.Peers))
 }
 

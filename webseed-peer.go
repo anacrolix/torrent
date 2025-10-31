@@ -214,6 +214,11 @@ func (ws *webseedPeer) readChunksErrorLevel(err error, req *webseedRequest) slog
 	if errors.As(err, &ne) && ne.Timeout() {
 		return slog.LevelInfo
 	}
+	if errors.Is(err, webseed.ErrStatusOkForRangeRequest{}) {
+		// This can happen for uncached results, and we get passed directly to origin. We should be
+		// coming back later and then only warning if it happens for a long time.
+		return slog.LevelDebug
+	}
 	// Error if we aren't also using and/or have peers...?
 	return slog.LevelWarn
 }
@@ -332,9 +337,8 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 		if err != nil {
 			// TODO: Pick out missing files or associate error with file. See also
 			// webseed.ReadRequestPartError.
-			var badResponse webseed.ErrBadResponse
-			if errors.As(err, &badResponse) {
-				ws.convict(badResponse, time.Minute)
+			if !wr.cancelled.Load() {
+				ws.convict(err, time.Minute)
 			}
 			ws.peer.locker().Unlock()
 			err = fmt.Errorf("reading chunk: %w", err)

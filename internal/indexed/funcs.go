@@ -56,6 +56,12 @@ func IterRange[R any](me relation[R], gte, lt R) iter.Seq[R] {
 				break
 			}
 		}
-
 	}
+}
+
+func FirstInRange[R any](me relation[R], gte, lt R) (_ g.Option[R]) {
+	for r := range IterRange(me, gte, lt) {
+		return g.Some(r)
+	}
+	return
 }

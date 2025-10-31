@@ -301,17 +301,30 @@ func (me *regularTrackerAnnounceDispatcher) writeStatus(w io.Writer) {
 // the other way to simplify things.
 func (me *regularTrackerAnnounceDispatcher) updateOverdue() {
 	now := time.Now()
-again:
 	var start, end nextAnnounceRecord
 	start.overdue = true
 	start.When = now.Add(1)
 	end.When = now.Add(1)
-	for r := range indexed.IterRange(me.overdueIndex, start, end) {
-		panicif.False(me.announceData.Update(r.torrentTrackerAnnouncerKey, func(value nextAnnounceInput) nextAnnounceInput {
-			value.overdue = time.Until(r.When) <= 0
-			return value
-		}))
-		goto again
+	var last g.Option[torrentTrackerAnnouncerKey]
+again:
+	for {
+		for r := range indexed.FirstInRange(me.overdueIndex, start, end).Iter() {
+			// Check we're making progress.
+			if last.Ok {
+				panicif.Zero(last.Value.Compare(r.torrentTrackerAnnouncerKey))
+			}
+			last.Set(r.torrentTrackerAnnouncerKey)
+			panicif.False(me.announceData.Update(
+				r.torrentTrackerAnnouncerKey,
+				func(value nextAnnounceInput) nextAnnounceInput {
+					// Must use same now as the range, or we can get stuck scanning the same window
+					// wondering and not moving things.
+					value.overdue = now.Sub(r.When) <= 0
+					return value
+				}))
+			continue again
+		}
+		break
 	}
 }
 

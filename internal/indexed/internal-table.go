@@ -135,13 +135,14 @@ func (me *table[R]) CreateOrReplace(r R) {
 
 func (me *table[R]) Iter() iter.Seq[R] {
 	return func(yield func(R) bool) {
-		it := me.set.Iterator()
+		it := me.getBtreeIterator()
 		for it.First(); it.Valid(); it.Next() {
 			r := it.Cur()
 			panicif.LessThan(me.cmp(r, me.minRecord), 0)
 			if !yield(r) {
 				return
 			}
+			me.assertIteratorVersion(it)
 		}
 	}
 }
@@ -223,10 +224,6 @@ func (me *table[R]) GetFirst() (r R, ok bool) {
 		return
 	}
 	return it.Cur(), true
-}
-
-func (me *table[R]) Iterator() Iterator[R] {
-	return Iterator[R]{me.set.Iterator()}
 }
 
 // Not count because that could imply more than O(1) work.

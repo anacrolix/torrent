@@ -1,7 +1,6 @@
 package indexed
 
 import (
-	"github.com/ajwerner/btree"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/generics/option"
 	"github.com/anacrolix/missinggo/v2/panicif"
@@ -26,14 +25,6 @@ func (me Pair[K, V]) Flip() Pair[V, K] {
 
 func pairMapRight[K, V any](me Pair[K, V]) V {
 	return me.Right
-}
-
-type Iterator[R any] struct {
-	inner btree.SetIterator[R]
-}
-
-func (me *Iterator[R]) Value() R {
-	return me.inner.Cur()
 }
 
 // A full index that doesn't require mapping records.

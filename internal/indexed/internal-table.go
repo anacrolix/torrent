@@ -11,8 +11,10 @@ import (
 )
 
 type table[R Record] struct {
-	minRecord     R
-	set           btree.Set[R]
+	minRecord R
+	set       btree.Set[R]
+	// Tracks changes to the btree
+	version       int
 	cmp           CompareFunc[R]
 	indexes       []genericRelation
 	indexTriggers []triggerFunc[R]
@@ -46,15 +48,31 @@ func (me *table[R]) OnChange(t triggerFunc[R]) {
 	me.triggers = append(me.triggers, t)
 }
 
+func (me *table[R]) getBtreeIterator() btreeIterator[R] {
+	return btreeIterator[R]{
+		MapIterator: me.set.Iterator(),
+		version:     me.version,
+	}
+}
+
+func (me *table[R]) incVersion() {
+	me.version++
+}
+
+func (me *table[R]) assertIteratorVersion(it btreeIterator[R]) {
+	panicif.NotEq(me.version, it.version)
+}
+
 func (me *table[R]) IterFrom(start R) iter.Seq[R] {
 	panicif.LessThan(me.cmp(start, me.minRecord), 0)
 	return func(yield func(R) bool) {
-		it := me.set.Iterator()
+		it := me.getBtreeIterator()
 		it.SeekGE(start)
 		for ; it.Valid(); it.Next() {
 			if !yield(it.Cur()) {
 				return
 			}
+			me.assertIteratorVersion(it)
 		}
 	}
 }
@@ -168,6 +186,7 @@ func (me *table[R]) Changed(old, new g.Option[R]) {
 	if !old.Ok && !new.Ok {
 		return
 	}
+	me.incVersion()
 	for _, t := range me.indexTriggers {
 		t(old, new)
 	}

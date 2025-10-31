@@ -106,20 +106,35 @@ func (me *regularTrackerAnnounceDispatcher) init(client *Client) {
 		}
 	})
 	me.infohashAnnouncing.Init(shortInfohash.Compare)
-	me.infohashAnnouncing.OnValueChange(func(key shortInfohash, old, new g.Option[infohashConcurrency]) {
+	me.infohashAnnouncing.OnValueChange(func(shortIh shortInfohash, old, new g.Option[infohashConcurrency]) {
 		start := me.announceData.MinRecord()
-		start.Left.ShortInfohash = key
+		start.Left.ShortInfohash = shortIh
+		keys := make([]torrentTrackerAnnouncerKey, 0, len(me.trackerClients))
+		var expectedCount g.Option[int]
 		for r := range indexed.IterClusteredWhere(
 			me.announceData,
 			start,
 			func(p indexed.Pair[torrentTrackerAnnouncerKey, nextAnnounceInput]) bool {
-				return p.Left.ShortInfohash == key
+				return p.Left.ShortInfohash == shortIh
 			},
 		) {
-			me.announceData.Update(r.Left, func(input nextAnnounceInput) nextAnnounceInput {
-				input.infohashActive = new.Value.count
-				return input
-			})
+			if expectedCount.Ok {
+				panicif.NotEq(r.Right.infohashActive, expectedCount.Value)
+			} else {
+				expectedCount.Set(r.Right.infohashActive)
+			}
+			if r.Right.infohashActive != new.Value.count {
+				keys = append(keys, r.Left)
+			}
+		}
+		for _, key := range keys {
+			panicif.False(me.announceData.Update(
+				key,
+				func(input nextAnnounceInput) nextAnnounceInput {
+					input.infohashActive = new.Value.count
+					return input
+				},
+			))
 		}
 	})
 	me.trackerAnnouncing.Init(cmp.Compare)

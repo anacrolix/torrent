@@ -64,6 +64,11 @@ import (
 
 var errTorrentClosed = errors.New("torrent closed")
 
+type torrentSlogGroupInput struct {
+	name        any
+	canonicalIh shortInfohash
+}
+
 // Maintains state of torrent within a Client. Many methods should not be called before the info is
 // available, see .Info and .GotInfo.
 type Torrent struct {
@@ -72,9 +77,13 @@ type Torrent struct {
 	connStats AllConnStats
 	counters  TorrentStatCounters
 
-	cl       *Client
-	logger   log.Logger
-	_slogger *slog.Logger
+	cl     *Client
+	logger log.Logger
+
+	baseSlogger        *slog.Logger          // Without dynamic group attrs
+	_slogger           *slog.Logger          // With the latest group attrs
+	_slogGroup         slog.Attr             // The slog group for merging into other loggers.
+	lastSlogGroupInput torrentSlogGroupInput // To guard against generating slog.Group
 
 	networkingEnabled      chansync.Flag
 	dataDownloadDisallowed chansync.Flag
@@ -1473,7 +1482,7 @@ type PieceStateChange struct {
 
 func (t *Torrent) deferPublishPieceStateChange(piece pieceIndex) {
 	p := t.piece(piece)
-	t.cl.locker().DeferUniqueUnaryFunc(p, p.publishStateChange)
+	t.cl.unlockHandlers.changedPieceStates[p] = struct{}{}
 }
 
 func (t *Torrent) pieceNumPendingChunks(piece pieceIndex) pp.Integer {
@@ -2811,12 +2820,12 @@ func (t *Torrent) finishHash(index pieceIndex) {
 	default:
 		level = slog.LevelWarn
 	}
+	t.cl.lock()
 	t.slogger().Log(context.Background(), level, "finished hashing piece",
 		"piece", index,
 		"correct", correct,
 		"failedPeers", failedPeers,
 		"err", copyErr)
-	t.cl.lock()
 	if correct {
 		if len(failedPeers) > 0 {
 			for peer := range failedPeers {
@@ -3588,21 +3597,43 @@ func (t *Torrent) Complete() chansync.ReadOnlyFlag {
 	return &t.complete
 }
 
-func (t *Torrent) slogger() *slog.Logger {
-	return t._slogger.With(t.slogGroup())
+func (t *Torrent) processSlogGroupInput(latest torrentSlogGroupInput) {
+	t._slogGroup = slog.Group("torrent",
+		"name", latest.name,
+		"ih", latest.canonicalIh)
+	t._slogger = t.baseSlogger.With(t._slogGroup)
+	t.lastSlogGroupInput = latest
 }
 
-// Returns a group attr describing the Torrent.
-func (t *Torrent) slogGroup() slog.Attr {
+func (t *Torrent) updateSlogGroup() {
+	latest := t.makeSlogGroupInput()
+	if t._slogger == nil || latest != t.lastSlogGroupInput {
+		t.processSlogGroupInput(latest)
+	}
+}
+
+// NB: You may need to be holding client lock to call this now.
+func (t *Torrent) slogger() *slog.Logger {
+	t.updateSlogGroup()
+	return t._slogger
+}
+
+func (t *Torrent) makeSlogGroupInput() torrentSlogGroupInput {
 	var name any
 	opt := t.bestName()
 	if opt.Ok {
 		name = opt.Value
 	}
-	return slog.Group("torrent",
-		"name", name,
-		"ih", *t.canonicalShortInfohash(),
-	)
+	return torrentSlogGroupInput{
+		name:        name,
+		canonicalIh: *t.canonicalShortInfohash(),
+	}
+}
+
+// Returns a group attr describing the Torrent.
+func (t *Torrent) slogGroup() slog.Attr {
+	t.updateSlogGroup()
+	return t._slogGroup
 }
 
 // Get a chunk buffer from the pool. It should be returned when it's no longer in use. Do we

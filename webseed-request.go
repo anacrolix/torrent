@@ -27,13 +27,15 @@ func (me *webseedRequest) Close() {
 }
 
 // Record that it was exceptionally cancelled.
-func (me *webseedRequest) Cancel(cause string) {
+func (me *webseedRequest) Cancel(cause string) bool {
 	me.request.Cancel(stringError(cause))
 	if !me.cancelled.Swap(true) {
 		if webseed.PrintDebug {
 			me.logger.Debug("webseed request cancelled", "cause", cause)
 		}
+		return true
 	}
+	return false
 }
 
 func (me *webseedRequest) String() string {

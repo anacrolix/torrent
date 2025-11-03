@@ -59,7 +59,9 @@ func (me *webseedPeer) cancelAllRequests() {
 	// Is there any point to this? Won't we fail to receive a chunk and cancel anyway? Should we
 	// Close requests instead?
 	for req := range me.activeRequests {
-		req.Cancel("all requests cancelled")
+		if req.Cancel("all requests cancelled") {
+			me.peer.t.deferUpdateRegularTrackerAnnouncing()
+		}
 	}
 }
 
@@ -158,9 +160,10 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex, logger *slog.Logger
 		}
 		ws.peer.t.cl.dumpCurrentWebseedRequests()
 	}
-	ws.activeRequests[&wsReq] = struct{}{}
 	t := ws.peer.t
 	cl := t.cl
+	ws.activeRequests[&wsReq] = struct{}{}
+	t.deferUpdateRegularTrackerAnnouncing()
 	g.MakeMapIfNil(&cl.activeWebseedRequests)
 	g.MapMustAssignNew(cl.activeWebseedRequests, ws.getRequestKey(&wsReq), &wsReq)
 	ws.peer.updateExpectingChunks()
@@ -264,6 +267,9 @@ func (ws *webseedPeer) sliceProcessor(webseedRequest *webseedRequest) {
 
 func (ws *webseedPeer) deleteActiveRequest(wr *webseedRequest) {
 	g.MustDelete(ws.activeRequests, wr)
+	if len(ws.activeRequests) == 0 {
+		ws.peer.t.deferUpdateRegularTrackerAnnouncing()
+	}
 	cl := ws.peer.cl
 	cl.numWebSeedRequests[ws.hostKey]--
 	g.MustDelete(cl.activeWebseedRequests, ws.getRequestKey(wr))

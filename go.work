@@ -2,6 +2,8 @@ go 1.24.5
 
 use (
 	.
+	../btree
+	../generics
+	../log
 	./storage/possum/lib/go
-	/Users/anacrolix/ags/generics
 )

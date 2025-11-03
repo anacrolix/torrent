@@ -311,7 +311,9 @@ again:
 		for r := range indexed.FirstInRange(me.overdueIndex, start, end).Iter() {
 			// Check we're making progress.
 			if last.Ok {
-				panicif.Zero(last.Value.Compare(r.torrentTrackerAnnouncerKey))
+				if last.Value.Compare(r.torrentTrackerAnnouncerKey) == 0 {
+					panic(fmt.Sprintf("last key was %#v, current record is %#v, ", last.Value, r))
+				}
 			}
 			last.Set(r.torrentTrackerAnnouncerKey)
 			panicif.False(me.announceData.Update(
@@ -319,7 +321,7 @@ again:
 				func(value nextAnnounceInput) nextAnnounceInput {
 					// Must use same now as the range, or we can get stuck scanning the same window
 					// wondering and not moving things.
-					value.overdue = now.Sub(r.When) <= 0
+					value.overdue = r.When.Compare(now) <= 0
 					return value
 				}))
 			continue again
@@ -480,8 +482,11 @@ func (me *regularTrackerAnnounceDispatcher) singleAnnouncer(key torrentTrackerAn
 	now := time.Now()
 	{
 		level := slog.LevelDebug
-		if err != nil && ctx.Err() == nil {
-			level = slog.LevelWarn
+		if err != nil {
+			if ctx.Err() == nil {
+				level = slog.LevelWarn
+			}
+			level = analog.SlogErrorLevel(err).UnwrapOr(level)
 		}
 		// numPeers is (.resp.Peers | length) with jq...
 		logger.Log(context.Background(), level, "announced", "resp", resp, "err", err)

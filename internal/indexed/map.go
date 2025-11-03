@@ -25,25 +25,26 @@ func (me *Map[K, V]) Init(cmp func(a, b K) int) {
 
 func (me *Map[K, V]) Update(key K, updateFunc func(V) V) (exists bool) {
 	start := Pair[K, V]{Left: key}
-	var first g.Option[Pair[K, V]]
-	for r := range me.IterFromWhile(start, func(p Pair[K, V]) bool {
-		return me.keyCmp(p.Left, key) == 0
-	}) {
-		panicif.True(first.Ok)
-		first.Set(r)
-	}
-	if !first.Ok {
+	gte := me.GetGte(start)
+	if !gte.Ok {
 		return
 	}
-	// Must finish iterating before doing update.
-	panicif.False(me.Table2.Update(
-		first.Value,
-		func(r Pair[K, V]) Pair[K, V] {
-			r.Right = updateFunc(r.Right)
-			return r
-		},
-	))
-	return true
+	old := gte.Value
+	if me.keyCmp(old.Left, key) != 0 {
+		return
+	}
+	exists = true
+	new := old
+	new.Right = updateFunc(old.Right)
+	if new.Right == old.Right {
+		return
+	}
+	replaced, overwrote := me.set.Upsert(new)
+	panicif.False(overwrote)
+	panicif.NotEq(replaced, old)
+	panicif.NotZero(me.cmp(replaced, old))
+	me.Changed(g.Some(old), g.Some(new))
+	return
 }
 
 func (me *Map[K, V]) Alter(key K, updateFunc func(V, bool) (V, bool)) {

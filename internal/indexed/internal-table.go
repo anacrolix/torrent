@@ -226,6 +226,17 @@ func (me *table[R]) GetFirst() (r R, ok bool) {
 	return it.Cur(), true
 }
 
+// Gets the first record greater than or equal. Hope to avoid allocation for iterator.
+func (me *table[R]) GetGte(r R) (ret g.Option[R]) {
+	// Don't need version checking since we don't iterate.
+	it := me.set.Iterator()
+	it.SeekGE(r)
+	if it.Valid() {
+		ret.Set(it.Cur())
+	}
+	return
+}
+
 // Not count because that could imply more than O(1) work.
 func (me *table[R]) Len() int {
 	return me.set.Len()

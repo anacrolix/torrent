@@ -267,6 +267,7 @@ func (cl *Client) announceKey() int32 {
 
 // Performs infallible parts of Client initialization. *Client and *ClientConfig must not be nil.
 func (cl *Client) init(cfg *ClientConfig) {
+	g.MakeMap(&cl.unlockHandlers.changedPieceStates)
 	cl.config = cfg
 	cl._mu.client = cl
 	cl.initLogger()
@@ -1451,8 +1452,7 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 	ihHex := t.InfoHash().HexString()
 	t.logger = cl.logger.WithDefaultLevel(log.Debug).WithNames(ihHex).WithContextText(ihHex)
 	t.name()
-	// Take raw copy for now, use withSlogGroup to add name and IH on demand.
-	t._slogger = cl.slogger
+	t.baseSlogger = cl.slogger
 	if opts.ChunkSize == 0 {
 		opts.ChunkSize = defaultChunkSize
 	}

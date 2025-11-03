@@ -163,4 +163,3 @@ retract (
 	[v1.29.0, v1.53.2]
 )
 
-replace github.com/ajwerner/btree => ../../src/btree

@@ -151,7 +151,7 @@ type Torrent struct {
 	peers prioritizedPeers
 	// An announcer for each tracker URL. Note this includes non-regular trackers too.
 	trackerAnnouncers           map[torrentTrackerAnnouncerKey]torrentTrackerAnnouncer
-	regularTrackerAnnounceState map[torrentTrackerAnnouncerKey]announceState
+	regularTrackerAnnounceState map[torrentTrackerAnnouncerKey]*announceState
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
 	numDHTAnnounces int
 
@@ -217,6 +217,9 @@ type Torrent struct {
 	initialPieceCheckDisabled bool
 	// See AddTorrentOpts.IgnoreUnverifiedPieceCompletion
 	ignoreUnverifiedPieceCompletion bool
+
+	// Relating to tracker Completed transition event
+	sawInitiallyIncompleteData bool
 }
 
 type torrentTrackerAnnouncerKey struct {
@@ -1102,6 +1105,7 @@ func (t *Torrent) close(wg *sync.WaitGroup) {
 	t.eachShortInfohash(func(short [20]byte) {
 		delete(t.cl.torrentsByShortHash, short)
 	})
+	t.deferUpdateRegularTrackerAnnouncing()
 	t.closedCtxCancel(errTorrentClosed)
 	t.getInfoCtxCancel(errTorrentClosed)
 	for _, f := range t.onClose {
@@ -1782,10 +1786,24 @@ func (t *Torrent) setCachedPieceCompletion(piece int, uncached g.Option[bool]) b
 	cached := p.completion()
 	cachedOpt := g.OptionFromTuple(cached.Complete, cached.Ok)
 	changed := cachedOpt != uncached
+	if !p.storageCompletionHasBeenOk && uncached.Ok && !uncached.Value {
+		t.sawInitiallyIncompleteData = true
+		// TODO: Possibly update other types of trackers too?
+		t.deferUpdateRegularTrackerAnnouncing()
+	}
 	p.storageCompletionOk = uncached.Ok
+	if !p.storageCompletionHasBeenOk {
+		p.storageCompletionHasBeenOk = p.storageCompletionOk
+	}
 	x := uint32(piece)
 	if uncached.Ok && uncached.Value {
-		t._completedPieces.Add(x)
+		if t._completedPieces.CheckedAdd(x) {
+			// This is missing conditions... do we care?
+			if t.haveAllPieces() {
+				// We may be able to send Completed event.
+				t.cl.unlockHandlers.deferUpdateTorrentRegularTrackerAnnouncing(t)
+			}
+		}
 	} else {
 		t._completedPieces.Remove(x)
 	}
@@ -2026,7 +2044,8 @@ func (t *Torrent) updateWantPeersEvent() {
 	t.deferUpdateRegularTrackerAnnouncing()
 }
 
-// Regular tracker announcing is dispatched as a single "actor".
+// Regular tracker announcing is dispatched as a single "actor". Probably needs to incorporate all
+// tracker types at some point.
 func (t *Torrent) deferUpdateRegularTrackerAnnouncing() {
 	t.cl.unlockHandlers.deferUpdateTorrentRegularTrackerAnnouncing(t)
 }
@@ -2188,7 +2207,7 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr trackerAnn
 		return torrentRegularTrackerAnnouncer{
 			u: u,
 			getAnnounceState: func() announceState {
-				return t.regularTrackerAnnounceState[announcerKey]
+				return *t.regularTrackerAnnounceState[announcerKey]
 			},
 		}
 	}()
@@ -2204,9 +2223,8 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr trackerAnn
 // We need a key in regularTrackerAnnounceState to ensure we propagate next announce state values.
 func (t *Torrent) initRegularTrackerAnnounceState(key torrentTrackerAnnouncerKey) {
 	g.MakeMapIfNil(&t.regularTrackerAnnounceState)
-	// da faaaaak. Need to zero initialize the state if it doesn't exist.
-	t.regularTrackerAnnounceState[key] = t.regularTrackerAnnounceState[key]
 	t.cl.regularTrackerAnnounceDispatcher.addKey(key)
+	t.regularTrackerAnnounceState[key] = t.cl.regularTrackerAnnounceDispatcher.announceStates[key]
 	t.deferUpdateRegularTrackerAnnouncing()
 }
 
@@ -3224,14 +3242,16 @@ func (t *Torrent) pieceRequestIndexBegin(piece pieceIndex) RequestIndex {
 
 // Run complete validation when lock is released.
 func (t *Torrent) deferUpdateComplete() {
-	t.cl._mu.DeferUniqueUnaryFunc(t, t.updateComplete)
+	t.cl.unlockHandlers.addUpdateComplete(t)
 }
 
 func (t *Torrent) updateComplete() {
-	// TODO: Announce complete to trackers?
 	t.complete.SetBool(t.isComplete())
 }
 
+// TODO: I don't think having this flick back and forth while hashing is good. I think externally we
+// might want to wait until all hashing has completed, but the completion state shouldn't change
+// until we prove something is incorrect.
 func (t *Torrent) isComplete() bool {
 	if t.activePieceHashes != 0 {
 		return false

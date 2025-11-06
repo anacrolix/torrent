@@ -267,7 +267,7 @@ func (cl *Client) announceKey() int32 {
 
 // Performs infallible parts of Client initialization. *Client and *ClientConfig must not be nil.
 func (cl *Client) init(cfg *ClientConfig) {
-	g.MakeMap(&cl.unlockHandlers.changedPieceStates)
+	cl.unlockHandlers.init()
 	cl.config = cfg
 	cl._mu.client = cl
 	cl.initLogger()

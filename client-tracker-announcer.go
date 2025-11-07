@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/url"
 	"time"
+	"weak"
 
 	g "github.com/anacrolix/generics"
 	analog "github.com/anacrolix/log"
@@ -23,10 +24,16 @@ import (
 // per tracker it would be handled here. Currently, handles only regular trackers but let's see if
 // we can get websocket trackers to use this too.
 type regularTrackerAnnounceDispatcher struct {
+	torrentClient *Client
+	logger        *slog.Logger
+
 	trackerClients map[trackerAnnouncerKey]*trackerClientsValue
 	announceStates map[torrentTrackerAnnouncerKey]*announceState
-	torrentClient  *Client
-	logger         *slog.Logger
+	// Save torrents so we can fetch announce request fields even when the torrent Client has
+	// dropped it. We should just prefer to remember the fields we need. Ideally this would map all
+	// short infohash forms to the same value. We're using weak.Pointer because we need to clean it
+	// up at some point, if this crashes I know to fix it.
+	torrentForAnnounceRequests map[shortInfohash]weak.Pointer[Torrent]
 
 	// Raw announce data keyed by announcer and short infohash.
 	announceData indexed.Map[torrentTrackerAnnouncerKey, nextAnnounceInput]
@@ -316,16 +323,17 @@ again:
 			// Check we're making progress.
 			if last.Ok {
 				if last.Value.Compare(r.torrentTrackerAnnouncerKey) == 0 {
-					panic(fmt.Sprintf("last key was %#v, current record is %#v, ", last.Value, r))
+					panic(fmt.Sprintf("last key was %#v, current record is %#v, current time is %#v", last.Value, r, now))
 				}
 			}
 			last.Set(r.torrentTrackerAnnouncerKey)
 			panicif.False(me.announceData.Update(
 				r.torrentTrackerAnnouncerKey,
 				func(value nextAnnounceInput) nextAnnounceInput {
+					panicif.NotEq(value, r.nextAnnounceInput)
 					// Must use same now as the range, or we can get stuck scanning the same window
 					// wondering and not moving things.
-					value.overdue = r.When.Compare(now) <= 0
+					value.overdue = value.When.Compare(now) <= 0
 					return value
 				}))
 			continue again
@@ -479,7 +487,7 @@ func (me *regularTrackerAnnounceDispatcher) singleAnnouncer(key torrentTrackerAn
 	defer me.torrentClient.unlock()
 	defer me.finishedAnnounce(key)
 	ih := key.ShortInfohash
-	t := me.torrentClient.torrentsByShortHash[ih]
+	t := me.getTorrentForAnnounceRequest(key.ShortInfohash)
 	req := t.announceRequest(event, ih)
 	ctx, cancel := context.WithTimeout(t.closedCtx, tracker.DefaultTrackerAnnounceTimeout)
 	defer cancel()
@@ -800,4 +808,19 @@ func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 	g.MakeMapIfNil(&me.trackerClients)
 	// TODO: Put the urlHost from here.
 	g.MapMustAssignNew(me.trackerClients, urlStr, &value)
+}
+
+func (me *regularTrackerAnnounceDispatcher) getTorrentForAnnounceRequest(ih shortInfohash) *Torrent {
+	t := me.torrentFromShortInfohash(ih)
+	if t == nil {
+		return me.torrentForAnnounceRequests[ih].Value()
+	}
+	// Save the torrent, so we can reuse the same fields if we do a Stopped announce event or are
+	// announcing while a torrent is dropped.
+	g.MakeMapIfNil(&me.torrentForAnnounceRequests)
+	if !g.MapContains(me.torrentForAnnounceRequests, ih) {
+		g.MapMustAssignNew(me.torrentForAnnounceRequests, ih, weak.Make(t))
+	}
+	return t
+
 }

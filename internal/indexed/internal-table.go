@@ -118,7 +118,7 @@ func (me *table[R]) SelectFirstWhere(gte R, where func(r R) bool) (ret g.Option[
 		ret.Set(r)
 		break
 	}
-	me.checkWhereGotFirst(ret, where)
+	checkWhereGotFirst(me, ret, where)
 	return
 }
 
@@ -202,6 +202,7 @@ func (me *table[R]) Change(old, new g.Option[R]) {
 			// updating unordered fields.
 			panicif.False(me.set.Delete(old.Value))
 			_, overwrote := me.set.Upsert(new.Value)
+			// What about deleting only if the upsert doesn't clobber here?
 			panicif.True(overwrote)
 		} else {
 			panicif.False(me.set.Delete(old.Value))

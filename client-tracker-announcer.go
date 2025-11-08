@@ -312,9 +312,10 @@ func (me *regularTrackerAnnounceDispatcher) writeStatus(w io.Writer) {
 // the other way to simplify things.
 func (me *regularTrackerAnnounceDispatcher) updateOverdue() {
 	now := time.Now()
-	var start, end nextAnnounceRecord
-	start.overdue = true
+	start := me.overdueIndex.MinRecord()
 	start.When = now.Add(1)
+	end := me.overdueIndex.MinRecord()
+	end.overdue = false
 	end.When = now.Add(1)
 	var last g.Option[torrentTrackerAnnouncerKey]
 again:
@@ -323,7 +324,17 @@ again:
 			// Check we're making progress.
 			if last.Ok {
 				if last.Value.Compare(r.torrentTrackerAnnouncerKey) == 0 {
-					panic(fmt.Sprintf("last key was %#v, current record is %#v, current time is %#v", last.Value, r, now))
+					panicif.NotEq(
+						r.nextAnnounceInput,
+						g.OptionFromTuple(me.announceData.Get(r.torrentTrackerAnnouncerKey)).Unwrap())
+					me.logger.Log(context.Background(), slog.LevelWarn,
+						"same item seen twice while updating overdue announces",
+						"last", last.Value,
+						"current record", fmt.Sprintf("%#v", r),
+						"now", now,
+						"cmp", r.When.Compare(now),
+						"after", now.After(r.When))
+					break again
 				}
 			}
 			last.Set(r.torrentTrackerAnnouncerKey)
@@ -333,7 +344,9 @@ again:
 					panicif.NotEq(value, r.nextAnnounceInput)
 					// Must use same now as the range, or we can get stuck scanning the same window
 					// wondering and not moving things.
+					oldOverdue := value.overdue
 					value.overdue = value.When.Compare(now) <= 0
+					panicif.Eq(value.overdue, oldOverdue)
 					return value
 				}))
 			continue again
@@ -389,7 +402,6 @@ func (me *regularTrackerAnnounceDispatcher) dispatchAnnounces() {
 			break
 		}
 		t := me.torrentFromShortInfohash(next.Value.ShortInfohash)
-		panicif.NotEq(t == nil, next.Value.When.IsZero())
 		// Check that torrent input synchronization is working. At this point, running in the
 		// dispatcher role, everything should be synced.
 		panicif.NotEq(next.Value.torrent, me.makeTorrentInput(t))
@@ -566,7 +578,7 @@ func (me *regularTrackerAnnounceDispatcher) getNextAnnounce() (_ g.Option[nextAn
 }
 
 func (me *regularTrackerAnnounceDispatcher) makeAnnounceStateInput(key torrentTrackerAnnouncerKey) nextAnnounceStateInput {
-	panicif.Nil(me.torrentClient)
+	panicif.Zero(me.torrentClient)
 	state := me.announceStates[key]
 	event, when := me.nextAnnounceEvent(key)
 	return nextAnnounceStateInput{
@@ -616,22 +628,33 @@ func compareOverdue(a, b nextAnnounceInput) int {
 func compareNextAnnounce(ar, br nextAnnounceInput) (ret int) {
 	// What about pushing back based on last announce failure? Some infohashes aren't liked by
 	// trackers.
-	whenCmp := 0
-	// All overdue announces should have the same When. Maybe this can be pushed way back to the end
-	// if we have another index for it.
-	if !ar.overdue {
-		whenCmp = ar.When.Compare(br.When)
-	}
-	return cmp.Or(
+
+	ret = cmp.Or(
 		extracmp.CompareBool(ar.active, br.active),
 		-extracmp.CompareBool(ar.overdue, br.overdue),
-		whenCmp,
+	)
+	if ret != 0 {
+		return
+	}
+	panicif.NotEq(ar.overdue, br.overdue)
+	overdue := ar.overdue
+	whenCmp := ar.When.Compare(br.When)
+	if !overdue {
+		ret = whenCmp
+		if ret != 0 {
+			return
+		}
+	}
+	return cmp.Or(
 		cmp.Compare(ar.infohashActive, br.infohashActive),
 		-extracmp.CompareBool(ar.torrent.Ok, br.torrent.Ok),
 		-extracmp.CompareBool(ar.torrent.Value.WantPeers, br.torrent.Value.WantPeers),
 		-extracmp.CompareBool(ar.torrent.Value.NeedData, br.torrent.Value.NeedData),
-		-extracmp.CompareBool(ar.torrent.Value.HasActiveWebseedRequests, br.torrent.Value.HasActiveWebseedRequests),
+		extracmp.CompareBool(ar.torrent.Value.HasActiveWebseedRequests, br.torrent.Value.HasActiveWebseedRequests),
 		cmp.Compare(eventOrdering[ar.AnnounceEvent], eventOrdering[br.AnnounceEvent]),
+		// Sort on when again, to order amongst announces with the same priorities. Not sure if we
+		// want this. Might be masking or fixing a bug in overdue handling.
+		whenCmp,
 	)
 }
 

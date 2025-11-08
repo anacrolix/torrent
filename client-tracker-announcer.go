@@ -3,6 +3,7 @@ package torrent
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -429,7 +430,7 @@ func (me *regularTrackerAnnounceDispatcher) startAnnounce(key torrentTrackerAnno
 		return i + 1
 	})
 	me.updateTrackerAnnounceHead(key.url)
-	go me.singleAnnouncer(key, next.AnnounceEvent)
+	go me.singleAnnounceAttempter(key, next.AnnounceEvent)
 }
 
 func (me *regularTrackerAnnounceDispatcher) alterInfohashConcurrency(ih shortInfohash, update func(existing int) int) {
@@ -494,22 +495,40 @@ func (me *regularTrackerAnnounceDispatcher) updateTimer() {
 	me.timer.Update(me.nextTimerDelay())
 }
 
-func (me *regularTrackerAnnounceDispatcher) singleAnnouncer(key torrentTrackerAnnouncerKey, event tracker.AnnounceEvent) {
+func (me *regularTrackerAnnounceDispatcher) singleAnnounceAttempter(key torrentTrackerAnnouncerKey, event tracker.AnnounceEvent) {
 	me.torrentClient.lock()
 	defer me.torrentClient.unlock()
 	defer me.finishedAnnounce(key)
 	ih := key.ShortInfohash
-	t := me.getTorrentForAnnounceRequest(key.ShortInfohash)
-	req := t.announceRequest(event, ih)
-	ctx, cancel := context.WithTimeout(t.closedCtx, tracker.DefaultTrackerAnnounceTimeout)
-	defer cancel()
-	// A logger that includes the nice torrent group so we know what the announce is for.
 	logger := me.logger.With(
-		t.slogGroup(),
 		"short infohash", ih,
 		"url", key.url,
 	)
+	t := me.getTorrentForAnnounceRequest(key.ShortInfohash)
+	if t == nil {
+		logger.Debug("skipping announce for GCed torrent")
+		me.updateAnnounceState(key, func(state *announceState) {
+			state.Err = errors.New("announce skipped: Torrent GCed")
+			state.lastAttemptCompleted = time.Now()
+		})
+	} else {
+		me.singleAnnounce(key, event, logger, t)
+	}
+}
+
+// Actually do an announce. We know *Torrent is accessible.
+func (me *regularTrackerAnnounceDispatcher) singleAnnounce(
+	key torrentTrackerAnnouncerKey,
+	event tracker.AnnounceEvent,
+	logger *slog.Logger,
+	t *Torrent,
+) {
+	// A logger that includes the nice torrent group so we know what the announce is for.
+	logger = me.logger.With(t.slogGroup())
+	req := t.announceRequest(event, key.ShortInfohash)
 	me.torrentClient.unlock()
+	ctx, cancel := context.WithTimeout(context.TODO(), tracker.DefaultTrackerAnnounceTimeout)
+	defer cancel()
 	logger.Debug("announcing", "req", req)
 	resp, err := me.trackerClients[key.url].client.Announce(ctx, req, me.getAnnounceOpts())
 	now := time.Now()
@@ -590,7 +609,9 @@ func (me *regularTrackerAnnounceDispatcher) makeAnnounceStateInput(key torrentTr
 
 func (me *regularTrackerAnnounceDispatcher) makeTorrentInput(t *Torrent) (_ g.Option[nextAnnounceTorrentInput]) {
 	// No torrent means the client has lost interest and the dispatcher just does followup actions.
-	if t == nil {
+	// If we drop a torrent, we still end up here but with a torrent that should result in None, so
+	// check for that.
+	if t == nil || !g.MapContains(me.torrentClient.torrents, t) {
 		return
 	}
 	return g.Some(nextAnnounceTorrentInput{
@@ -836,7 +857,7 @@ func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 func (me *regularTrackerAnnounceDispatcher) getTorrentForAnnounceRequest(ih shortInfohash) *Torrent {
 	t := me.torrentFromShortInfohash(ih)
 	if t == nil {
-		return me.torrentForAnnounceRequests[ih].Value()
+		return g.MapMustGet(me.torrentForAnnounceRequests, ih).Value()
 	}
 	// Save the torrent, so we can reuse the same fields if we do a Stopped announce event or are
 	// announcing while a torrent is dropped.

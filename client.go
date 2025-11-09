@@ -1444,6 +1444,14 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 	}
 	t.setChunkSize(opts.ChunkSize)
 	cl.torrents[t] = struct{}{}
+	// Load persisted session state (peers) and register saver on close.
+	if peers := t.loadPersistedPeers(); len(peers) != 0 {
+		// We're under the Client lock here; call the unlocked variant to avoid deadlock.
+		_ = t.addPeers(peers)
+	}
+	t.onClose = append(t.onClose, func() {
+		t.saveSessionState()
+	})
 	return
 }
 

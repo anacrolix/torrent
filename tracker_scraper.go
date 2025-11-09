@@ -228,13 +228,24 @@ func (me *trackerScraper) Run() {
 	// make sure first announce is a "started"
 	e := tracker.Started
 
+	// If we have a persisted last announce, start by waiting out its interval before announcing.
+	first := true
+
 	for {
-		ar := me.announce(me.t.closedCtx, e)
-		// after first announce, get back to regular "none"
-		e = tracker.None
-		me.t.cl.lock()
-		me.lastAnnounce = ar
-		me.t.cl.unlock()
+		var ar trackerAnnounceResult
+		if first && !me.lastAnnounce.Completed.IsZero() {
+			ar = me.lastAnnounce
+		} else {
+			ar = me.announce(me.t.closedCtx, e)
+			// after first announce, get back to regular "none"
+			e = tracker.None
+			me.t.cl.lock()
+			me.lastAnnounce = ar
+			me.t.cl.unlock()
+			// Persist announce state for this tracker best-effort.
+			me.t.persistTrackerState(me.u.String(), ar)
+		}
+		first = false
 
 	recalculate:
 		// Make sure we don't announce for at least a minute since the last one.

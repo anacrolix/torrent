@@ -1231,8 +1231,8 @@ func (t *Torrent) countBytesHashed(n int64) {
 
 func (t *Torrent) hashPiece(piece pieceIndex) (
 	correct bool,
-// These are peers that sent us blocks that differ from what we hash here. TODO: Track Peer not
-// bannable addr for peer types that are rebuked differently.
+	// These are peers that sent us blocks that differ from what we hash here. TODO: Track Peer not
+	// bannable addr for peer types that are rebuked differently.
 	differingPeers map[bannableAddr]struct{},
 	err error,
 ) {
@@ -1306,7 +1306,7 @@ func sumExactly(dst []byte, sum func(b []byte) []byte) {
 }
 
 func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash) (
-// These are peers that sent us blocks that differ from what we hash here.
+	// These are peers that sent us blocks that differ from what we hash here.
 	differingPeers map[bannableAddr]struct{},
 	err error,
 ) {
@@ -1350,8 +1350,8 @@ func (t *Torrent) havePiece(index pieceIndex) bool {
 }
 
 func (t *Torrent) maybeDropMutuallyCompletePeer(
-// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's
-// okay?
+	// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's
+	// okay?
 	p *PeerConn,
 ) {
 	if !t.cl.config.DropMutuallyCompletePeers {
@@ -2163,6 +2163,10 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr string, sh
 			lookupTrackerIp: t.cl.config.LookupTrackerIp,
 			stopCh:          make(chan struct{}),
 			logger:          t.slogger().With("name", "tracker", "urlKey", u.String()),
+		}
+		// Initialize lastAnnounce from persisted session state, if any, so we respect tracker backoff.
+		if ar, ok := t.loadPersistedTrackerAnnounce(u.String()); ok {
+			newAnnouncer.lastAnnounce = ar
 		}
 		go newAnnouncer.Run()
 		return newAnnouncer

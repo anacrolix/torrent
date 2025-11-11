@@ -375,6 +375,9 @@ func (me *regularTrackerAnnounceDispatcher) addKey(key torrentTrackerAnnouncerKe
 		return
 	}
 	t := me.torrentFromShortInfohash(key.ShortInfohash)
+	g.MakeMapIfNil(&me.torrentForAnnounceRequests)
+	// This can be duplicated when there's multiple trackers for a short infohash. That's fine.
+	me.torrentForAnnounceRequests[key.ShortInfohash] = weak.Make(t)
 	if !g.MapContains(me.announceStates, key) {
 		g.MakeMapIfNil(&me.announceStates)
 		g.MapMustAssignNew(me.announceStates, key, g.PtrTo(announceState{}))
@@ -851,17 +854,8 @@ func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 	g.MapMustAssignNew(me.trackerClients, urlStr, &value)
 }
 
+// Returns nil if the Torrent has been GCd. Use this lazily as a way to stop caring about announcing
+// something, if we don't get to sending Completed or error in time.
 func (me *regularTrackerAnnounceDispatcher) getTorrentForAnnounceRequest(ih shortInfohash) *Torrent {
-	t := me.torrentFromShortInfohash(ih)
-	if t == nil {
-		return g.MapMustGet(me.torrentForAnnounceRequests, ih).Value()
-	}
-	// Save the torrent, so we can reuse the same fields if we do a Stopped announce event or are
-	// announcing while a torrent is dropped.
-	g.MakeMapIfNil(&me.torrentForAnnounceRequests)
-	if !g.MapContains(me.torrentForAnnounceRequests, ih) {
-		g.MapMustAssignNew(me.torrentForAnnounceRequests, ih, weak.Make(t))
-	}
-	return t
-
+	return g.MapMustGet(me.torrentForAnnounceRequests, ih).Value()
 }

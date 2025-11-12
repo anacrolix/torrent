@@ -84,7 +84,8 @@ func (er expectReader) UnreadLength() int64 {
 	return er.dr.UnreadLength()
 }
 
-// io.EOF is returned if the source terminates cleanly on a message boundary.
+// io.EOF is returned if the source terminates cleanly on a message boundary. TODO: Raise error
+// level for protocol errors, log them, or add an error type.
 func (d *Decoder) Decode(msg *Message) (err error) {
 	var dr decodeReader
 	{

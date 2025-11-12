@@ -238,7 +238,9 @@ func (cl *Client) getLoggers() (log.Logger, *slog.Logger) {
 	}
 	// Point logger to slogger.
 	if logger.IsZero() {
-		logger = log.NewLogger()
+		// I see "warning - 1" become info by the time it reaches an Erigon/geth logger. I think
+		// we've lost the old default of debug somewhere along the way.
+		logger = log.NewLogger().WithDefaultLevel(log.Debug)
 		logger.SetHandlers(log.SlogHandlerAsHandler{slogger.Handler()})
 	}
 	// The unhandled case is that both logger and slogger are set. In this case, use them as normal.

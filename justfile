@@ -1,3 +1,5 @@
+export CGO_LDFLAGS := '-Lstorage/possum/lib/target/debug'
+
 check:
     go test -run @ -failfast ./... > /dev/null
 

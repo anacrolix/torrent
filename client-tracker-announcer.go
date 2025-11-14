@@ -51,7 +51,7 @@ type regularTrackerAnnounceDispatcher struct {
 }
 
 type trackerAnnounceHeadRecord struct {
-	trackerRequests int
+	trackerRequests int // Count of active concurrent requests to a given tracker.
 	nextAnnounceRecord
 }
 
@@ -62,12 +62,17 @@ type trackerClientsValue struct {
 
 // According to compareNextAnnounce, which is universal, and we only need to handle the non-zero
 // value fields.
-func nextAnnounceMinRecord() (gte nextAnnounceRecord) {
-	gte.overdue = true
-	gte.torrent.Ok = true
-	gte.torrent.Value.NeedData = true
-	gte.torrent.Value.WantPeers = true
-	gte.AnnounceEvent = tracker.Started
+func nextAnnounceMinRecord() (ret nextAnnounceRecord) {
+	ret.nextAnnounceInput = nextAnnounceInputMin()
+	return
+}
+
+func nextAnnounceInputMin() (ret nextAnnounceInput) {
+	ret.overdue = true
+	ret.torrent.Ok = true
+	ret.torrent.Value.NeedData = true
+	ret.torrent.Value.WantPeers = true
+	ret.AnnounceEvent = tracker.Started
 	return
 }
 
@@ -75,6 +80,7 @@ func (me *regularTrackerAnnounceDispatcher) init(client *Client) {
 	me.torrentClient = client
 	me.logger = client.slogger
 	me.announceData.Init(torrentTrackerAnnouncerKey.Compare)
+	me.announceData.SetMinRecord(torrentTrackerAnnouncerKey{})
 	me.announceData.OnChange(func(old, new g.Option[indexed.Pair[torrentTrackerAnnouncerKey, nextAnnounceInput]]) {
 		if !new.Ok {
 			return
@@ -83,13 +89,21 @@ func (me *regularTrackerAnnounceDispatcher) init(client *Client) {
 			new.Value.Right.infohashActive,
 			g.OptionFromTuple(me.infohashAnnouncing.Get(new.Value.Left.ShortInfohash)).Value.count)
 	})
-	me.announceIndex = indexed.NewFullMappedIndex(&me.announceData, announceIndexCompare, nextAnnounceRecordFromPair)
-	me.announceIndex.SetMinRecord(nextAnnounceMinRecord())
-	me.overdueIndex = indexed.NewFullMappedIndex(&me.announceData, overdueIndexCompare, nextAnnounceRecordFromPair)
-	me.overdueIndex.SetMinRecord(func() (ret nextAnnounceRecord) {
-		ret.overdue = true
-		return
-	}())
+	me.announceIndex = indexed.NewFullMappedIndex(
+		&me.announceData,
+		announceIndexCompare,
+		nextAnnounceRecordFromPair,
+		nextAnnounceMinRecord(),
+	)
+	me.overdueIndex = indexed.NewFullMappedIndex(
+		&me.announceData,
+		overdueIndexCompare,
+		nextAnnounceRecordFromPair,
+		func() (ret nextAnnounceRecord) {
+			ret.overdue = true
+			return
+		}(),
+	)
 	me.trackerAnnounceHead.Init(func(a, b trackerAnnounceHeadRecord) int {
 		return cmp.Compare(a.url, b.url)
 	})
@@ -102,6 +116,10 @@ func (me *regularTrackerAnnounceDispatcher) init(client *Client) {
 				a.torrentTrackerAnnouncerKey.Compare(b.torrentTrackerAnnouncerKey),
 			)
 		},
+		func() (ret trackerAnnounceHeadRecord) {
+			ret.nextAnnounceInput = nextAnnounceInputMin()
+			return
+		}(),
 	)
 	// After announce index changes (we need the ordering), update the next announce for each
 	// tracker url.

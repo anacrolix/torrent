@@ -100,3 +100,8 @@ func (me *Map[K, V]) OnValueChange(do mapTriggerFunc[K, V]) {
 		do(key, option.Map(pairMapRight, old), option.Map(pairMapRight, new))
 	})
 }
+
+// Maps don't compare on the value, so we can leave them as zeroes.
+func (me *Map[K, V]) SetMinRecord(min K) {
+	me.table.SetMinRecord(Pair[K, V]{Left: min})
+}

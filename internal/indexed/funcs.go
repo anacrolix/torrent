@@ -67,9 +67,10 @@ func IterRange[R any](me relation[R], gte, lt R) iter.Seq[R] {
 	}
 }
 
-func FirstInRange[R any](me relation[R], gte, lt R) (_ g.Option[R]) {
-	for r := range IterRange(me, gte, lt) {
-		return g.Some(r)
+func FirstInRange[R any](me relation[R], gte, lt R) (ret g.Option[R]) {
+	ret = me.GetGte(gte)
+	if ret.Ok && me.GetCmp()(ret.Value, lt) >= 0 {
+		ret.SetNone()
 	}
 	return
 }

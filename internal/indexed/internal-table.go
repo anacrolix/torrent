@@ -11,7 +11,7 @@ import (
 )
 
 type table[R Record] struct {
-	minRecord R
+	minRecord g.Option[R]
 	set       btree.Set[R]
 	// Tracks changes to the btree
 	version       int
@@ -27,8 +27,8 @@ func (me *table[R]) GetCmp() CompareFunc[R] {
 }
 
 func (me *table[R]) SetMinRecord(min R) {
-	panicif.GreaterThan(me.cmp(min, me.minRecord), 0)
-	me.minRecord = min
+	panicif.GreaterThan(me.cmp(min, me.minRecord.Value), 0)
+	me.minRecord.Set(min)
 }
 
 func (me *table[R]) Init(cmp func(a, b R) int) {
@@ -64,7 +64,9 @@ func (me *table[R]) assertIteratorVersion(it btreeIterator[R]) {
 }
 
 func (me *table[R]) IterFrom(start R) iter.Seq[R] {
-	panicif.LessThan(me.cmp(start, me.minRecord), 0)
+	if me.minRecord.Ok {
+		panicif.LessThan(me.cmp(start, me.minRecord.Value), 0)
+	}
 	return func(yield func(R) bool) {
 		it := me.getBtreeIterator()
 		it.SeekGE(start)
@@ -138,7 +140,9 @@ func (me *table[R]) Iter() iter.Seq[R] {
 		it := me.getBtreeIterator()
 		for it.First(); it.Valid(); it.Next() {
 			r := it.Cur()
-			panicif.LessThan(me.cmp(r, me.minRecord), 0)
+			if me.minRecord.Ok && amortize.Try() {
+				panicif.LessThan(me.cmp(r, me.minRecord.Value), 0)
+			}
 			if !yield(r) {
 				return
 			}
@@ -221,10 +225,13 @@ func (me *table[R]) Change(old, new g.Option[R]) {
 func (me *table[R]) GetFirst() (r R, ok bool) {
 	it := me.set.Iterator()
 	it.First()
-	if !it.Valid() {
-		return
+	if it.Valid() {
+		r, ok = it.Cur(), true
 	}
-	return it.Cur(), true
+	if amortize.Try() {
+		panicif.NotEq(g.OptionFromTuple(r, ok), me.GetGte(me.MinRecord()))
+	}
+	return
 }
 
 // Gets the first record greater than or equal. Hope to avoid allocation for iterator.
@@ -243,9 +250,12 @@ func (me *table[R]) Len() int {
 	return me.set.Len()
 }
 
-// Returns an empty record of type R. Convenient to avoid having to look up complex types for small
-// expressions. Could be a global function. Should definitely be if this is invoked through an
-// interface.
+// Returns the minimal record of type R, which may not be the same as the zero value for the record.
+// Convenient to avoid having to look up complex types for small expressions. Could be a global
+// function. Should definitely be if this is invoked through an interface. Panics if the min record
+// wasn't set. The concept of MinRecord might be flawed if there are conditions in the ordering of
+// values in a record. In that case the user may have to modify "intermediate" fields in order to
+// set a GTE record that's appropriate midway in the table.
 func (me *table[R]) MinRecord() (_ R) {
-	return me.minRecord
+	return me.minRecord.Unwrap()
 }

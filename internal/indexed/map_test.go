@@ -36,21 +36,17 @@ func TestOverdue(t *testing.T) {
 	a.Init(func(a, b int) int {
 		return cmp.Compare(a, b)
 	})
-	idx := NewFullMappedIndex(a, func(a, b Pair[overdueRecord, int]) int {
-		return cmp.Or(overdueRecordIndexCompare(a.Left, b.Left), cmp.Compare(a.Right, b.Right))
-	}, Pair[int, overdueRecord].Flip)
-	//var idx Table2[overdueRecord, int]
-	//idx.Init(func(a, b Pair[overdueRecord, int]) int {
-	//	return cmp.Or(overdueRecordIndexCompare(a.Left, b.Left), cmp.Compare(a.Right, b.Right))
-	//})
-	var min Pair[overdueRecord, int]
-	min.Left.overdue = true
-	idx.SetMinRecord(min)
-	//a.OnChange(func(old, new g.Option[Pair[int, overdueRecord]]) {
-	//	oldFlipped := option.Map(Pair[int, overdueRecord].Flip, old)
-	//	newFlipped := option.Map(Pair[int, overdueRecord].Flip, new)
-	//	idx.Change(oldFlipped, newFlipped)
-	//})
+	idx := NewFullMappedIndex(
+		&a,
+		func(a, b Pair[overdueRecord, int]) int {
+			return cmp.Or(overdueRecordIndexCompare(a.Left, b.Left), cmp.Compare(a.Right, b.Right))
+		},
+		Pair[int, overdueRecord].Flip,
+		func() (ret Pair[overdueRecord, int]) {
+			ret.Left.overdue = true
+			return
+		}(),
+	)
 	qt.Assert(t, qt.CmpEquals(nil, slices.Collect(a.Iter())))
 	rows := []overdueRecord{
 		{overdue: true},

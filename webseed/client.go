@@ -166,6 +166,12 @@ func (ws *Client) requestPartResponsesReader(ctx context.Context, w *io.PipeWrit
 	panicif.Err(w.CloseWithError(err))
 }
 
+type ErrStatusOkForRangeRequest struct{}
+
+func (ErrStatusOkForRangeRequest) Error() string {
+	return "resp status ok but requested range"
+}
+
 type ErrBadResponse struct {
 	Msg      string
 	Response *http.Response
@@ -225,20 +231,17 @@ func (me *Client) recvPartResult(ctx context.Context, w io.Writer, part requestP
 		return nil
 	case http.StatusOK:
 		// The response is from the beginning of the file.
-		me.checkContentLength(resp, part, part.fileRange.End())
+		me.checkContentLength(resp, part, part.fileLength)
 		discard := part.fileRange.Start
 		if discard != 0 {
-			if PrintDebug {
-				fmt.Printf("resp status ok but requested range [url=%q, range=%q]",
-					part.req.URL,
-					part.req.Header.Get("Range"))
-			}
-			me.Logger.Info("resp status ok but requested range",
+			me.Logger.Debug("resp status ok but requested range",
 				"url", part.req.URL.String(),
 				"range", part.req.Header.Get("Range"))
 		}
 		if discard > MaxDiscardBytes {
-			return ErrBadResponse{"resp status ok but requested range", resp}
+			// TODO: So I think this can happen if the webseed host is caching and needs to pull
+			// from the origin. If you try again later it will probably work.
+			return ErrStatusOkForRangeRequest{}
 		}
 		// Instead of discarding, we could try receiving all the chunks present in the response
 		// body. I don't know how one would handle multiple chunk requests resulting in an OK

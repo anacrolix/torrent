@@ -1,6 +1,7 @@
 package infohash
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding"
@@ -14,6 +15,10 @@ const Size = 20
 type T [Size]byte
 
 var _ fmt.Formatter = (*T)(nil)
+
+func (l T) Compare(r T) int {
+	return bytes.Compare(l.Bytes(), r.Bytes())
+}
 
 func (t T) Format(f fmt.State, c rune) {
 	// TODO: I can't figure out a nice way to just override the 'x' rune, since it's meaningless

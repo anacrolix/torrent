@@ -34,6 +34,7 @@ import (
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
+	"github.com/anacrolix/torrent/internal/extracmp"
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/webtorrent"
 	"github.com/cespare/xxhash"
@@ -63,7 +64,8 @@ type Client struct {
 	connStats AllConnStats
 	counters  TorrentStatCounters
 
-	_mu lockWithDeferreds
+	_mu            lockWithDeferreds
+	unlockHandlers clientUnlockHandlers
 	// Used in constrained situations when the lock is held.
 	roaringIntIterator roaring.IntIterator
 	event              sync.Cond
@@ -100,7 +102,9 @@ type Client struct {
 	acceptLimiter map[ipStr]int
 	numHalfOpen   int
 
-	websocketTrackers  websocketTrackers
+	websocketTrackers                websocketTrackers
+	regularTrackerAnnounceDispatcher regularTrackerAnnounceDispatcher
+
 	numWebSeedRequests map[webseedHostKeyHandle]int
 
 	activeAnnounceLimiter limiter.Instance
@@ -188,7 +192,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	fmt.Fprintln(w)
 	slices.SortFunc(torrentsSlice, func(a, b *Torrent) int {
 		return cmp.Or(
-			compareBool(a.haveInfo(), b.haveInfo()),
+			extracmp.CompareBool(a.haveInfo(), b.haveInfo()),
 			func() int {
 				if a.haveInfo() && b.haveInfo() {
 					return -cmp.Compare(a.bytesLeft(), b.bytesLeft())
@@ -210,7 +214,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 			fmt.Fprintf(
 				w,
 				"%f%% of %d bytes (%s)",
-				100*(1-float64(t.bytesMissingLocked())/float64(t.info.TotalLength())),
+				100*t.progressUnitFloat(),
 				t.length(),
 				humanize.Bytes(uint64(t.length())))
 		} else {
@@ -220,6 +224,11 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		t.writeStatus(w)
 		fmt.Fprintln(w)
 	}
+	cl.writeRegularTrackerAnnouncerStatus(w)
+}
+
+func (cl *Client) writeRegularTrackerAnnouncerStatus(w io.Writer) {
+	cl.regularTrackerAnnounceDispatcher.writeStatus(w)
 }
 
 func (cl *Client) getLoggers() (log.Logger, *slog.Logger) {
@@ -258,13 +267,16 @@ func (cl *Client) announceKey() int32 {
 
 // Performs infallible parts of Client initialization. *Client and *ClientConfig must not be nil.
 func (cl *Client) init(cfg *ClientConfig) {
+	cl.unlockHandlers.init()
 	cl.config = cfg
+	cl._mu.client = cl
+	cl.initLogger()
+	cl.regularTrackerAnnounceDispatcher.init(cl)
 	cfg.setRateLimiterBursts()
 	g.MakeMap(&cl.dopplegangerAddrs)
 	g.MakeMap(&cl.torrentsByShortHash)
 	g.MakeMap(&cl.torrents)
 	cl.torrentsByShortHash = make(map[metainfo.Hash]*Torrent)
-	cl.activeAnnounceLimiter.SlotsPerKey = 2
 	cl.event.L = cl.locker()
 	cl.ipBlockList = cfg.IPBlocklist
 	cl.httpClient = &http.Client{
@@ -284,7 +296,6 @@ func (cl *Client) init(cfg *ClientConfig) {
 	g.MakeMap(&cl.numWebSeedRequests)
 
 	go cl.acceptLimitClearer()
-	cl.initLogger()
 	//cl.logger.Levelf(log.Critical, "test after init")
 
 	storageImpl := cfg.DefaultStorage
@@ -1441,7 +1452,7 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 	ihHex := t.InfoHash().HexString()
 	t.logger = cl.logger.WithDefaultLevel(log.Debug).WithNames(ihHex).WithContextText(ihHex)
 	t.name()
-	t._slogger = t.withSlogger(cl.slogger)
+	t.baseSlogger = cl.slogger
 	if opts.ChunkSize == 0 {
 		opts.ChunkSize = defaultChunkSize
 	}

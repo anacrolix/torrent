@@ -5,6 +5,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	g "github.com/anacrolix/generics"
+	"github.com/anacrolix/torrent/internal/amortize"
 	requestStrategy "github.com/anacrolix/torrent/internal/request-strategy"
 )
 
@@ -92,6 +93,9 @@ func (t *Torrent) getPieceRequestOrder() *requestStrategy.PieceRequestOrder {
 }
 
 func (t *Torrent) checkPendingPiecesMatchesRequestOrder() {
+	if !amortize.Try() {
+		return
+	}
 	short := *t.canonicalShortInfohash()
 	var proBitmap roaring.Bitmap
 	for item := range t.getPieceRequestOrder().Iter() {

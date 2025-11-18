@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"bytes"
+	"cmp"
 	"container/heap"
 	"context"
 	"crypto/sha1"
@@ -12,6 +13,7 @@ import (
 	"iter"
 	"log/slog"
 	"maps"
+	"math"
 	"math/rand"
 	"net/netip"
 	"net/url"
@@ -62,6 +64,11 @@ import (
 
 var errTorrentClosed = errors.New("torrent closed")
 
+type torrentSlogGroupInput struct {
+	name        any
+	canonicalIh shortInfohash
+}
+
 // Maintains state of torrent within a Client. Many methods should not be called before the info is
 // available, see .Info and .GotInfo.
 type Torrent struct {
@@ -70,9 +77,13 @@ type Torrent struct {
 	connStats AllConnStats
 	counters  TorrentStatCounters
 
-	cl       *Client
-	logger   log.Logger
-	_slogger *slog.Logger
+	cl     *Client
+	logger log.Logger
+
+	baseSlogger        *slog.Logger          // Without dynamic group attrs
+	_slogger           *slog.Logger          // With the latest group attrs
+	_slogGroup         slog.Attr             // The slog group for merging into other loggers.
+	lastSlogGroupInput torrentSlogGroupInput // To guard against generating slog.Group
 
 	networkingEnabled      chansync.Flag
 	dataDownloadDisallowed chansync.Flag
@@ -138,10 +149,9 @@ type Torrent struct {
 	// them. That encourages us to reconnect to peers that are well known in
 	// the swarm.
 	peers prioritizedPeers
-	// Whether we want to know more peers.
-	wantPeersEvent missinggo.Event
-	// An announcer for each tracker URL.
-	trackerAnnouncers map[torrentTrackerAnnouncerKey]torrentTrackerAnnouncer
+	// An announcer for each tracker URL. Note this includes non-regular trackers too.
+	trackerAnnouncers           map[torrentTrackerAnnouncerKey]torrentTrackerAnnouncer
+	regularTrackerAnnounceState map[torrentTrackerAnnouncerKey]*announceState
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
 	numDHTAnnounces int
 
@@ -207,12 +217,24 @@ type Torrent struct {
 	initialPieceCheckDisabled bool
 	// See AddTorrentOpts.IgnoreUnverifiedPieceCompletion
 	ignoreUnverifiedPieceCompletion bool
+
+	// Relating to tracker Completed transition event
+	sawInitiallyIncompleteData bool
 }
 
 type torrentTrackerAnnouncerKey struct {
-	shortInfohash [20]byte
-	url           string
+	ShortInfohash shortInfohash
+	url           trackerAnnouncerKey
 }
+
+func (me torrentTrackerAnnouncerKey) Compare(other torrentTrackerAnnouncerKey) int {
+	return cmp.Or(
+		me.ShortInfohash.Compare(other.ShortInfohash),
+		cmp.Compare(me.url, other.url))
+}
+
+// Has the modified scheme for announcer-per-IP protocol and such-forth.
+type trackerAnnouncerKey string
 
 type outgoingConnAttemptKey = *PeerInfo
 
@@ -1083,6 +1105,7 @@ func (t *Torrent) close(wg *sync.WaitGroup) {
 	t.eachShortInfohash(func(short [20]byte) {
 		delete(t.cl.torrentsByShortHash, short)
 	})
+	t.deferUpdateRegularTrackerAnnouncing()
 	t.closedCtxCancel(errTorrentClosed)
 	t.getInfoCtxCancel(errTorrentClosed)
 	for _, f := range t.onClose {
@@ -1231,8 +1254,8 @@ func (t *Torrent) countBytesHashed(n int64) {
 
 func (t *Torrent) hashPiece(piece pieceIndex) (
 	correct bool,
-// These are peers that sent us blocks that differ from what we hash here. TODO: Track Peer not
-// bannable addr for peer types that are rebuked differently.
+	// These are peers that sent us blocks that differ from what we hash here. TODO: Track Peer not
+	// bannable addr for peer types that are rebuked differently.
 	differingPeers map[bannableAddr]struct{},
 	err error,
 ) {
@@ -1306,7 +1329,7 @@ func sumExactly(dst []byte, sum func(b []byte) []byte) {
 }
 
 func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash) (
-// These are peers that sent us blocks that differ from what we hash here.
+	// These are peers that sent us blocks that differ from what we hash here.
 	differingPeers map[bannableAddr]struct{},
 	err error,
 ) {
@@ -1354,8 +1377,8 @@ func (t *Torrent) havePiece(index pieceIndex) bool {
 }
 
 func (t *Torrent) maybeDropMutuallyCompletePeer(
-// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's
-// okay?
+	// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's
+	// okay?
 	p *PeerConn,
 ) {
 	if !t.cl.config.DropMutuallyCompletePeers {
@@ -1463,7 +1486,7 @@ type PieceStateChange struct {
 
 func (t *Torrent) deferPublishPieceStateChange(piece pieceIndex) {
 	p := t.piece(piece)
-	t.cl.locker().DeferUniqueUnaryFunc(p, p.publishStateChange)
+	t.cl.unlockHandlers.changedPieceStates[p] = struct{}{}
 }
 
 func (t *Torrent) pieceNumPendingChunks(piece pieceIndex) pp.Integer {
@@ -1763,10 +1786,24 @@ func (t *Torrent) setCachedPieceCompletion(piece int, uncached g.Option[bool]) b
 	cached := p.completion()
 	cachedOpt := g.OptionFromTuple(cached.Complete, cached.Ok)
 	changed := cachedOpt != uncached
+	if !p.storageCompletionHasBeenOk && uncached.Ok && !uncached.Value {
+		t.sawInitiallyIncompleteData = true
+		// TODO: Possibly update other types of trackers too?
+		t.deferUpdateRegularTrackerAnnouncing()
+	}
 	p.storageCompletionOk = uncached.Ok
+	if !p.storageCompletionHasBeenOk {
+		p.storageCompletionHasBeenOk = p.storageCompletionOk
+	}
 	x := uint32(piece)
 	if uncached.Ok && uncached.Value {
-		t._completedPieces.Add(x)
+		if t._completedPieces.CheckedAdd(x) {
+			// This is missing conditions... do we care?
+			if t.haveAllPieces() {
+				// We may be able to send Completed event.
+				t.cl.unlockHandlers.deferUpdateTorrentRegularTrackerAnnouncing(t)
+			}
+		}
 	} else {
 		t._completedPieces.Remove(x)
 	}
@@ -1992,23 +2029,30 @@ func (t *Torrent) dropConnection(c *PeerConn) {
 	}
 }
 
-// Peers as in contact information for dialing out.
+// Peers as in contact information for dialing out. We should try to get some peers, even if we
+// don't currently need them so as not to waste announces or have unnecessary latency or events.
 func (t *Torrent) wantPeers() bool {
 	if t.closed.IsSet() {
 		return false
 	}
-	if t.peers.Len() > t.cl.config.TorrentPeersLowWater {
-		return false
-	}
-	return t.wantOutgoingConns()
+	return t.peers.Len() <= t.cl.config.TorrentPeersLowWater
 }
 
+// This used to update a chansync/event for wanting peers for the per-Torrent tracker announcers,
+// but now those are client-level and not persistent.
 func (t *Torrent) updateWantPeersEvent() {
-	if t.wantPeers() {
-		t.wantPeersEvent.Set()
-	} else {
-		t.wantPeersEvent.Clear()
-	}
+	t.deferUpdateRegularTrackerAnnouncing()
+}
+
+// Regular tracker announcing is dispatched as a single "actor". Probably needs to incorporate all
+// tracker types at some point.
+func (t *Torrent) deferUpdateRegularTrackerAnnouncing() {
+	t.cl.unlockHandlers.deferUpdateTorrentRegularTrackerAnnouncing(t)
+}
+
+func (t *Torrent) updateRegularTrackerAnnouncing() {
+	// Note this uses the map that only contains regular tracker URLs.
+	t.cl.regularTrackerAnnounceDispatcher.updateTorrentInput(t)
 }
 
 // Returns whether the client should make effort to seed the torrent.
@@ -2128,17 +2172,15 @@ func (t *Torrent) startScrapingTracker(_url string) {
 		t.startScrapingTracker(u.String())
 		return
 	}
-	if t.infoHash.Ok {
-		t.startScrapingTrackerWithInfohash(u, _url, t.infoHash.Value)
-	}
-	if t.infoHashV2.Ok {
-		t.startScrapingTrackerWithInfohash(u, _url, *t.infoHashV2.Value.ToShort())
+	announcerKey := trackerAnnouncerKey(_url)
+	for ih := range t.iterShortInfohashes() {
+		t.startScrapingTrackerWithInfohash(u, announcerKey, ih)
 	}
 }
 
-func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr string, shortInfohash [20]byte) {
+func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr trackerAnnouncerKey, shortInfohash [20]byte) {
 	announcerKey := torrentTrackerAnnouncerKey{
-		shortInfohash: shortInfohash,
+		ShortInfohash: shortInfohash,
 		url:           urlStr,
 	}
 	if _, ok := t.trackerAnnouncers[announcerKey]; ok {
@@ -2160,16 +2202,14 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr string, sh
 				return nil
 			}
 		}
-		newAnnouncer := &trackerScraper{
-			shortInfohash:   shortInfohash,
-			u:               *u,
-			t:               t,
-			lookupTrackerIp: t.cl.config.LookupTrackerIp,
-			stopCh:          make(chan struct{}),
-			logger:          t.slogger().With("name", "tracker", "urlKey", u.String()),
+		t.cl.startTrackerAnnouncer(u, urlStr)
+		t.initRegularTrackerAnnounceState(announcerKey)
+		return torrentRegularTrackerAnnouncer{
+			u: u,
+			getAnnounceState: func() announceState {
+				return *t.regularTrackerAnnounceState[announcerKey]
+			},
 		}
-		go newAnnouncer.Run()
-		return newAnnouncer
 	}()
 	if sl == nil {
 		return
@@ -2178,6 +2218,14 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr string, sh
 	if g.MapInsert(t.trackerAnnouncers, announcerKey, sl).Ok {
 		panic("tracker announcer already exists")
 	}
+}
+
+// We need a key in regularTrackerAnnounceState to ensure we propagate next announce state values.
+func (t *Torrent) initRegularTrackerAnnounceState(key torrentTrackerAnnouncerKey) {
+	g.MakeMapIfNil(&t.regularTrackerAnnounceState)
+	t.cl.regularTrackerAnnounceDispatcher.addKey(key)
+	t.regularTrackerAnnounceState[key] = t.cl.regularTrackerAnnounceDispatcher.announceStates[key]
+	t.deferUpdateRegularTrackerAnnouncing()
 }
 
 // Adds and starts tracker scrapers for tracker URLs that aren't already
@@ -2790,12 +2838,12 @@ func (t *Torrent) finishHash(index pieceIndex) {
 	default:
 		level = slog.LevelWarn
 	}
+	t.cl.lock()
 	t.slogger().Log(context.Background(), level, "finished hashing piece",
 		"piece", index,
 		"correct", correct,
 		"failedPeers", failedPeers,
 		"err", copyErr)
-	t.cl.lock()
 	if correct {
 		if len(failedPeers) > 0 {
 			for peer := range failedPeers {
@@ -3194,14 +3242,16 @@ func (t *Torrent) pieceRequestIndexBegin(piece pieceIndex) RequestIndex {
 
 // Run complete validation when lock is released.
 func (t *Torrent) deferUpdateComplete() {
-	t.cl._mu.DeferUniqueUnaryFunc(t, t.updateComplete)
+	t.cl.unlockHandlers.addUpdateComplete(t)
 }
 
 func (t *Torrent) updateComplete() {
-	// TODO: Announce complete to trackers?
 	t.complete.SetBool(t.isComplete())
 }
 
+// TODO: I don't think having this flick back and forth while hashing is good. I think externally we
+// might want to wait until all hashing has completed, but the completion state shouldn't change
+// until we prove something is incorrect.
 func (t *Torrent) isComplete() bool {
 	if t.activePieceHashes != 0 {
 		return false
@@ -3498,6 +3548,14 @@ func (t *Torrent) canonicalShortInfohash() *infohash.T {
 	return t.infoHashV2.UnwrapPtr().ToShort()
 }
 
+func (t *Torrent) iterShortInfohashes() iter.Seq[shortInfohash] {
+	return func(yield func(shortInfohash) bool) {
+		t.eachShortInfohash(func(short [20]byte) {
+			yield(short)
+		})
+	}
+}
+
 func (t *Torrent) eachShortInfohash(each func(short [20]byte)) {
 	if t.infoHash.Value == *t.infoHashV2.Value.ToShort() {
 		// This includes zero values, since they both should not be zero. Plus Option should not
@@ -3559,21 +3617,43 @@ func (t *Torrent) Complete() chansync.ReadOnlyFlag {
 	return &t.complete
 }
 
-func (t *Torrent) slogger() *slog.Logger {
-	return t._slogger.With(t.slogGroup())
+func (t *Torrent) processSlogGroupInput(latest torrentSlogGroupInput) {
+	t._slogGroup = slog.Group("torrent",
+		"name", latest.name,
+		"ih", latest.canonicalIh)
+	t._slogger = t.baseSlogger.With(t._slogGroup)
+	t.lastSlogGroupInput = latest
 }
 
-// Returns a group attr describing the Torrent.
-func (t *Torrent) slogGroup() slog.Attr {
+func (t *Torrent) updateSlogGroup() {
+	latest := t.makeSlogGroupInput()
+	if t._slogger == nil || latest != t.lastSlogGroupInput {
+		t.processSlogGroupInput(latest)
+	}
+}
+
+// NB: You may need to be holding client lock to call this now.
+func (t *Torrent) slogger() *slog.Logger {
+	t.updateSlogGroup()
+	return t._slogger
+}
+
+func (t *Torrent) makeSlogGroupInput() torrentSlogGroupInput {
 	var name any
 	opt := t.bestName()
 	if opt.Ok {
 		name = opt.Value
 	}
-	return slog.Group("torrent",
-		"name", name,
-		"ih", *t.canonicalShortInfohash(),
-	)
+	return torrentSlogGroupInput{
+		name:        name,
+		canonicalIh: *t.canonicalShortInfohash(),
+	}
+}
+
+// Returns a group attr describing the Torrent.
+func (t *Torrent) slogGroup() slog.Attr {
+	t.updateSlogGroup()
+	return t._slogGroup
 }
 
 // Get a chunk buffer from the pool. It should be returned when it's no longer in use. Do we
@@ -3746,4 +3826,11 @@ func (t *Torrent) maxEndRequest() RequestIndex {
 // Avoids needing or indexing the pieces slice.
 func (p *Torrent) chunkIndexSpec(piece pieceIndex, chunk chunkIndexType) ChunkSpec {
 	return chunkIndexSpec(pp.Integer(chunk), p.pieceLength(piece), p.chunkSize)
+}
+
+func (t *Torrent) progressUnitFloat() float64 {
+	if !t.haveInfo() {
+		return math.NaN()
+	}
+	return 1 - float64(t.bytesMissingLocked())/float64(t.info.TotalLength())
 }

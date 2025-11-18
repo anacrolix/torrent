@@ -4,6 +4,7 @@ import (
 	"github.com/RoaringBitmap/roaring"
 )
 
+// TODO: Update to roaring v2 or higher
 type Bitmap[T BitConstraint] struct {
 	roaring.Bitmap
 }

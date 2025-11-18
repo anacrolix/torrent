@@ -61,7 +61,7 @@ func (me *Cache[Peer, BlockKey, Hash]) ForgetBlockSeq(seq iter.Seq[BlockKey]) {
 	}
 }
 
-// Returns whether any block in the sequence has at least once peer recorded.
+// Returns whether any block in the sequence has at least one peer recorded.
 func (me *Cache[Peer, BlockKey, Hash]) HasPeerForBlocks(seq iter.Seq[BlockKey]) bool {
 	me.lock.RLock()
 	defer me.lock.RUnlock()

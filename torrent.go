@@ -1216,7 +1216,7 @@ func (t *Torrent) getBlockCheckingWriterForPiece(piece pieceIndex) blockChecking
 	return blockCheckingWriter{
 		cache:        &t.smartBanCache,
 		requestIndex: t.pieceRequestIndexBegin(piece),
-		chunkSize:    t.chunkSize.Int(),
+		chunkBuffer:  t.getChunkBuffer(),
 	}
 }
 
@@ -1313,7 +1313,10 @@ func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash) (
 	var w io.Writer = h
 	if t.hasSmartbanDataForPiece(piece) {
 		smartBanWriter := t.getBlockCheckingWriterForPiece(piece)
-		w = io.MultiWriter(h, &smartBanWriter)
+		defer func() {
+			t.putChunkBuffer(smartBanWriter.chunkBuffer)
+			smartBanWriter.chunkBuffer = nil
+		}()
 		defer func() {
 			if err != nil {
 				// Skip smart banning since we can't blame them for storage issues. A short write would
@@ -1325,6 +1328,7 @@ func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash) (
 			smartBanWriter.Flush()
 			differingPeers = smartBanWriter.badPeers
 		}()
+		w = io.MultiWriter(h, &smartBanWriter)
 	}
 	p := t.piece(piece)
 	storagePiece := p.Storage()
@@ -3575,7 +3579,9 @@ func (t *Torrent) slogGroup() slog.Attr {
 // Get a chunk buffer from the pool. It should be returned when it's no longer in use. Do we
 // waste an allocation if we throw away the pointer it was stored with?
 func (t *Torrent) getChunkBuffer() []byte {
-	return *t.chunkPool.Get().(*[]byte)
+	b := *t.chunkPool.Get().(*[]byte)
+	b = b[:t.chunkSize.Int()]
+	return b
 }
 
 func (t *Torrent) putChunkBuffer(b []byte) {

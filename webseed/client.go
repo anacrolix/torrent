@@ -89,7 +89,7 @@ type Client struct {
 	PathEscaper             PathEscaper
 }
 
-type ResponseBodyWrapper func(io.Reader) io.Reader
+type ResponseBodyWrapper func(r io.Reader, interrupt func()) io.Reader
 
 func (me *Client) SetInfo(info *metainfo.Info, fileIndex *segments.Index) {
 	if !strings.HasSuffix(me.Url, "/") && info.IsDir() {
@@ -202,7 +202,7 @@ func (me *Client) recvPartResult(ctx context.Context, w io.Writer, part requestP
 	defer resp.Body.Close()
 	var body io.Reader = resp.Body
 	if a := me.ResponseBodyWrapper; a != nil {
-		body = a(body)
+		body = a(body, func() { panicif.Err(resp.Body.Close()) })
 	}
 	// We did set resp.Body to nil here, but I'm worried the HTTP machinery might do something
 	// funny.

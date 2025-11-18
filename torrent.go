@@ -3128,7 +3128,9 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 		opt(&ws.client)
 	}
 	setDefaultDownloadRateLimiterBurstIfZero(ws.client.ResponseBodyRateLimiter)
-	ws.client.ResponseBodyWrapper = func(r io.Reader) io.Reader {
+	ws.client.ResponseBodyWrapper = func(r io.Reader, interrupt func()) io.Reader {
+		// Make sure to rate limit *after* idle timing.
+		r = newIdleTimeoutReader(r, 30*time.Second, interrupt)
 		return newRateLimitedReader(r, ws.client.ResponseBodyRateLimiter)
 	}
 	g.MakeMapWithCap(&ws.activeRequests, ws.client.MaxRequests)

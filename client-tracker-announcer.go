@@ -535,9 +535,6 @@ func (me *regularTrackerAnnounceDispatcher) singleAnnounce(
 	{
 		level := slog.LevelDebug
 		if err != nil {
-			if ctx.Err() == nil {
-				level = slog.LevelWarn
-			}
 			level = analog.SlogErrorLevel(err).UnwrapOr(level)
 		}
 		// numPeers is (.resp.Peers | length) with jq...

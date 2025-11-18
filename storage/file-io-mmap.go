@@ -81,12 +81,12 @@ func (me *fileMmap) inc() {
 	panicif.LessThanOrEqual(me.refs.Add(1), 0)
 }
 
-func (m *mmapFileIo) openForSharedRead(name string) (_ sharedFileIf, err error) {
-	return m.openReadOnly(name)
+func (me *mmapFileIo) openForSharedRead(name string) (_ sharedFileIf, err error) {
+	return me.openReadOnly(name)
 }
 
-func (m *mmapFileIo) openForRead(name string) (_ fileReader, err error) {
-	sh, err := m.openReadOnly(name)
+func (me *mmapFileIo) openForRead(name string) (_ fileReader, err error) {
+	sh, err := me.openReadOnly(name)
 	if err != nil {
 		return
 	}
@@ -95,10 +95,10 @@ func (m *mmapFileIo) openForRead(name string) (_ fileReader, err error) {
 	}, nil
 }
 
-func (m *mmapFileIo) openReadOnly(name string) (_ *mmapSharedFileHandle, err error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	v, ok := m.paths[name]
+func (me *mmapFileIo) openReadOnly(name string) (_ *mmapSharedFileHandle, err error) {
+	me.mu.Lock()
+	defer me.mu.Unlock()
+	v, ok := me.paths[name]
 	if ok {
 		return newMmapFile(v), nil
 	}
@@ -112,21 +112,21 @@ func (m *mmapFileIo) openReadOnly(name string) (_ *mmapSharedFileHandle, err err
 		err = fmt.Errorf("mapping file: %w", err)
 		return
 	}
-	v = m.addNewMmap(name, mm, false, f)
+	v = me.addNewMmap(name, mm, false, f)
 	return newMmapFile(v), nil
 }
 
-func (m *mmapFileIo) openForWrite(name string, size int64) (_ fileWriter, err error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	v, ok := m.paths[name]
+func (me *mmapFileIo) openForWrite(name string, size int64) (_ fileWriter, err error) {
+	me.mu.Lock()
+	defer me.mu.Unlock()
+	v, ok := me.paths[name]
 	if ok {
 		if int64(len(v.m)) == size && v.writable {
 			v.inc()
 			return newMmapFile(v), nil
 		} else {
 			v.dec()
-			g.MustDelete(m.paths, name)
+			g.MustDelete(me.paths, name)
 		}
 	}
 	// TODO: A bunch of this can be done without holding the lock.
@@ -156,7 +156,7 @@ func (m *mmapFileIo) openForWrite(name string, size int64) (_ fileWriter, err er
 		return
 	}
 	closeFile = false
-	return newMmapFile(m.addNewMmap(name, mm, true, f)), nil
+	return newMmapFile(me.addNewMmap(name, mm, true, f)), nil
 }
 
 func newMmapFile(f *fileMmap) *mmapSharedFileHandle {
@@ -187,29 +187,29 @@ type mmapSharedFileHandle struct {
 	close sync.Once
 }
 
-func (m *mmapSharedFileHandle) WriteAt(p []byte, off int64) (n int, err error) {
+func (me *mmapSharedFileHandle) WriteAt(p []byte, off int64) (n int, err error) {
 	// It's not actually worth the hassle to write using mmap here since the caller provided the
 	// buffer already.
-	return m.f.f.WriteAt(p, off)
+	return me.f.f.WriteAt(p, off)
 }
 
-func (m *mmapSharedFileHandle) ReadAt(p []byte, off int64) (n int, err error) {
-	n = copy(p, m.f.m[off:])
+func (me *mmapSharedFileHandle) ReadAt(p []byte, off int64) (n int, err error) {
+	n = copy(p, me.f.m[off:])
 	if n < len(p) {
 		if off < 0 {
 			err = fs.ErrInvalid
 			return
 		}
 	}
-	if off+int64(n) == int64(len(m.f.m)) {
+	if off+int64(n) == int64(len(me.f.m)) {
 		err = io.EOF
 	}
 	return
 }
 
-func (m *mmapSharedFileHandle) Close() (err error) {
-	m.close.Do(func() {
-		err = m.f.dec()
+func (me *mmapSharedFileHandle) Close() (err error) {
+	me.close.Do(func() {
+		err = me.f.dec()
 	})
 	return
 }

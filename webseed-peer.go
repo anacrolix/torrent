@@ -327,6 +327,8 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 		if webseed.PrintDebug && wr.cancelled.Load() {
 			fmt.Printf("webseed read %v after cancellation: %v\n", n, err)
 		}
+		// We need this early for the convict call.
+		ws.peer.locker().Lock()
 		if err != nil {
 			// TODO: Pick out missing files or associate error with file. See also
 			// webseed.ReadRequestPartError.
@@ -334,18 +336,18 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 			if errors.As(err, &badResponse) {
 				ws.convict(badResponse, time.Minute)
 			}
+			ws.peer.locker().Unlock()
 			err = fmt.Errorf("reading chunk: %w", err)
 			return
 		}
 		// TODO: This happens outside Client lock, and stats can be written out of sync with each
-		// other. Why even bother with atomics?
+		// other. Why even bother with atomics? This needs to happen after the err check above.
 		ws.peer.doChunkReadStats(int64(n))
 		// TODO: Clean up the parameters for receiveChunk.
 		msg.Piece = buf
 		msg.Index = reqSpec.Index
 		msg.Begin = reqSpec.Begin
 
-		ws.peer.locker().Lock()
 		// Ensure the request is pointing to the next chunk before receiving the current one. If
 		// webseed requests are triggered, we want to ensure our existing request is up to date.
 		wr.next++

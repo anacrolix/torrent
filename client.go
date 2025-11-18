@@ -225,7 +225,8 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 func (cl *Client) getLoggers() (log.Logger, *slog.Logger) {
 	logger := cl.config.Logger
 	slogger := cl.config.Slogger
-	// Maintain old behaviour if ClientConfig.Slogger isn't provided. Pointer Slogger to Logger so it appears unmodified.
+	// Maintain old behaviour if ClientConfig.Slogger isn't provided. Point Slogger to Logger so it
+	// appears unmodified.
 	if slogger == nil {
 		if logger.IsZero() {
 			logger = log.Default

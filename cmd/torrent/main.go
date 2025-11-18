@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"io"
 	stdLog "log"
+	"log/slog"
 	"net/http"
 	"os"
 
 	"github.com/anacrolix/bargle"
 	"github.com/anacrolix/envpprof"
 	app "github.com/anacrolix/gostdapp"
+	"github.com/anacrolix/log"
 	xprometheus "github.com/anacrolix/missinggo/v2/prometheus"
 
 	"github.com/davecgh/go-spew/spew"
@@ -27,6 +29,8 @@ func init() {
 	stdLog.SetFlags(stdLog.Flags() | stdLog.Lshortfile)
 	prometheus.MustRegister(xprometheus.NewExpvarCollector())
 	http.Handle("/metrics", promhttp.Handler())
+	log.Default = log.NewLogger().WithDefaultLevel(log.Info)
+	log.Default.SetHandlers(log.SlogHandlerAsHandler{slog.Default().Handler()})
 }
 
 func main() {
@@ -40,6 +44,12 @@ func mainErr(ctx context.Context) error {
 	debugFlag := bargle.NewFlag(&debug)
 	debugFlag.AddLong("debug")
 	main.Options = append(main.Options, debugFlag.Make())
+	main.AfterParseFunc = func(ctx bargle.Context) error {
+		if debug {
+			slog.SetLogLoggerLevel(slog.LevelDebug)
+		}
+		return nil
+	}
 	main.Positionals = append(main.Positionals,
 		bargle.Subcommand{Name: "metainfo", Command: metainfoCmd()},
 		bargle.Subcommand{Name: "announce", Command: func() bargle.Command {
@@ -63,10 +73,14 @@ func mainErr(ctx context.Context) error {
 			var dlc DownloadCmd
 			cmd := bargle.FromStruct(&dlc)
 			cmd.DefaultAction = func() error {
-				return downloadErr(ctx, downloadFlags{
-					Debug:       debug,
-					DownloadCmd: dlc,
-				})
+				return downloadErr(
+					ctx,
+					downloadFlags{
+						Debug:       debug,
+						DownloadCmd: dlc,
+					},
+					slog.Default(),
+				)
 			}
 			return cmd
 		}()},

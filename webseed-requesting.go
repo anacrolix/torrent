@@ -197,9 +197,9 @@ func (cl *Client) updateWebseedRequests() {
 	}
 
 	// Cancel any existing requests that are no longer wanted.
-	for _, value := range unwantedExistingRequests {
+	for key, value := range unwantedExistingRequests {
 		// Should we skip cancelling requests that are ended and just haven't cleaned up yet?
-		value.existingWebseedRequest.Cancel("deprioritized")
+		value.existingWebseedRequest.Cancel("deprioritized", key.t)
 	}
 
 	printPlan := sync.OnceFunc(func() {

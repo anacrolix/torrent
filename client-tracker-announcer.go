@@ -425,8 +425,17 @@ func (me *regularTrackerAnnounceDispatcher) dispatchAnnounces() {
 		}
 		t := me.torrentFromShortInfohash(next.Value.ShortInfohash)
 		// Check that torrent input synchronization is working. At this point, running in the
-		// dispatcher role, everything should be synced.
-		panicif.NotEq(next.Value.torrent, me.makeTorrentInput(t))
+		// dispatcher role, everything should be synced. Other state in the announce data index is
+		// now the original.
+		{
+			actual := next.Value.torrent
+			expected := me.makeTorrentInput(t)
+			if actual != expected {
+				me.logger.Warn("announce dispatcher torrent input is not synced",
+					"expected", expected,
+					"actual", actual)
+			}
+		}
 		if !next.Value.overdue {
 			break
 		}

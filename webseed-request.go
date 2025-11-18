@@ -26,13 +26,15 @@ func (me *webseedRequest) Close() {
 	me.request.Close()
 }
 
-// Record that it was exceptionally cancelled.
-func (me *webseedRequest) Cancel(cause string) bool {
+// Record that it was exceptionally cancelled. Require that Torrent be passed so we can ensure
+// announce dispatcher is updated.
+func (me *webseedRequest) Cancel(cause string, t *Torrent) bool {
 	me.request.Cancel(stringError(cause))
 	if !me.cancelled.Swap(true) {
 		if webseed.PrintDebug {
 			me.logger.Debug("webseed request cancelled", "cause", cause)
 		}
+		t.deferUpdateRegularTrackerAnnouncing()
 		return true
 	}
 	return false

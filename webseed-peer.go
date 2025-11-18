@@ -59,9 +59,7 @@ func (me *webseedPeer) cancelAllRequests() {
 	// Is there any point to this? Won't we fail to receive a chunk and cancel anyway? Should we
 	// Close requests instead?
 	for req := range me.activeRequests {
-		if req.Cancel("all requests cancelled") {
-			me.peer.t.deferUpdateRegularTrackerAnnouncing()
-		}
+		req.Cancel("all requests cancelled", me.peer.t)
 	}
 }
 
@@ -367,7 +365,7 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 			if !ws.wantedChunksInDiscardWindow(wr) {
 				// This cancels the stream, but we don't stop su--reading to make the most of the
 				// buffered body.
-				wr.Cancel("no wanted chunks in discard window")
+				wr.Cancel("no wanted chunks in discard window", ws.peer.t)
 			}
 		}
 		ws.peer.locker().Unlock()

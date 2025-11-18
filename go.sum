@@ -93,8 +93,8 @@ github.com/anacrolix/log v0.6.0/go.mod h1:lWvLTqzAnCWPJA08T2HCstZi0L1y2Wyvm3FJgw
 github.com/anacrolix/log v0.13.1/go.mod h1:D4+CvN8SnruK6zIFS/xPoRJmtvtnxs+CSfDQ+BFxZ68=
 github.com/anacrolix/log v0.14.1/go.mod h1:1OmJESOtxQGNMlUO5rcv96Vpp9mfMqXXbe2RdinFLdY=
 github.com/anacrolix/log v0.14.2/go.mod h1:1OmJESOtxQGNMlUO5rcv96Vpp9mfMqXXbe2RdinFLdY=
-github.com/anacrolix/log v0.17.1-0.20251112041439-b1e798401c61 h1:Mhn6psCZpkRSdGZ2G48FcGIXbcNz396tr1W3ZxqECV4=
-github.com/anacrolix/log v0.17.1-0.20251112041439-b1e798401c61/go.mod h1:YjBZbwe2v3RsU7WdoBlVSPVpfKuOAno9SRQ/8tIl+hk=
+github.com/anacrolix/log v0.17.1-0.20251118025802-918f1157b7bb h1:nGNLCQbxFQZz7/9PXLGQ9GmavI/W+eX66pSwVeUwugU=
+github.com/anacrolix/log v0.17.1-0.20251118025802-918f1157b7bb/go.mod h1:YjBZbwe2v3RsU7WdoBlVSPVpfKuOAno9SRQ/8tIl+hk=
 github.com/anacrolix/lsan v0.0.0-20211126052245-807000409a62/go.mod h1:66cFKPCO7Sl4vbFnAaSq7e4OXtdMhRSBagJGWgmpJbM=
 github.com/anacrolix/lsan v0.1.0 h1:TbgB8fdVXgBwrNsJGHtht9+9FepNFu5H7dU8ek6XYAY=
 github.com/anacrolix/lsan v0.1.0/go.mod h1:66cFKPCO7Sl4vbFnAaSq7e4OXtdMhRSBagJGWgmpJbM=

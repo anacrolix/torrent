@@ -15,7 +15,7 @@ require (
 	github.com/anacrolix/generics v0.1.0
 	github.com/anacrolix/go-libutp v1.3.2
 	github.com/anacrolix/gostdapp v0.2.0
-	github.com/anacrolix/log v0.17.1-0.20251112041439-b1e798401c61
+	github.com/anacrolix/log v0.17.1-0.20251118025802-918f1157b7bb
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/v2 v2.10.0
 	github.com/anacrolix/multiless v0.4.0

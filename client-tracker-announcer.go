@@ -211,18 +211,6 @@ func (me *regularTrackerAnnounceDispatcher) updateTrackerAnnounceHead(url tracke
 	me.updateTimer()
 }
 
-func (me *regularTrackerAnnounceDispatcher) setInfohashActiveCount(key shortInfohash, count int) {
-	for k := range me.announceData.IterKeysFrom(torrentTrackerAnnouncerKey{ShortInfohash: key}) {
-		if k.ShortInfohash != key {
-			break
-		}
-		me.announceData.Update(k, func(input nextAnnounceInput) nextAnnounceInput {
-			input.infohashActive = count
-			return input
-		})
-	}
-}
-
 func nextAnnounceRecordFromParts(key torrentTrackerAnnouncerKey, input nextAnnounceInput) nextAnnounceRecord {
 	return nextAnnounceRecord{
 		torrentTrackerAnnouncerKey: key,
@@ -568,7 +556,7 @@ func (me *regularTrackerAnnounceDispatcher) singleAnnounce(
 	t *Torrent,
 ) {
 	// A logger that includes the nice torrent group so we know what the announce is for.
-	logger = me.logger.With(t.slogGroup())
+	logger = logger.With(t.slogGroup())
 	req := t.announceRequest(event, key.ShortInfohash)
 	me.torrentClient.unlock()
 	ctx, cancel := context.WithTimeout(context.TODO(), tracker.DefaultTrackerAnnounceTimeout)

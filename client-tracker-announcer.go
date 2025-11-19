@@ -81,13 +81,27 @@ func (me *regularTrackerAnnounceDispatcher) init(client *Client) {
 	me.logger = client.slogger
 	me.announceData.Init(torrentTrackerAnnouncerKey.Compare)
 	me.announceData.SetMinRecord(torrentTrackerAnnouncerKey{})
+	// This is super pedantic, we're checking distinct root tables are synced with each other. In
+	// this case there's a trigger in infohashAnnouncing to update all the corresponding infohashes
+	// in announceData. Anytime announceData is changed, we check it's still up to date with
+	// infohashAnnouncing.
 	me.announceData.OnChange(func(old, new g.Option[indexed.Pair[torrentTrackerAnnouncerKey, nextAnnounceInput]]) {
 		if !new.Ok {
 			return
 		}
-		panicif.NotEq(
-			new.Value.Right.infohashActive,
-			g.OptionFromTuple(me.infohashAnnouncing.Get(new.Value.Left.ShortInfohash)).Value.count)
+		// Due to trigger chains that result in announceData being updated *for unrelated fields*,
+		// the check occurred prematurely while updating announceData. The fix is to update all
+		// indexes, then to do triggers. This is massive overkill for this project right now.
+		actual := new.Value.Right.infohashActive
+		key := new.Value.Left
+		expected := g.OptionFromTuple(me.infohashAnnouncing.Get(key.ShortInfohash)).Value.count
+		if actual != expected {
+			me.logger.Debug(
+				"announceData.infohashActive != infohashAnnouncing.count",
+				"key", key,
+				"actual", actual,
+				"expected", expected)
+		}
 	})
 	me.announceIndex = indexed.NewFullMappedIndex(
 		&me.announceData,

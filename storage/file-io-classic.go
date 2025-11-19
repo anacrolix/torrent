@@ -1,11 +1,22 @@
 package storage
 
 import (
+	"errors"
 	"io"
 	"os"
 )
 
 type classicFileIo struct{}
+
+func (me classicFileIo) rename(from, to string) error {
+	a := sharedFiles.CloseAll(from)
+	b := sharedFiles.CloseAll(to)
+	c := os.Rename(from, to)
+	if c != nil {
+		return errors.Join(a, b, c)
+	}
+	return nil
+}
 
 func (me classicFileIo) flush(name string, offset, nbytes int64) error {
 	return fsync(name)

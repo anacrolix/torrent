@@ -4,8 +4,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sync"
 
+	"github.com/anacrolix/sync"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/segments"
 )

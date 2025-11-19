@@ -21,7 +21,13 @@ var (
 
 type regularFsSharedFiles struct{}
 
-func (r regularFsSharedFiles) Open(name string) (sharedFileIf, error) {
+func (me regularFsSharedFiles) CloseAll(name string) error {
+	// We don't track regular file handles, we will assume the client is synchronizing things
+	// correctly so that an open handle won't be around.
+	return nil
+}
+
+func (me regularFsSharedFiles) Open(name string) (sharedFileIf, error) {
 	return os.Open(name)
 }
 
@@ -32,6 +38,7 @@ type sharedFileIf interface {
 
 type sharedFilesInterface interface {
 	Open(name string) (sharedFileIf, error)
+	CloseAll(name string) error
 }
 
 func init() {

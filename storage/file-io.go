@@ -21,4 +21,5 @@ type fileIo interface {
 	openForRead(name string) (fileReader, error)
 	openForWrite(name string, size int64) (fileWriter, error)
 	flush(name string, offset, nbytes int64) error
+	rename(from, to string) error
 }

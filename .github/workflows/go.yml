@@ -8,7 +8,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        go-version: ["1.24"]
+        go-version: [ stable, oldstable]
         # windows-latest removed for now: known issues with file handles to
         # resolved. could set classic file io mode.
         os: [macos-latest, ubuntu-latest]
@@ -20,21 +20,22 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
+      - run: brew install macfuse fuse-t && echo 'FUSE_FORCE_BACKEND=fuse-t' >> $GITHUB_ENV
+        if: matrix.os == 'macos-latest'
+      - run: |
+          sudo apt update
+          sudo apt install -y fuse
+        if: matrix.os == 'ubuntu-latest'
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install just
+        run: cargo install just
       - name: Build possum
         run: |
           cd storage/possum/lib
           cargo build --lib
-      - run: brew install macfuse fuse-t && echo 'FUSE_FORCE_BACKEND=fuse-t' >> $GITHUB_ENV
-        if: matrix.os == 'macos-latest'
-      - run: sudo apt install fuse
-        if: matrix.os == 'ubuntu-latest'
       # Separate to remove downloading spam and possible caching improvement.
       - run: go mod download
-      - run: go test -race ./...
-      # Separate benchmarks because I think it modifies the stderr handling.
-      - run: go test -race -bench . -benchtime 2x -run @ ./...
-
+      - run: just test
         # Test on 386 for atomic alignment and other bad 64-bit assumptions
       - if: matrix.os != 'macos-latest'
         run: GOARCH=386 go test -run @ ./...

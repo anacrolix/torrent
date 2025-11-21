@@ -2402,6 +2402,10 @@ func (t *Torrent) dhtAnnouncer(s DhtServer) {
 			err := t.timeboxedAnnounceToDht(s)
 			if err != nil {
 				t.logger.WithDefaultLevel(log.Warning).Printf("error announcing %q to DHT: %s", t, err)
+				// Assume DNS issues. This is hacky, but DHT announcing needs be overhauled and
+				// managed at a client level without unnecessary goroutines, just like with regular
+				// trackers. Works around https://github.com/anacrolix/torrent/issues/1029.
+				time.Sleep(5 * time.Minute)
 			}
 		}()
 	}

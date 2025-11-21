@@ -409,7 +409,9 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		}
 	}
 
-	go cl.forwardPort()
+	if !cfg.NoDefaultPortForwarding {
+		go cl.forwardPort()
+	}
 	if !cfg.NoDHT {
 		for _, s := range sockets {
 			if pc, ok := s.(net.PacketConn); ok {

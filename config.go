@@ -42,6 +42,7 @@ type ClientTrackerConfig struct {
 
 type ClientDhtConfig struct {
 	// Don't create a DHT.
+	// cfg.NoDHT aka cfg.DisableDHT
 	NoDHT            bool `long:"disable-dht"`
 	DhtStartingNodes func(network string) dht.StartingNodesGetter
 	// Called for each anacrolix/dht Server created for the Client.
@@ -64,6 +65,7 @@ type ClientConfig struct {
 	// socket with uTP unless configured otherwise.
 	ListenHost              func(network string) string
 	ListenPort              int
+	// cfg.NoDefaultPortForwarding aka cfg.DisableUpnp
 	NoDefaultPortForwarding bool
 	UpnpID                  string
 	DisablePEX              bool `long:"disable-pex"`

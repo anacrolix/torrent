@@ -2363,7 +2363,10 @@ func (t *Torrent) timeboxedAnnounceToDht(s DhtServer) error {
 	}
 	select {
 	case <-t.closed.Done():
-	case <-time.After(5 * time.Minute):
+		// Arbitrary, but reported in
+		// https://github.com/anacrolix/torrent/issues/1005#issuecomment-2856881633. Should able to
+		// remove timeboxing entirely at some point.
+	case <-time.After(15 * time.Minute):
 	}
 	stop()
 	return nil

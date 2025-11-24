@@ -5,6 +5,6 @@ import (
 )
 
 type btreeIterator[R any] struct {
-	btree.MapIterator[R, struct{}]
+	btree.Iterator[R, struct{}]
 	version int
 }

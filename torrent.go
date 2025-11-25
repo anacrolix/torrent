@@ -621,7 +621,7 @@ func (t *Torrent) hashInfoBytes(b []byte, info *metainfo.Info) error {
 		if v1Hash == t.infoHash.Value {
 			if info.HasV2() {
 				t.infoHashV2.Set(v2Hash)
-				cl.torrentsByShortHash[*v2Hash.ToShort()] = t
+				cl.torrentsByShortHash.Set(*v2Hash.ToShort(), t)
 			}
 		} else if *v2Hash.ToShort() == t.infoHash.Value {
 			if !info.HasV2() {
@@ -630,7 +630,7 @@ func (t *Torrent) hashInfoBytes(b []byte, info *metainfo.Info) error {
 			t.infoHashV2.Set(v2Hash)
 			t.infoHash.SetNone()
 			if info.HasV1() {
-				cl.torrentsByShortHash[v1Hash] = t
+				cl.torrentsByShortHash.Set(v1Hash, t)
 				t.infoHash.Set(v1Hash)
 			}
 		}
@@ -647,7 +647,7 @@ func (t *Torrent) hashInfoBytes(b []byte, info *metainfo.Info) error {
 		}
 		if info.HasV1() {
 			t.infoHash.Set(v1Hash)
-			cl.torrentsByShortHash[v1Hash] = t
+			cl.torrentsByShortHash.Set(v1Hash, t)
 		}
 	} else {
 		panic("no expected infohashes")
@@ -1102,9 +1102,7 @@ func (t *Torrent) numPiecesCompleted() (num pieceIndex) {
 func (t *Torrent) close(wg *sync.WaitGroup) {
 	// Should only be called from the Client.
 	panicif.False(t.closed.Set())
-	t.eachShortInfohash(func(short [20]byte) {
-		delete(t.cl.torrentsByShortHash, short)
-	})
+	// We now keep a weak pointer in torrentsByShortHash for asynchronous cleanup like announcing Stopped.
 	t.deferUpdateRegularTrackerAnnouncing()
 	t.closedCtxCancel(errTorrentClosed)
 	t.getInfoCtxCancel(errTorrentClosed)

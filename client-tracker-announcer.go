@@ -413,7 +413,8 @@ func (me *regularTrackerAnnounceDispatcher) addKey(key torrentTrackerAnnouncerKe
 
 // Returns nil if the torrent was dropped.
 func (me *regularTrackerAnnounceDispatcher) torrentFromShortInfohash(short shortInfohash) *Torrent {
-	return me.torrentClient.torrentsByShortHash[short]
+	t, _ := me.torrentClient.torrentsByShortHash.Get(short)
+	return t
 }
 
 const maxConcurrentAnnouncesPerTracker = 2

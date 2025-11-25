@@ -7,6 +7,7 @@ import (
 	"crypto/rc4"
 	"io"
 	"net"
+	"slices"
 	"sync"
 	"testing"
 
@@ -15,14 +16,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func padBytesToHash(b []byte) (ret []byte) {
+	var sk SecretKey
+	copy(sk[:], b)
+	return sk[:]
+}
+
 func sliceIter(skeys [][]byte) SecretKeyIter {
-	return func(callback func([]byte) bool) {
-		for _, sk := range skeys {
-			if !callback(sk) {
-				break
-			}
-		}
+	arraySlice := make([][20]byte, 0, len(skeys))
+	for _, key := range skeys {
+		var sk SecretKey
+		copy(sk[:], key)
+		arraySlice = append(arraySlice, sk)
 	}
+	return slices.Values(arraySlice)
 }
 
 func TestReadUntil(t *testing.T) {
@@ -62,9 +69,10 @@ func handshakeTest(t testing.TB, ia []byte, aData, bData string, cryptoProvides 
 	a, b := net.Pipe()
 	wg := sync.WaitGroup{}
 	wg.Add(2)
+	senderSkey := padBytesToHash([]byte("yep"))
 	go func() {
 		defer wg.Done()
-		a, cm, err := InitiateHandshake(a, []byte("yep"), ia, cryptoProvides)
+		a, cm, err := InitiateHandshake(a, senderSkey, ia, cryptoProvides)
 		require.NoError(t, err)
 		assert.Equal(t, cryptoSelect(cryptoProvides), cm)
 		go a.Write([]byte(aData))
@@ -85,7 +93,7 @@ func handshakeTest(t testing.TB, ia []byte, aData, bData string, cryptoProvides 
 			cryptoSelect,
 		)
 		require.NoError(t, res.error)
-		assert.EqualValues(t, "yep", res.SecretKey)
+		assert.EqualValues(t, senderSkey, res.SecretKey)
 		b := res.ReadWriter
 		assert.Equal(t, cryptoSelect(cryptoProvides), res.CryptoMethod)
 		go b.Write([]byte(bData))

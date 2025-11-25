@@ -13,6 +13,7 @@ import (
 	"expvar"
 	"fmt"
 	"io"
+	"iter"
 	"math"
 	"math/big"
 	"strconv"
@@ -437,19 +438,18 @@ func (h *handshake) receiverSteps(ctx context.Context) (ret io.ReadWriter, chose
 	eachHash := sha1.New()
 	var sum, xored [sha1.Size]byte
 	err = ErrNoSecretKeyMatch
-	h.skeys(func(skey []byte) bool {
+	for skey := range h.skeys {
 		eachHash.Reset()
 		eachHash.Write(req2)
-		eachHash.Write(skey)
+		eachHash.Write(skey[:])
 		eachHash.Sum(sum[:0])
 		xorInPlace(xored[:], sum[:], expectedHash)
 		if bytes.Equal(xored[:], b[:]) {
-			h.skey = skey
+			h.skey = skey[:]
 			err = nil
-			return false
+			break
 		}
-		return true
-	})
+	}
 	if err != nil {
 		return
 	}
@@ -598,9 +598,12 @@ func ReceiveHandshakeEx(
 	return
 }
 
-// A function that given a function, calls it with secret keys until it
-// returns false or exhausted.
-type SecretKeyIter func(callback func(skey []byte) (more bool))
+type (
+	// For performance reasons prefer a static-sized array rather than []byte.
+	SecretKey = [20]byte
+	// A function that given a function, calls it with secret keys until it returns false or exhausted.
+	SecretKeyIter = iter.Seq[SecretKey]
+)
 
 func DefaultCryptoSelector(provided CryptoMethod) CryptoMethod {
 	// We prefer plaintext for performance reasons.

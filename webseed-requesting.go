@@ -380,7 +380,8 @@ func (cl *Client) iterPossibleWebseedRequests() iter.Seq2[webseedUniqueRequestKe
 				input,
 				value.pieces,
 				func(ih metainfo.Hash, pieceIndex int, orderState requestStrategy.PieceRequestOrderState) bool {
-					t := cl.torrentsByShortHash[ih]
+					t, ok := cl.torrentsByShortHash.Get(ih)
+					panicif.False(ok)
 					if len(t.webSeeds) == 0 {
 						return true
 					}

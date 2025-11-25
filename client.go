@@ -93,7 +93,7 @@ type Client struct {
 	// All Torrents by their short infohashes (v1 if valid, and truncated v2 if valid). Unless the
 	// info has been obtained, there's no knowing if an infohash belongs to v1 or v2. TODO: Make
 	// this a weak pointer.
-	torrentsByShortHash map[InfoHash]*Torrent
+	torrentsByShortHash syncMapTorrentsByShortHash
 
 	// Piece request orderings grouped by storage. Value is value type because all fields are
 	// references.
@@ -274,9 +274,8 @@ func (cl *Client) init(cfg *ClientConfig) {
 	cl.regularTrackerAnnounceDispatcher.init(cl)
 	cfg.setRateLimiterBursts()
 	g.MakeMap(&cl.dopplegangerAddrs)
-	g.MakeMap(&cl.torrentsByShortHash)
+	cl.torrentsByShortHash.Init()
 	g.MakeMap(&cl.torrents)
-	cl.torrentsByShortHash = make(map[metainfo.Hash]*Torrent)
 	cl.event.L = cl.locker()
 	cl.ipBlockList = cfg.IPBlocklist
 	cl.httpClient = &http.Client{
@@ -331,7 +330,7 @@ func (cl *Client) init(cfg *ClientConfig) {
 		) {
 			cl.lock()
 			defer cl.unlock()
-			t, ok := cl.torrentsByShortHash[infoHash]
+			t, ok := cl.torrentsByShortHash.Get(infoHash)
 			if !ok {
 				return tracker.AnnounceRequest{}, errors.New("torrent not tracked by client")
 			}
@@ -345,7 +344,7 @@ func (cl *Client) init(cfg *ClientConfig) {
 		OnConn: func(dc webtorrent.DataChannelConn, dcc webtorrent.DataChannelContext) {
 			cl.lock()
 			defer cl.unlock()
-			t, ok := cl.torrentsByShortHash[dcc.InfoHash]
+			t, ok := cl.torrentsByShortHash.Get(dcc.InfoHash)
 			if !ok {
 				cl.logger.WithDefaultLevel(log.Warning).Printf(
 					"got webrtc conn for unloaded torrent with infohash %x",
@@ -543,7 +542,6 @@ func (cl *Client) Close() (errs []error) {
 	}
 	// Can we not modify cl.torrents as we delete from it?
 	panicif.NotZero(len(cl.torrents))
-	panicif.NotZero(len(cl.torrentsByShortHash))
 	cl.clearPortMappings()
 	for i := range cl.onClose {
 		cl.onClose[len(cl.onClose)-1-i]()
@@ -696,10 +694,7 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 
 // Returns a handle to the given torrent, if it's present in the client.
 func (cl *Client) Torrent(ih metainfo.Hash) (t *Torrent, ok bool) {
-	cl.rLock()
-	defer cl.rUnlock()
-	t, ok = cl.torrentsByShortHash[ih]
-	return
+	return cl.torrentsByShortHash.Get(ih)
 }
 
 type DialResult struct {
@@ -1022,32 +1017,17 @@ func (cl *Client) initiateHandshakes(ctx context.Context, c *PeerConn, t *Torren
 
 // Calls f with any secret keys. Note that it takes the Client lock, and so must be used from code
 // that won't also try to take the lock. This saves us copying all the infohashes everytime.
-func (cl *Client) forSkeys(f func([]byte) bool) {
-	cl.rLock()
-	defer cl.rUnlock()
-	if false { // Emulate the bug from #114
-		var firstIh InfoHash
-		for ih := range cl.torrentsByShortHash {
-			firstIh = ih
-			break
-		}
-		for range cl.torrentsByShortHash {
-			if !f(firstIh[:]) {
-				break
-			}
-		}
-		return
-	}
-	for ih := range cl.torrentsByShortHash {
-		if !f(ih[:]) {
-			break
+func (cl *Client) forSkeys(yield func([20]byte) bool) {
+	for ih := range cl.torrentsByShortHash.IterKeys {
+		if !yield(ih) {
+			return
 		}
 	}
 }
 
 func (cl *Client) handshakeReceiverSecretKeys() mse.SecretKeyIter {
-	if ret := cl.config.Callbacks.ReceiveEncryptedHandshakeSkeys; ret != nil {
-		return ret
+	if cb := cl.config.Callbacks.ReceiveEncryptedHandshakeSkeys; cb != nil {
+		return cb
 	}
 	return cl.forSkeys
 }
@@ -1086,13 +1066,18 @@ func (cl *Client) receiveHandshakes(c *PeerConn) (t *Torrent, err error) {
 		return nil, fmt.Errorf("during bt handshake: %w", err)
 	}
 
-	cl.lock()
-	t = cl.torrentsByShortHash[ih]
-	if t != nil && t.infoHashV2.Ok && *t.infoHashV2.Value.ToShort() == ih {
-		torrent.Add("v2 handshakes received", 1)
-		c.v2 = true
+	// Hooray for atomics.
+	t, _ = cl.torrentsByShortHash.Get(ih)
+	if t != nil {
+		cl.rLock()
+		isV2 := t.infoHashV2.Ok && *t.infoHashV2.Value.ToShort() == ih
+		cl.rUnlock()
+		if isV2 {
+			torrent.Add("v2 handshakes received", 1)
+			// PeerConn isn't owned by the Client yet.
+			c.v2 = true
+		}
 	}
-	cl.unlock()
 
 	return
 }
@@ -1475,53 +1460,54 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 	return cl.AddTorrentInfoHashWithStorage(infoHash, nil)
 }
 
-// Deprecated. Adds a torrent by InfoHash with a custom Storage implementation.
-// If the torrent already exists then this Storage is ignored and the
-// existing torrent returned with `new` set to `false`
+// Deprecated. Adds a torrent by InfoHash with a custom Storage implementation. If the torrent
+// already exists then this Storage is ignored and the existing torrent returned with `new` set to
+// `false`
 func (cl *Client) AddTorrentInfoHashWithStorage(
 	infoHash metainfo.Hash,
 	specStorage storage.ClientImpl,
 ) (t *Torrent, new bool) {
-	cl.lock()
-	defer cl.unlock()
-	t, ok := cl.torrentsByShortHash[infoHash]
-	if ok {
-		return
-	}
-	new = true
-
-	t = cl.newTorrent(infoHash, specStorage)
-	cl.eachDhtServer(func(s DhtServer) {
-		if cl.config.PeriodicallyAnnounceTorrentsToDht {
-			go t.dhtAnnouncer(s)
-		}
+	return cl.AddTorrentOpt(AddTorrentOpts{
+		InfoHash: infoHash,
+		Storage:  specStorage,
 	})
-	cl.torrentsByShortHash[infoHash] = t
-	cl.torrents[t] = struct{}{}
-	cl.clearAcceptLimits()
-	t.updateWantPeersEvent()
-	// Tickle Client.waitAccept, new torrent may want conns.
-	cl.event.Broadcast()
+}
+
+func (cl *Client) addTorrentReturningExisting(opts AddTorrentOpts) (t *Torrent, ok bool) {
+	t, ok = cl.torrentsByShortHash.Get(opts.InfoHash)
+	if !ok {
+		if opts.InfoHashV2.Ok {
+			t, ok = cl.torrentsByShortHash.Get(*opts.InfoHashV2.Value.ToShort())
+		}
+	}
 	return
 }
 
 // Adds a torrent by InfoHash with a custom Storage implementation. If the torrent already exists
 // then this Storage is ignored and the existing torrent returned with `new` set to `false`.
 func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
-	infoHash := opts.InfoHash
-	panicif.Zero(infoHash)
-	cl.lock()
-	defer cl.unlock()
-	t, ok := cl.torrentsByShortHash[infoHash]
-	if ok {
+	panicif.Zero(opts.InfoHash)
+
+	t, ok := cl.addTorrentReturningExisting(opts)
+	if ok && !t.closed.IsSet() {
 		return
 	}
-	if opts.InfoHashV2.Ok {
-		t, ok = cl.torrentsByShortHash[*opts.InfoHashV2.Value.ToShort()]
-		if ok {
+
+	cl.lock()
+	defer cl.unlock()
+
+	t, ok = cl.addTorrentReturningExisting(opts)
+	if ok {
+		if !t.closed.IsSet() {
 			return
 		}
+		// Do we have to nuke this? Can't we just clobber it?
+		t.eachShortInfohash(func(short [20]byte) {
+			cl.torrentsByShortHash.Delete(short)
+		})
 	}
+
+	infoHash := opts.InfoHash
 	new = true
 
 	t = cl.newTorrentOpt(opts)
@@ -1530,7 +1516,7 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 			go t.dhtAnnouncer(s)
 		}
 	})
-	cl.torrentsByShortHash[infoHash] = t
+	panicif.False(cl.torrentsByShortHash.Set(infoHash, t))
 	t.setInfoBytesLocked(opts.InfoBytes)
 	cl.clearAcceptLimits()
 	t.updateWantPeersEvent()
@@ -1787,12 +1773,12 @@ func (cl *Client) newDownloadRateLimitedReader(r io.Reader) io.Reader {
 }
 
 func (cl *Client) onDHTAnnouncePeer(ih metainfo.Hash, ip net.IP, port int, portOk bool) {
-	cl.lock()
-	defer cl.unlock()
-	t := cl.torrentsByShortHash[ih]
-	if t == nil {
+	t, ok := cl.torrentsByShortHash.Get(ih)
+	if !ok {
 		return
 	}
+	cl.lock()
+	defer cl.unlock()
 	t.addPeers([]PeerInfo{{
 		Addr:   ipPortAddr{ip, port},
 		Source: PeerSourceDhtAnnouncePeer,

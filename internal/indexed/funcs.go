@@ -14,6 +14,7 @@ import (
 func IterClusteredWhere[R any](t relation[R], gte R, where func(r R) bool) Iter[R] {
 	return func(yield func(R) bool) {
 		first := true
+		// TODO: This function is allocating..
 		checkFirst := func(r g.Option[R]) {
 			if !first {
 				return

@@ -341,7 +341,7 @@ func (me *regularTrackerAnnounceDispatcher) updateOverdue() {
 	var last g.Option[torrentTrackerAnnouncerKey]
 again:
 	for {
-		for r := range indexed.FirstInRange(me.overdueIndex, start, end).Iter() {
+		for r := range indexed.FirstInRange(me.overdueIndex, start, end).Iter {
 			// Check we're making progress.
 			if last.Ok {
 				if last.Value.Compare(r.torrentTrackerAnnouncerKey) == 0 {

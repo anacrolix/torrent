@@ -25,7 +25,12 @@ func (me *Map[K, V]) Init(cmp func(a, b K) int) {
 	me.keyCmp = cmp
 }
 
-func (me *Map[K, V]) Update(key K, updateFunc func(V) V) (exists bool) {
+type UpdateResult struct {
+	Exists  bool
+	Changed bool
+}
+
+func (me *Map[K, V]) Update(key K, updateFunc func(V) V) (res UpdateResult) {
 	start := Pair[K, V]{Left: key}
 	gte := me.GetGte(start)
 	if !gte.Ok {
@@ -35,7 +40,7 @@ func (me *Map[K, V]) Update(key K, updateFunc func(V) V) (exists bool) {
 	if me.keyCmp(old.Left, key) != 0 {
 		return
 	}
-	exists = true
+	res.Exists = true
 	new := old
 	new.Right = updateFunc(old.Right)
 	if new.Right == old.Right {
@@ -45,6 +50,8 @@ func (me *Map[K, V]) Update(key K, updateFunc func(V) V) (exists bool) {
 	panicif.False(overwrote)
 	panicif.NotEq(replaced, old)
 	panicif.NotZero(me.cmp(replaced, old))
+	// Is this lazy? Should the caller be triggering instead?
+	res.Changed = true
 	me.Changed(g.Some(old), g.Some(new))
 	return
 }

@@ -1,6 +1,6 @@
 module github.com/anacrolix/torrent
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/RoaringBitmap/roaring v1.2.3
@@ -55,7 +55,7 @@ require (
 	golang.org/x/net v0.42.0
 	golang.org/x/sync v0.16.0
 	golang.org/x/sys v0.34.0
-	golang.org/x/time v0.0.0-20220609170525-579cf78fd858
+	golang.org/x/time v0.14.0
 )
 
 require (

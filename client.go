@@ -1776,14 +1776,7 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 }
 
 func (cl *Client) newDownloadRateLimitedReader(r io.Reader) io.Reader {
-	if cl.config.DownloadRateLimiter == nil {
-		return r
-	}
-	// Why if the limit is Inf? Because it can be dynamically adjusted.
-	return rateLimitedReader{
-		l: cl.config.DownloadRateLimiter,
-		r: r,
-	}
+	return newRateLimitedReader(r, cl.config.DownloadRateLimiter)
 }
 
 func (cl *Client) onDHTAnnouncePeer(ih metainfo.Hash, ip net.IP, port int, portOk bool) {

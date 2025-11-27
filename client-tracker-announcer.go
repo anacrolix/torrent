@@ -174,7 +174,7 @@ func (me *regularTrackerAnnounceDispatcher) init(client *Client) {
 					input.infohashActive = new.Value.count
 					return input
 				},
-			))
+			).Exists)
 		}
 	})
 	me.trackerAnnouncing.Init(cmp.Compare)
@@ -369,7 +369,7 @@ again:
 					value.overdue = value.When.Compare(now) <= 0
 					panicif.Eq(value.overdue, oldOverdue)
 					return value
-				}))
+				}).Exists)
 			continue again
 		}
 		break
@@ -455,7 +455,7 @@ func (me *regularTrackerAnnounceDispatcher) startAnnounce(key torrentTrackerAnno
 		panicif.True(r.active)
 		r.active = true
 		return r
-	}))
+	}).Exists)
 	me.alterInfohashConcurrency(key.ShortInfohash, func(existing int) int {
 		return existing + 1
 	})
@@ -501,11 +501,12 @@ func (me *regularTrackerAnnounceDispatcher) syncAnnounceState(key torrentTracker
 
 func (me *regularTrackerAnnounceDispatcher) updateTorrentInput(t *Torrent) {
 	input := me.makeTorrentInput(t)
+	changed := false
 	for key := range t.regularTrackerAnnounceState {
 		panicif.Zero(key.url)
 		panicif.Zero(key.ShortInfohash)
 		// Avoid clobbering derived and unrelated values (overdue and active).
-		exists := me.announceData.Update(
+		res := me.announceData.Update(
 			key,
 			func(av nextAnnounceInput) nextAnnounceInput {
 				av.torrent = input
@@ -514,9 +515,13 @@ func (me *regularTrackerAnnounceDispatcher) updateTorrentInput(t *Torrent) {
 				return av
 			},
 		)
-		panicif.False(exists)
+		panicif.False(res.Exists)
+		changed = changed || res.Changed
 	}
-	me.updateTimer()
+	// 'Twould be better to have a change trigger on nextAnnounce, but I'm in a hurry.
+	if changed {
+		me.updateTimer()
+	}
 }
 
 func (me *regularTrackerAnnounceDispatcher) nextTimerDelay() mytimer.TimeValue {

@@ -2526,6 +2526,9 @@ func (t *Torrent) newConnsAllowed() bool {
 	if t.closed.IsSet() {
 		return false
 	}
+	if rl := t.cl.config.DownloadRateLimiter; rl != nil && rl.Tokens() <= 0 {
+		return false
+	}
 	if t.needData() {
 		return true
 	}

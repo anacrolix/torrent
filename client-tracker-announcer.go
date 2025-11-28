@@ -738,7 +738,7 @@ type nextAnnounceTorrentInput struct {
 	HasActiveWebseedRequests bool
 }
 
-// TODO: Expand this to do Completed. when.IsZero if there's nothing to do and the data can be forgotten.
+// when.IsZero if there's nothing to do and the data can be forgotten.
 func (me *regularTrackerAnnounceDispatcher) nextAnnounceEvent(key torrentTrackerAnnouncerKey) (event tracker.AnnounceEvent, when time.Time) {
 	state := g.MapMustGet(me.announceStates, key)
 	lastOk := state.lastOk

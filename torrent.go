@@ -1801,7 +1801,7 @@ func (t *Torrent) setCachedPieceCompletion(piece int, uncached g.Option[bool]) b
 			// This is missing conditions... do we care?
 			if t.haveAllPieces() {
 				// We may be able to send Completed event.
-				t.cl.unlockHandlers.deferUpdateTorrentRegularTrackerAnnouncing(t)
+				t.deferUpdateRegularTrackerAnnouncing()
 			}
 		}
 	} else {

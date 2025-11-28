@@ -881,6 +881,8 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		var msg pp.Message
 		func() {
 			cl.unlock()
+			// TODO: Could TryLock and pump for more messages here until we can get the lock and
+			// process them in a batch.
 			defer cl.lock()
 			err = decoder.Decode(&msg)
 			if err != nil {

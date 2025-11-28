@@ -188,10 +188,18 @@ func (me *table[R]) Contains(r R) (ok bool) {
 }
 
 func (me *table[R]) Changed(old, new g.Option[R]) {
+	// You should not even be trying to change a table underneath iterators. We want to know about
+	// this even if nothing happens.
+	me.incVersion()
 	if !old.Ok && !new.Ok {
 		return
 	}
-	me.incVersion()
+	if old.Ok && new.Ok {
+		// I believe we have that Records are value-comparable.
+		if old.Value == new.Value {
+			return
+		}
+	}
 	for _, t := range me.indexTriggers {
 		t(old, new)
 	}

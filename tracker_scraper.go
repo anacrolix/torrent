@@ -76,6 +76,15 @@ type trackerAnnounceResult struct {
 }
 
 func (me *trackerScraper) getIp() (ip net.IP, err error) {
+	// Skip IP resolution if using proxy - the proxy handles DNS resolution
+	// and we don't need to check against blocklists for proxied connections.
+	// This applies to both HTTP proxy and custom dial contexts that might be using proxies.
+	if me.t.cl.config.HTTPProxy != nil || me.t.cl.config.TrackerDialContext != nil {
+		// Return a dummy IP that won't be used for actual connections when proxy is set.
+		// The actual connection will be handled by the proxy or custom dial context.
+		return net.ParseIP("127.0.0.1"), nil
+	}
+	
 	var ips []net.IP
 	if me.lookupTrackerIp != nil {
 		ips, err = me.lookupTrackerIp(&me.u)

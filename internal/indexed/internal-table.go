@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"iter"
 
-	"github.com/ajwerner/btree"
+	"github.com/anacrolix/btree"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/torrent/internal/amortize"

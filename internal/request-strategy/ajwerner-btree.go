@@ -1,7 +1,7 @@
 package requestStrategy
 
 import (
-	"github.com/ajwerner/btree"
+	"github.com/anacrolix/btree"
 )
 
 type ajwernerBtree struct {

@@ -31,7 +31,7 @@ type clientPieceRequestOrderSharedStorageTorrentKey clientPieceRequestOrderKey[s
 func (c clientPieceRequestOrderSharedStorageTorrentKey) getRequestStrategyInput(cl *Client) requestStrategy.Input {
 	return requestStrategyInputMultiTorrent{
 		requestStrategyInputCommon: cl.getRequestStrategyInputCommon(),
-		torrents:                   cl.torrentsByShortHash,
+		torrents:                   &cl.torrentsByShortHash,
 		capFunc:                    c.inner,
 	}
 }

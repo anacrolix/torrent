@@ -41,3 +41,18 @@ jobs:
         run: GOARCH=386 go test -run @ ./...
       - name: Some packages compile for WebAssembly
         run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
+
+      - name: Test global installability
+        run: |
+          # Create isolated environment
+          TMPDIR=$(mktemp -d)
+          cd "$TMPDIR"
+
+          # Init a dummy module to avoid any local go.mod influence
+          go mod init dummy
+
+          # This should succeed if your module is properly published
+          go install github.com/anacrolix/torrent/cmd/torrent@${{ github.ref_name }}
+
+          # Verify it runs
+          $(go env GOPATH)/bin/torrent version

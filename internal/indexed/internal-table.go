@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"iter"
 
-	"github.com/anacrolix/btree"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/torrent/internal/amortize"
@@ -12,7 +11,7 @@ import (
 
 type table[R Record] struct {
 	minRecord g.Option[R]
-	set       btree.Set[R]
+	set       btreeSet[R]
 	// Tracks changes to the btree
 	version       int
 	cmp           CompareFunc[R]
@@ -33,7 +32,7 @@ func (me *table[R]) SetMinRecord(min R) {
 
 func (me *table[R]) Init(cmp func(a, b R) int) {
 	panicif.True(me.inited)
-	me.set = btree.MakeSet[R](cmp)
+	me.set = makeAjwernerSet[R](cmp)
 	me.cmp = cmp
 	me.inited = true
 }
@@ -48,13 +47,6 @@ func (me *table[R]) OnChange(t triggerFunc[R]) {
 	me.triggers = append(me.triggers, t)
 }
 
-func (me *table[R]) getBtreeIterator() btreeIterator[R] {
-	return btreeIterator[R]{
-		MapIterator: me.set.Iterator(),
-		version:     me.version,
-	}
-}
-
 func (me *table[R]) incVersion() {
 	me.version++
 }
@@ -67,16 +59,7 @@ func (me *table[R]) IterFrom(start R) iter.Seq[R] {
 	if me.minRecord.Ok {
 		panicif.LessThan(me.cmp(start, me.minRecord.Value), 0)
 	}
-	return func(yield func(R) bool) {
-		it := me.getBtreeIterator()
-		it.SeekGE(start)
-		for ; it.Valid(); it.Next() {
-			if !yield(it.Cur()) {
-				return
-			}
-			me.assertIteratorVersion(it)
-		}
-	}
+	return me.set.IterFrom(start)
 }
 
 func (me *table[R]) IterFromWhile(gte R, while func(R) bool) iter.Seq[R] {
@@ -125,7 +108,7 @@ func (me *table[R]) SelectFirstWhere(gte R, where func(r R) bool) (ret g.Option[
 }
 
 func (me *table[R]) Delete(r R) (removed bool) {
-	remK, _, removed := me.set.Map.Delete(r)
+	remK, removed := me.set.Delete(r)
 	me.Changed(g.OptionFromTuple(remK, removed), g.None[R]())
 	return
 }
@@ -137,23 +120,19 @@ func (me *table[R]) CreateOrReplace(r R) {
 
 func (me *table[R]) Iter() iter.Seq[R] {
 	return func(yield func(R) bool) {
-		it := me.getBtreeIterator()
-		for it.First(); it.Valid(); it.Next() {
-			r := it.Cur()
+		for r := range me.set.Iter {
 			if me.minRecord.Ok && amortize.Try() {
 				panicif.LessThan(me.cmp(r, me.minRecord.Value), 0)
 			}
 			if !yield(r) {
 				return
 			}
-			me.assertIteratorVersion(it)
 		}
 	}
 }
 
 func (me *table[R]) Create(r R) (created bool) {
-	_, exists := me.set.Get(r)
-	if exists {
+	if me.set.Contains(r) {
 		return false
 	}
 	_, overwrote := me.set.Upsert(r)
@@ -179,12 +158,8 @@ func (me *table[R]) Update(r R, updateFunc func(r R) R) (existed bool) {
 }
 
 // Should this only return a single value ever? Should we check?
-func (me *table[R]) Contains(r R) (ok bool) {
-	// Make sure set is in fact a Set and has no value.
-	var v struct{}
-	v, ok = me.set.Get(r)
-	_ = v
-	return
+func (me *table[R]) Contains(r R) bool {
+	return me.set.Contains(r)
 }
 
 func (me *table[R]) Changed(old, new g.Option[R]) {
@@ -212,12 +187,14 @@ func (me *table[R]) Change(old, new g.Option[R]) {
 		if new.Ok {
 			// We can't guard deletion in case the compare function is partial, because we may be
 			// updating unordered fields.
-			panicif.False(me.set.Delete(old.Value))
+			_, deleted := me.set.Delete(old.Value)
+			panicif.False(deleted)
 			_, overwrote := me.set.Upsert(new.Value)
 			// What about deleting only if the upsert doesn't clobber here?
 			panicif.True(overwrote)
 		} else {
-			panicif.False(me.set.Delete(old.Value))
+			_, deleted := me.set.Delete(old.Value)
+			panicif.False(deleted)
 		}
 	} else {
 		if new.Ok {
@@ -231,10 +208,9 @@ func (me *table[R]) Change(old, new g.Option[R]) {
 }
 
 func (me *table[R]) GetFirst() (r R, ok bool) {
-	it := me.set.Iterator()
-	it.First()
-	if it.Valid() {
-		r, ok = it.Cur(), true
+	for r = range me.Iter() {
+		ok = true
+		break
 	}
 	if amortize.Try() {
 		panicif.NotEq(g.OptionFromTuple(r, ok), me.GetGte(me.MinRecord()))
@@ -245,10 +221,9 @@ func (me *table[R]) GetFirst() (r R, ok bool) {
 // Gets the first record greater than or equal. Hope to avoid allocation for iterator.
 func (me *table[R]) GetGte(r R) (ret g.Option[R]) {
 	// Don't need version checking since we don't iterate.
-	it := me.set.Iterator()
-	it.SeekGE(r)
-	if it.Valid() {
-		ret.Set(it.Cur())
+	for ret.Value = range me.IterFrom(r) {
+		ret.Ok = true
+		break
 	}
 	return
 }

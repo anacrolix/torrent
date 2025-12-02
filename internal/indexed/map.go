@@ -65,11 +65,12 @@ func (me *Map[K, V]) Alter(key K, updateFunc func(V, bool) (V, bool)) {
 }
 
 func (me *Map[K, V]) Get(k K) (v V, ok bool) {
-	it := me.set.Iterator()
-	it.SeekGE(Pair[K, V]{Left: k})
-	if it.Valid() && me.keyCmp(it.Cur().Left, k) == 0 {
-		v = it.Cur().Right
-		ok = true
+	for r := range me.set.IterFrom(Pair[K, V]{Left: k}) {
+		if me.keyCmp(r.Left, k) == 0 {
+			v = r.Right
+			ok = true
+			break
+		}
 	}
 	return
 }

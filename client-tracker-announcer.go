@@ -266,7 +266,7 @@ func (me *regularTrackerAnnounceDispatcher) printNextAnnounceRecordTable(
 	tab := sw.tab()
 	tab.cols(nextAnnounceRecordCols...)
 	tab.row()
-	for r := range table.Iter() {
+	for r := range table.Iter {
 		me.putNextAnnounceRecordCols(tab, r)
 		tab.row()
 	}
@@ -281,7 +281,7 @@ func (me *regularTrackerAnnounceDispatcher) printNextAnnounceTable(
 	tab.cols("#tr")
 	tab.cols(nextAnnounceRecordCols...)
 	tab.row()
-	for r := range table.Iter() {
+	for r := range table.Iter {
 		tab.cols(r.trackerRequests)
 		me.putNextAnnounceRecordCols(tab, r.nextAnnounceRecord)
 		tab.row()

@@ -47,7 +47,7 @@ func TestOverdue(t *testing.T) {
 			return
 		}(),
 	)
-	qt.Assert(t, qt.CmpEquals(nil, slices.Collect(a.Iter())))
+	qt.Assert(t, qt.CmpEquals(nil, slices.Collect(a.Iter)))
 	rows := []overdueRecord{
 		{overdue: true},
 		{overdue: true, when: time.Now().Add(-time.Minute)},
@@ -61,9 +61,9 @@ func TestOverdue(t *testing.T) {
 	for i, row := range rows {
 		panicif.False(a.Create(i, row))
 	}
-	itered := slices.Collect(MapPairIterLeft(a.Iter()))
+	itered := slices.Collect(MapPairIterLeft(a.Iter))
 	qt.Assert(t, qt.HasLen(itered, len(rows)))
-	iteredPks := slices.Collect(MapPairIterRight(idx.Iter()))
+	iteredPks := slices.Collect(MapPairIterRight(idx.Iter))
 	qt.Assert(t, qt.CmpEquals([]int{0, 5, 1, 2, 6, 3, 4, 7}, iteredPks))
 	var overdue []int
 	gte := idx.MinRecord()
@@ -80,7 +80,7 @@ func TestOverdue(t *testing.T) {
 			return r
 		})
 	}
-	qt.Assert(t, qt.CmpEquals([]int{0, 5, 6, 1, 3, 2, 4, 7}, slices.Collect(MapPairIterRight(idx.Iter()))))
+	qt.Assert(t, qt.CmpEquals([]int{0, 5, 6, 1, 3, 2, 4, 7}, slices.Collect(MapPairIterRight(idx.Iter))))
 }
 
 type orderedPrimaryKey[T constraints.Ordered] struct {

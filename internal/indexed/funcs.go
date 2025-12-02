@@ -41,7 +41,7 @@ func checkWhereGotFirst[R any](me relation[R], first g.Option[R], where func(r R
 		return
 	}
 	var slowRet g.Option[R]
-	for r := range me.Iter() {
+	for r := range me.Iter {
 		if where(r) {
 			slowRet.Set(r)
 			break

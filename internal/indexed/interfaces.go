@@ -15,7 +15,7 @@ type tableInterface[R any] interface {
 type relation[R any] interface {
 	genericRelation
 	GetGte(gte R) g.Option[R]
-	Iter() iter.Seq[R]
+	Iter(yield func(R) bool)
 	// Should this be done using MinRecord to force the logic to be tested?
 	IterFrom(gte R) iter.Seq[R]
 	MinRecord() R

@@ -85,7 +85,7 @@ func (me *table[R]) checkWhereGotFirst(first g.Option[R], where func(r R) bool) 
 		return
 	}
 	var slowRet g.Option[R]
-	for r := range me.Iter() {
+	for r := range me.Iter {
 		if where(r) {
 			slowRet.Set(r)
 			break
@@ -118,15 +118,13 @@ func (me *table[R]) CreateOrReplace(r R) {
 	me.Changed(g.OptionFromTuple(replaced, overwrote), g.Some(r))
 }
 
-func (me *table[R]) Iter() iter.Seq[R] {
-	return func(yield func(R) bool) {
-		for r := range me.set.Iter {
-			if me.minRecord.Ok && amortize.Try() {
-				panicif.LessThan(me.cmp(r, me.minRecord.Value), 0)
-			}
-			if !yield(r) {
-				return
-			}
+func (me *table[R]) Iter(yield func(R) bool) {
+	for r := range me.set.Iter {
+		if me.minRecord.Ok && amortize.Try() {
+			panicif.LessThan(me.cmp(r, me.minRecord.Value), 0)
+		}
+		if !yield(r) {
+			return
 		}
 	}
 }
@@ -208,7 +206,7 @@ func (me *table[R]) Change(old, new g.Option[R]) {
 }
 
 func (me *table[R]) GetFirst() (r R, ok bool) {
-	for r = range me.Iter() {
+	for r = range me.Iter {
 		ok = true
 		break
 	}

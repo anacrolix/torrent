@@ -27,7 +27,7 @@ func (me *Table2[K, V]) IterKeysFrom(start K) iter.Seq[K] {
 
 func Iter2[K, V any](me tableInterface[Pair[K, V]]) iter.Seq2[K, V] {
 	return func(yield func(K, V) bool) {
-		for r := range me.Iter() {
+		for r := range me.Iter {
 			if !yield(r.Left, r.Right) {
 				return
 			}

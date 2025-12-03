@@ -1244,7 +1244,6 @@ func (c *PeerConn) setTorrent(t *Torrent) {
 	panicif.NotNil(c.t)
 	c.t = t
 	c.initClosedCtx()
-	c.logger.WithDefaultLevel(log.Debug).Printf("set torrent=%v", t)
 	c.setPeerLoggers(t.logger, t.slogger())
 	c.reconcileHandshakeStats()
 }

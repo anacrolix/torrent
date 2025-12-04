@@ -44,7 +44,7 @@ func NewFullMappedIndex[F, T comparable](
 	mapFunc func(F) T,
 	minRecord T,
 ) Index[T] {
-	var index *Table[T]
+	var index *table[T]
 	g.InitNew(&index)
 	index.Init(cmpFunc)
 	index.SetMinRecord(minRecord)

@@ -146,6 +146,8 @@ func (me *regularTrackerAnnounceDispatcher) initTables() {
 	me.trackerAnnounceHead.Init(func(a, b trackerAnnounceHeadRecord) int {
 		return cmp.Compare(a.url, b.url)
 	})
+	// Just empty url.
+	me.trackerAnnounceHead.SetMinRecord(trackerAnnounceHeadRecord{})
 	me.nextAnnounce = indexed.NewFullIndex(
 		&me.trackerAnnounceHead,
 		func(a, b trackerAnnounceHeadRecord) int {

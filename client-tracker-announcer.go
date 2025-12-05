@@ -338,41 +338,24 @@ func (me *regularTrackerAnnounceDispatcher) updateOverdue() {
 	end := me.overdueIndex.MinRecord()
 	end.overdue = false
 	end.When = now.Add(1)
-	var last g.Option[torrentTrackerAnnouncerKey]
-again:
-	for {
-		for r := range indexed.FirstInRange(me.overdueIndex, start, end).Iter() {
-			// Check we're making progress.
-			if last.Ok {
-				if last.Value.Compare(r.torrentTrackerAnnouncerKey) == 0 {
-					panicif.NotEq(
-						r.nextAnnounceInput,
-						g.OptionFromTuple(me.announceData.Get(r.torrentTrackerAnnouncerKey)).Unwrap())
-					me.logger.Log(context.Background(), slog.LevelWarn,
-						"same item seen twice while updating overdue announces",
-						"last", last.Value,
-						"current record", fmt.Sprintf("%#v", r),
-						"now", now,
-						"cmp", r.When.Compare(now),
-						"after", now.After(r.When))
-					break again
-				}
-			}
-			last.Set(r.torrentTrackerAnnouncerKey)
-			panicif.False(me.announceData.Update(
-				r.torrentTrackerAnnouncerKey,
-				func(value nextAnnounceInput) nextAnnounceInput {
-					panicif.NotEq(value, r.nextAnnounceInput)
-					// Must use same now as the range, or we can get stuck scanning the same window
-					// wondering and not moving things.
-					oldOverdue := value.overdue
-					value.overdue = value.When.Compare(now) <= 0
-					panicif.Eq(value.overdue, oldOverdue)
-					return value
-				}))
-			continue again
-		}
-		break
+
+	// This stops recursive thrashing while we pivot on a fixed now.
+	var updateKeys []torrentTrackerAnnouncerKey
+	for r := range indexed.IterRange(me.overdueIndex, start, end) {
+		updateKeys = append(updateKeys, r.torrentTrackerAnnouncerKey)
+	}
+	for _, key := range updateKeys {
+		// There's no guarantee we actually change anything, the overdue might remain the same due
+		// to timing.
+		panicif.False(me.announceData.Update(
+			key,
+			func(value nextAnnounceInput) nextAnnounceInput {
+				// For recursive updates, we make sure to monotonically progress state. (Now always
+				// forward, so we are always agreeing with other instances of updateOverdue).
+				value.overdue = value.When.Compare(time.Now()) <= 0
+				return value
+			},
+		))
 	}
 }
 

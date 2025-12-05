@@ -908,3 +908,16 @@ func TestClientConfigSetHandlerNotIgnored(t *testing.T) {
 	h := cl.logger.Handlers[0].(log.StreamHandler)
 	qt.Check(t, qt.Equals(h.W, io.Discard))
 }
+
+func TestDroppedTorrentsNotReturned(t *testing.T) {
+	cl := newTestingClient(t)
+	tt, _ := cl.AddTorrentOpt(testingAddTorrentOpts)
+	tt1, ok := cl.Torrent(tt.InfoHash())
+	qt.Check(t, qt.IsTrue(ok))
+	qt.Check(t, qt.Equals(tt1, tt))
+	qt.Check(t, qt.SliceContains(cl.Torrents(), tt))
+	tt.Drop()
+	tt1, ok = cl.Torrent(tt.InfoHash())
+	qt.Check(t, qt.IsFalse(ok))
+	qt.Check(t, qt.HasLen(cl.Torrents(), 0))
+}

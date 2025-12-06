@@ -22,6 +22,7 @@ var defaultFileIo = func() fileIo {
 }
 
 type fileIo interface {
+	Close() error
 
 	openForSharedRead(name string) (sharableReader, error)
 	openForRead(name string) (fileReader, error)

@@ -8,8 +8,8 @@ act:
 
 export GOPPROF := env("GOPPROF", "http")
 
-test-short: build-possum
-    GOPPROF='{{GOPPROF}}' go test -race -failfast -short ./...
+test-short *args: build-possum
+    GOPPROF='{{GOPPROF}}' go test -race -failfast -short {{ args }} ./...
 
 test *args: build-possum
     go test -race {{ args }} ./...

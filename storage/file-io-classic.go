@@ -7,6 +7,11 @@ import (
 
 type classicFileIo struct{}
 
+// Lifetimes of files are scoped to their use, so let's hope everyone is being a good citizen.
+func (me classicFileIo) Close() error {
+	return nil
+}
+
 func (me classicFileIo) rename(from, to string) error {
 	return os.Rename(from, to)
 }

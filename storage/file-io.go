@@ -16,10 +16,21 @@ type fileReader interface {
 	io.ReadCloser
 }
 
+// This gets clobbered by a hybrid mmap implementation if mmap is available.
+var defaultFileIo = func() fileIo {
+	return classicFileIo{}
+}
+
 type fileIo interface {
-	openForSharedRead(name string) (sharedFileIf, error)
+
+	openForSharedRead(name string) (sharableReader, error)
 	openForRead(name string) (fileReader, error)
 	openForWrite(name string, size int64) (fileWriter, error)
 	flush(name string, offset, nbytes int64) error
 	rename(from, to string) error
+}
+
+type sharableReader interface {
+	io.ReaderAt
+	io.Closer
 }

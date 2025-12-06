@@ -124,7 +124,7 @@ func (fts *fileTorrentImpl) file(index int) file {
 }
 
 // Open file for reading.
-func (me *fileTorrentImpl) openSharedFile(file file) (f sharedFileIf, err error) {
+func (me *fileTorrentImpl) openSharedFile(file file) (f sharableReader, err error) {
 	file.mu.RLock()
 	// Fine to open once under each name on a unix system. We could make the shared file keys more
 	// constrained, but it shouldn't matter. TODO: Ensure at most one of the names exist.

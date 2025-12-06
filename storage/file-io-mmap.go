@@ -5,11 +5,12 @@ package storage
 import (
 	"errors"
 	"fmt"
-	"github.com/anacrolix/sync"
 	"io"
 	"io/fs"
 	"os"
 	"sync/atomic"
+
+	"github.com/anacrolix/sync"
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
@@ -44,20 +45,30 @@ func init() {
 
 type mmapFileIo struct {
 	mu sync.RWMutex
-	// We could automatically expire fileMmaps by using weak.Pointers? Currently the store never
+	// We could automatically expire fileMmaps by using weak.Pointers? Currently, the store never
 	// relinquishes its extra ref so we never clean up anyway.
 	paths map[string]*fileMmap
+}
+
+func (me *mmapFileIo) Close() error {
+	me.mu.Lock()
+	defer me.mu.Unlock()
+	for name := range me.paths {
+		me.closeName(name)
+	}
+	me.paths = nil
+	return nil
 }
 
 func (me *mmapFileIo) rename(from, to string) (err error) {
 	me.mu.Lock()
 	defer me.mu.Unlock()
-	me.close(from)
-	me.close(to)
+	me.closeName(from)
+	me.closeName(to)
 	return os.Rename(from, to)
 }
 
-func (me *mmapFileIo) close(name string) {
+func (me *mmapFileIo) closeName(name string) {
 	v, ok := me.paths[name]
 	if ok {
 		// We're forcibly closing the handle. Leave the store's ref intact so we're the only one
@@ -117,7 +128,7 @@ func (me *fileMmap) inc() {
 	panicif.LessThanOrEqual(me.refs.Add(1), 0)
 }
 
-func (me *mmapFileIo) openForSharedRead(name string) (_ sharedFileIf, err error) {
+func (me *mmapFileIo) openForSharedRead(name string) (_ sharableReader, err error) {
 	return me.openReadOnly(name)
 }
 

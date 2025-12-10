@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/url"
 	"time"
+	"unique"
 	"weak"
 
 	g "github.com/anacrolix/generics"
@@ -34,7 +35,7 @@ type regularTrackerAnnounceDispatcher struct {
 	// dropped it. We should just prefer to remember the fields we need. Ideally this would map all
 	// short infohash forms to the same value. We're using weak.Pointer because we need to clean it
 	// up at some point, if this crashes I know to fix it.
-	torrentForAnnounceRequests map[shortInfohash]weak.Pointer[Torrent]
+	torrentForAnnounceRequests map[unique.Handle[shortInfohash]]weak.Pointer[Torrent]
 
 	// Raw announce data keyed by announcer and short infohash.
 	announceData indexed.Map[torrentTrackerAnnouncerKey, nextAnnounceInput]
@@ -48,7 +49,7 @@ type regularTrackerAnnounceDispatcher struct {
 	// trackerAnnounceHead sorted by tracker requests, announce input, key...
 	nextAnnounce indexed.Index[trackerAnnounceHeadRecord]
 
-	infohashAnnouncing indexed.Map[shortInfohash, infohashConcurrency]
+	infohashAnnouncing indexed.Map[unique.Handle[shortInfohash], infohashConcurrency]
 	trackerAnnouncing  indexed.Map[trackerAnnouncerKey, int]
 
 	timer                      mytimer.Timer
@@ -175,8 +176,8 @@ func (me *regularTrackerAnnounceDispatcher) initTables() {
 			me.updateTrackerAnnounceHead(new.Value.Left.url)
 		}
 	})
-	me.infohashAnnouncing.Init(shortInfohash.Compare)
-	me.infohashAnnouncing.OnValueChange(func(shortIh shortInfohash, old, new g.Option[infohashConcurrency]) {
+	me.infohashAnnouncing.Init(compareUniqueHandles[shortInfohash])
+	me.infohashAnnouncing.OnValueChange(func(shortIh unique.Handle[shortInfohash], old, new g.Option[infohashConcurrency]) {
 		start := me.announceData.MinRecord()
 		start.Left.ShortInfohash = shortIh
 		keys := make([]torrentTrackerAnnouncerKey, 0, len(me.trackerClients))
@@ -265,7 +266,7 @@ func announceIndexCompare(a, b nextAnnounceRecord) int {
 	return cmp.Or(
 		cmp.Compare(a.url, b.url),
 		compareNextAnnounce(a.nextAnnounceInput, b.nextAnnounceInput),
-		a.ShortInfohash.Compare(b.ShortInfohash),
+		compareUniqueHandles(a.ShortInfohash, b.ShortInfohash),
 	)
 }
 
@@ -449,8 +450,8 @@ func (me *regularTrackerAnnounceDispatcher) addKey(key torrentTrackerAnnouncerKe
 }
 
 // Returns nil if the torrent was dropped.
-func (me *regularTrackerAnnounceDispatcher) torrentFromShortInfohash(short shortInfohash) *Torrent {
-	t, _ := me.torrentClient.torrentsByShortHash.Get(short)
+func (me *regularTrackerAnnounceDispatcher) torrentFromShortInfohash(short unique.Handle[shortInfohash]) *Torrent {
+	t, _ := me.torrentClient.torrentsByShortHash.GetUnique(short)
 	return t
 }
 
@@ -517,7 +518,7 @@ func (me *regularTrackerAnnounceDispatcher) startAnnounce(key torrentTrackerAnno
 	go me.singleAnnounceAttempter(key, next.AnnounceEvent)
 }
 
-func (me *regularTrackerAnnounceDispatcher) alterInfohashConcurrency(ih shortInfohash, update func(existing int) int) {
+func (me *regularTrackerAnnounceDispatcher) alterInfohashConcurrency(ih unique.Handle[shortInfohash], update func(existing int) int) {
 	me.infohashAnnouncing.Alter(
 		ih,
 		func(ic infohashConcurrency, b bool) (infohashConcurrency, bool) {
@@ -612,7 +613,7 @@ func (me *regularTrackerAnnounceDispatcher) singleAnnounce(
 ) {
 	// A logger that includes the nice torrent group so we know what the announce is for.
 	logger = logger.With(t.slogGroup())
-	req := t.announceRequest(event, key.ShortInfohash)
+	req := t.announceRequest(event, key.ShortInfohash.Value())
 	me.torrentClient.unlock()
 	ctx, cancel := context.WithTimeout(context.TODO(), tracker.DefaultTrackerAnnounceTimeout)
 	defer cancel()
@@ -940,7 +941,7 @@ func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 
 // Returns nil if the Torrent has been GCd. Use this lazily as a way to stop caring about announcing
 // something, if we don't get to sending Completed or error in time.
-func (me *regularTrackerAnnounceDispatcher) getTorrentForAnnounceRequest(ih shortInfohash) *Torrent {
+func (me *regularTrackerAnnounceDispatcher) getTorrentForAnnounceRequest(ih unique.Handle[shortInfohash]) *Torrent {
 	return g.MapMustGet(me.torrentForAnnounceRequests, ih).Value()
 }
 

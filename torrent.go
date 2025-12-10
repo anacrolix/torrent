@@ -221,13 +221,21 @@ type Torrent struct {
 }
 
 type torrentTrackerAnnouncerKey struct {
-	ShortInfohash shortInfohash
+	ShortInfohash unique.Handle[shortInfohash]
 	url           trackerAnnouncerKey
+}
+
+func uniqueHandlePtr[T comparable](h unique.Handle[T]) uintptr {
+	return *(*uintptr)(unsafe.Pointer(&h))
+}
+
+func compareUniqueHandles[T comparable](a, b unique.Handle[T]) int {
+	return cmp.Compare(uniqueHandlePtr[T](a), uniqueHandlePtr[T](b))
 }
 
 func (me torrentTrackerAnnouncerKey) Compare(other torrentTrackerAnnouncerKey) int {
 	return cmp.Or(
-		me.ShortInfohash.Compare(other.ShortInfohash),
+		compareUniqueHandles(me.ShortInfohash, other.ShortInfohash),
 		cmp.Compare(me.url, other.url))
 }
 
@@ -2179,9 +2187,13 @@ func (t *Torrent) startScrapingTracker(_url string) {
 	}
 }
 
-func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr trackerAnnouncerKey, shortInfohash [20]byte) {
+func (t *Torrent) startScrapingTrackerWithInfohash(
+	u *url.URL,
+	urlStr trackerAnnouncerKey,
+	shortInfohash shortInfohash,
+) {
 	announcerKey := torrentTrackerAnnouncerKey{
-		ShortInfohash: shortInfohash,
+		ShortInfohash: unique.Make(shortInfohash),
 		url:           urlStr,
 	}
 	if _, ok := t.trackerAnnouncers[announcerKey]; ok {

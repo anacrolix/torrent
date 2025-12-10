@@ -226,9 +226,11 @@ type torrentTrackerAnnouncerKey struct {
 }
 
 func (me torrentTrackerAnnouncerKey) Compare(other torrentTrackerAnnouncerKey) int {
-	return cmp.Or(
-		me.ShortInfohash.Compare(other.ShortInfohash),
-		cmp.Compare(me.url, other.url))
+	ret := me.ShortInfohash.Compare(other.ShortInfohash)
+	if ret != 0 {
+		return ret
+	}
+	return cmp.Compare(me.url, other.url)
 }
 
 // Has the modified scheme for announcer-per-IP protocol and such-forth.

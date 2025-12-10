@@ -719,11 +719,12 @@ var eventOrdering = map[tracker.AnnounceEvent]int{
 	tracker.None:      -1, // Regular maintenance
 }
 
-func overdueIndexCompare(a, b nextAnnounceRecord) int {
-	return cmp.Or(
-		compareOverdue(a.nextAnnounceInput, b.nextAnnounceInput),
-		a.torrentTrackerAnnouncerKey.Compare(b.torrentTrackerAnnouncerKey),
-	)
+func overdueIndexCompare(a, b nextAnnounceRecord) (ret int) {
+	ret = compareOverdue(a.nextAnnounceInput, b.nextAnnounceInput)
+	if ret != 0 {
+		return
+	}
+	return a.torrentTrackerAnnouncerKey.Compare(b.torrentTrackerAnnouncerKey)
 }
 
 func compareOverdue(a, b nextAnnounceInput) int {

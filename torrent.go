@@ -234,9 +234,11 @@ func compareUniqueHandles[T comparable](a, b unique.Handle[T]) int {
 }
 
 func (me torrentTrackerAnnouncerKey) Compare(other torrentTrackerAnnouncerKey) int {
-	return cmp.Or(
-		compareUniqueHandles(me.ShortInfohash, other.ShortInfohash),
-		cmp.Compare(me.url, other.url))
+	ret := compareUniqueHandles(me.ShortInfohash, other.ShortInfohash)
+	if ret != 0 {
+		return ret
+	}
+	return cmp.Compare(me.url, other.url)
 }
 
 // Has the modified scheme for announcer-per-IP protocol and such-forth.

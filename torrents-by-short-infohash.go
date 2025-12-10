@@ -68,14 +68,17 @@ func (me *syncMapTorrentsByShortHash) derefValueOrDelete(
 	return nil, false
 }
 
-func (me *syncMapTorrentsByShortHash) Get(ih shortInfohash) (t *Torrent, ok bool) {
-	key := unique.Make(ih)
+func (me *syncMapTorrentsByShortHash) GetUnique(key unique.Handle[shortInfohash]) (t *Torrent, ok bool) {
 	v, ok := me.inner.Load(key)
 	if !ok {
 		return
 	}
 	wp := v.(syncMapTorrentsByShortHashValue)
 	return me.derefValueOrDelete(key, wp)
+}
+
+func (me *syncMapTorrentsByShortHash) Get(ih shortInfohash) (t *Torrent, ok bool) {
+	return me.GetUnique(unique.Make(ih))
 }
 
 // Returns true if the key was newly inserted.

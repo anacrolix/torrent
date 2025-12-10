@@ -6,6 +6,7 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+	"unique"
 
 	analog "github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/panicif"
@@ -28,9 +29,9 @@ func TestUpdateOverdueRecursion(t *testing.T) {
 		// and the other that is by a recursive call, and subsequently reversed when we bounce back
 		// out to the original call.
 		key1 := torrentTrackerAnnouncerKey{}
-		key1.ShortInfohash[0] = 1
+		key1.ShortInfohash = unique.Make(shortInfohash{1})
 		key2 := torrentTrackerAnnouncerKey{}
-		key2.ShortInfohash[0] = 2
+		key2.ShortInfohash = unique.Make(shortInfohash{2})
 		value1 := nextAnnounceInput{}
 		value1.overdue = false
 		value1.When = time.Now()

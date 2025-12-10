@@ -50,7 +50,9 @@ type regularTrackerAnnounceDispatcher struct {
 
 	infohashAnnouncing indexed.Map[shortInfohash, infohashConcurrency]
 	trackerAnnouncing  indexed.Map[trackerAnnouncerKey, int]
-	timer              mytimer.Timer
+
+	timer                      mytimer.Timer
+	pendingTorrentInputUpdates map[*Torrent]struct{}
 }
 
 type announceDataRow = indexed.Pair[torrentTrackerAnnouncerKey, nextAnnounceInput]
@@ -87,6 +89,7 @@ func (me *regularTrackerAnnounceDispatcher) init(client *Client) {
 	me.torrentClient = client
 	me.logger = client.slogger
 	me.initTables()
+	g.MakeMap(&me.pendingTorrentInputUpdates)
 	me.initTimer()
 }
 
@@ -218,12 +221,12 @@ func (me *regularTrackerAnnounceDispatcher) initTables() {
 }
 
 func (me *regularTrackerAnnounceDispatcher) initTimer() {
-	me.timer.Init(time.Now(), me.timerFunc)
+	me.timer.Init(mytimer.Immediate(), me.timerFunc)
 }
 
 func (me *regularTrackerAnnounceDispatcher) initTimerNoop() {
-	me.timer.Init(time.Now(), func() mytimer.TimeValue {
-		return time.Time{}
+	me.timer.Init(mytimer.Immediate(), func() mytimer.TimeValue {
+		return mytimer.Never()
 	})
 }
 
@@ -359,7 +362,7 @@ func (me *regularTrackerAnnounceDispatcher) putNextAnnounceRecordCols(
 func (me *regularTrackerAnnounceDispatcher) writeStatus(w io.Writer) {
 	sw := statusWriter{w: w}
 	// TODO: Print active announces
-	sw.f("timer next: %v\n", time.Until(me.timer.When()))
+	sw.f("timer next: %v\n", time.Until(me.timer.When().Time))
 	sw.f("Next announces:\n")
 	for sw := range indented(sw) {
 		me.printNextAnnounceRecordTable(sw, me.announceIndex)
@@ -416,6 +419,10 @@ func (me *regularTrackerAnnounceDispatcher) timerFunc() mytimer.TimeValue {
 
 // The progress method, called by the timer.
 func (me *regularTrackerAnnounceDispatcher) step() mytimer.TimeValue {
+	for t := range me.pendingTorrentInputUpdates {
+		me.updateTorrentInput(t)
+	}
+	clear(me.pendingTorrentInputUpdates)
 	me.dispatchAnnounces()
 	// We *are* the Sen... Timer.
 	return me.nextTimerDelay()
@@ -549,7 +556,6 @@ func (me *regularTrackerAnnounceDispatcher) syncAnnounceState(key torrentTracker
 
 func (me *regularTrackerAnnounceDispatcher) updateTorrentInput(t *Torrent) {
 	input := me.makeTorrentInput(t)
-	changed := false
 	for key := range t.regularTrackerAnnounceState {
 		panicif.Zero(key.url)
 		panicif.Zero(key.ShortInfohash)
@@ -564,17 +570,15 @@ func (me *regularTrackerAnnounceDispatcher) updateTorrentInput(t *Torrent) {
 			},
 		)
 		panicif.False(res.Exists)
-		changed = changed || res.Changed
-	}
-	// 'Twould be better to have a change trigger on nextAnnounce, but I'm in a hurry.
-	if changed {
-		me.updateTimer()
 	}
 }
 
 func (me *regularTrackerAnnounceDispatcher) nextTimerDelay() mytimer.TimeValue {
+	if len(me.pendingTorrentInputUpdates) != 0 {
+		return mytimer.Immediate()
+	}
 	next := me.getNextAnnounce()
-	return next.Value.When
+	return mytimer.FromTime(next.Value.When)
 }
 
 func (me *regularTrackerAnnounceDispatcher) updateTimer() {
@@ -942,4 +946,8 @@ func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 // something, if we don't get to sending Completed or error in time.
 func (me *regularTrackerAnnounceDispatcher) getTorrentForAnnounceRequest(ih shortInfohash) *Torrent {
 	return g.MapMustGet(me.torrentForAnnounceRequests, ih).Value()
+}
+
+func (me *regularTrackerAnnounceDispatcher) pendTorrentInputUpdate(t *Torrent) {
+	me.pendingTorrentInputUpdates[t] = struct{}{}
 }

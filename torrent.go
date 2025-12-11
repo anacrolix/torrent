@@ -611,7 +611,8 @@ func (t *Torrent) onSetInfo() {
 	})
 }
 
-// Checks the info bytes hash to expected values. Fills in any missing infohashes.
+// Checks the info bytes hash to expected values. Fills in any missing infohashes. TODO: Add a test
+// checking what happens if you try to apply the wrong info bytes.
 func (t *Torrent) hashInfoBytes(b []byte, info *metainfo.Info) error {
 	v1Hash := infohash.HashBytes(b)
 	v2Hash := infohash_v2.HashBytes(b)

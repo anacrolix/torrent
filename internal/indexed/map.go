@@ -30,30 +30,15 @@ type UpdateResult struct {
 	Changed bool
 }
 
+// Inner table update is unimplemented, because
 func (me *Map[K, V]) Update(key K, updateFunc func(V) V) (res UpdateResult) {
-	start := Pair[K, V]{Left: key}
-	gte := me.GetGte(start)
-	if !gte.Ok {
-		return
-	}
-	old := gte.Value
-	if me.keyCmp(old.Left, key) != 0 {
-		return
-	}
-	res.Exists = true
-	new := old
-	new.Right = updateFunc(old.Right)
-	if new.Right == old.Right {
-		return
-	}
-	replaced, overwrote := me.set.Upsert(new)
-	panicif.False(overwrote)
-	panicif.NotEq(replaced, old)
-	panicif.NotZero(me.cmp(replaced, old))
-	// Is this lazy? Should the caller be triggering instead?
-	res.Changed = true
-	me.Changed(g.Some(old), g.Some(new))
-	return
+	return me.Table2.Update(
+		Pair[K, V]{Left: key},
+		func(r Pair[K, V]) Pair[K, V] {
+			r.Right = updateFunc(r.Right)
+			return r
+		},
+	)
 }
 
 func (me *Map[K, V]) Alter(key K, updateFunc func(V, bool) (V, bool)) {
@@ -65,14 +50,7 @@ func (me *Map[K, V]) Alter(key K, updateFunc func(V, bool) (V, bool)) {
 }
 
 func (me *Map[K, V]) Get(k K) (v V, ok bool) {
-	for r := range me.set.IterFrom(Pair[K, V]{Left: k}) {
-		if me.keyCmp(r.Left, k) == 0 {
-			v = r.Right
-			ok = true
-			break
-		}
-	}
-	return
+	return option.Map(pairMapRight, GetEq(me, Pair[K, V]{Left: k})).AsTuple()
 }
 
 func (me *Map[K, V]) ContainsKey(k K) bool {

@@ -15,10 +15,14 @@ type table[R Record] struct {
 	// Tracks changes to the btree
 	version       int
 	cmp           CompareFunc[R]
+	insteadOf     []InsteadOf[R]
 	indexes       []genericRelation
 	indexTriggers []triggerFunc[R]
-	triggers      []triggerFunc[R]
-	inited        bool
+	// I want to believe this isn't useful for indexes but I could be wrong.
+	triggers []triggerFunc[R]
+	inited   bool
+	// The table must not be modified. We're probably handling triggers on it.
+	poisoned bool
 }
 
 func (me *table[R]) GetCmp() CompareFunc[R] {
@@ -30,11 +34,11 @@ func (me *table[R]) SetMinRecord(min R) {
 	me.minRecord.Set(min)
 }
 
-func (me *table[R]) Init(cmp func(a, b R) int) {
+func (me *table[R]) Init(cmp CompareFunc[R]) {
 	panicif.True(me.inited)
+	me.inited = true
 	me.set = makeAjwernerSet(cmp)
 	me.cmp = cmp
-	me.inited = true
 }
 
 func (me *table[R]) runTriggers(old, new g.Option[R]) {
@@ -108,12 +112,16 @@ func (me *table[R]) SelectFirstWhere(gte R, where func(r R) bool) (ret g.Option[
 }
 
 func (me *table[R]) Delete(r R) (removed bool) {
+	// TODO: insteadOf trigger
+	panicif.NotZero(len(me.insteadOf))
 	remK, removed := me.set.Delete(r)
 	me.Changed(g.OptionFromTuple(remK, removed), g.None[R]())
 	return
 }
 
 func (me *table[R]) CreateOrReplace(r R) {
+	// TODO: insteadOf trigger
+	panicif.NotZero(len(me.insteadOf))
 	replaced, overwrote := me.set.Upsert(r)
 	me.Changed(g.OptionFromTuple(replaced, overwrote), g.Some(r))
 }
@@ -133,26 +141,49 @@ func (me *table[R]) Create(r R) (created bool) {
 	if me.set.Contains(r) {
 		return false
 	}
+	{
+		opt := me.applyInsteadOf(g.None[R](), g.Some(r))
+		if opt.Ok {
+			r = opt.Value
+		} else {
+			return false
+		}
+	}
 	_, overwrote := me.set.Upsert(r)
 	panicif.True(overwrote)
 	me.Changed(g.None[R](), g.Some(r))
 	return true
 }
 
-func (me *table[R]) Update(r R, updateFunc func(r R) R) (existed bool) {
-	existed = me.Contains(r)
-	if !existed {
-		return false
-	}
-	newRecord := updateFunc(r)
-	if newRecord == r {
+// Doesn't currently allow replacing items other than itself.
+func (me *table[R]) Update(start R, updateFunc func(r R) R) (res UpdateResult) {
+	gte := me.GetGte(start)
+	if !gte.Ok {
 		return
 	}
-	replaced, overwrote := me.set.Upsert(newRecord)
-	panicif.False(overwrote)
-	panicif.NotZero(me.cmp(r, replaced))
-	me.Changed(g.Some(r), g.Some(newRecord))
-	return true
+	old := gte.Value
+	if me.cmp(old, start) != 0 {
+		return
+	}
+	res.Exists = true
+	new := updateFunc(old)
+	res.Changed = me.Change(g.Some(old), g.Some(new))
+	return
+	//newOpt := me.applyInsteadOf(g.Some(old), g.Some(new))
+	//// It can be done I just need to implement it.
+	//panicif.False(newOpt.Ok)
+	//new = newOpt.Value
+	//if new == old {
+	//	return
+	//}
+	//replaced, overwrote := me.set.Upsert(new)
+	//panicif.False(overwrote)
+	//panicif.NotEq(replaced, old)
+	//panicif.NotZero(me.cmp(replaced, old))
+	//// Is this lazy? Should the caller be triggering instead?
+	//res.Changed = true
+	//panicif.False(me.Changed(g.Some(old), g.Some(new)))
+	//return
 }
 
 // Should this only return a single value ever? Should we check?
@@ -160,27 +191,33 @@ func (me *table[R]) Contains(r R) bool {
 	return me.set.Contains(r)
 }
 
-func (me *table[R]) Changed(old, new g.Option[R]) {
+func (me *table[R]) Changed(old, new g.Option[R]) bool {
 	// You should not even be trying to change a table underneath iterators. We want to know about
 	// this even if nothing happens.
 	me.incVersion()
+	// Make sure nothing invalidates the old/new values we're handling.
+	me.Poison()
+	defer me.Unpoison()
 	if !old.Ok && !new.Ok {
-		return
+		return false
 	}
 	if old.Ok && new.Ok {
 		// I believe we have that Records are value-comparable.
 		if old.Value == new.Value {
-			return
+			return false
 		}
 	}
 	for _, t := range me.indexTriggers {
 		t(old, new)
 	}
 	me.runTriggers(old, new)
+	return true
 }
 
-// When you know the existing state and the destination state. Most efficient.
-func (me *table[R]) Change(old, new g.Option[R]) {
+// When you know the existing state and the destination state. Most efficient. This is used by
+// indexes, but allows insteadOf. Not sure if that's a good idea.
+func (me *table[R]) Change(old, new g.Option[R]) bool {
+	new = me.applyInsteadOf(old, new)
 	if old.Ok {
 		if new.Ok {
 			// We can't guard deletion in case the compare function is partial, because we may be
@@ -198,11 +235,9 @@ func (me *table[R]) Change(old, new g.Option[R]) {
 		if new.Ok {
 			_, overwrote := me.set.Upsert(new.Value)
 			panicif.True(overwrote)
-		} else {
-			return
 		}
 	}
-	me.Changed(old, new)
+	return me.Changed(old, new)
 }
 
 func (me *table[R]) GetFirst() (r R, ok bool) {
@@ -239,4 +274,22 @@ func (me *table[R]) Len() int {
 // set a GTE record that's appropriate midway in the table.
 func (me *table[R]) MinRecord() (_ R) {
 	return me.minRecord.Unwrap()
+}
+
+// Detect recursive use of table when it's a bad idea. To be replaced with a better fix sometime.
+func (me *table[R]) Poison() {
+	panicif.True(me.poisoned)
+	me.poisoned = true
+}
+
+func (me *table[R]) Unpoison() {
+	panicif.False(me.poisoned)
+	me.poisoned = false
+}
+
+func (me *table[R]) applyInsteadOf(old, new g.Option[R]) g.Option[R] {
+	for _, f := range me.insteadOf {
+		new = f(old, new)
+	}
+	return new
 }

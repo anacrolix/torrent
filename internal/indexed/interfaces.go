@@ -20,6 +20,8 @@ type relation[R any] interface {
 	IterFrom(gte R) iter.Seq[R]
 	MinRecord() R
 	GetCmp() CompareFunc[R]
+	Poison()
+	Unpoison()
 }
 
 type genericRelation interface {

@@ -75,3 +75,15 @@ func FirstInRange[R any](me relation[R], gte, lt R) (ret g.Option[R]) {
 	}
 	return
 }
+
+// Gets a row that compares equal to the given key.
+func GetEq[R any](r relation[R], key R) (eq g.Option[R]) {
+	eq = r.GetGte(key)
+	if !eq.Ok {
+		return
+	}
+	if r.GetCmp()(key, eq.Value) != 0 {
+		eq.SetNone()
+	}
+	return
+}

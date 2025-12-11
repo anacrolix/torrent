@@ -60,9 +60,6 @@ func (me *table[R]) assertIteratorVersion(it btreeIterator[R]) {
 }
 
 func (me *table[R]) IterFrom(start R) iter.Seq[R] {
-	if me.minRecord.Ok {
-		panicif.LessThan(me.cmp(start, me.minRecord.Value), 0)
-	}
 	return me.set.IterFrom(start)
 }
 
@@ -112,18 +109,11 @@ func (me *table[R]) SelectFirstWhere(gte R, where func(r R) bool) (ret g.Option[
 }
 
 func (me *table[R]) Delete(r R) (removed bool) {
-	// TODO: insteadOf trigger
-	panicif.NotZero(len(me.insteadOf))
-	remK, removed := me.set.Delete(r)
-	me.Changed(g.OptionFromTuple(remK, removed), g.None[R]())
-	return
+	return me.Change(g.Some(r), g.None[R]())
 }
 
 func (me *table[R]) CreateOrReplace(r R) {
-	// TODO: insteadOf trigger
-	panicif.NotZero(len(me.insteadOf))
-	replaced, overwrote := me.set.Upsert(r)
-	me.Changed(g.OptionFromTuple(replaced, overwrote), g.Some(r))
+	me.Change(GetEq(me, r), g.Some(r))
 }
 
 func (me *table[R]) Iter(yield func(R) bool) {
@@ -141,18 +131,7 @@ func (me *table[R]) Create(r R) (created bool) {
 	if me.set.Contains(r) {
 		return false
 	}
-	{
-		opt := me.applyInsteadOf(g.None[R](), g.Some(r))
-		if opt.Ok {
-			r = opt.Value
-		} else {
-			return false
-		}
-	}
-	_, overwrote := me.set.Upsert(r)
-	panicif.True(overwrote)
-	me.Changed(g.None[R](), g.Some(r))
-	return true
+	return me.Change(g.None[R](), g.Some(r))
 }
 
 // Doesn't currently allow replacing items other than itself.
@@ -169,21 +148,6 @@ func (me *table[R]) Update(start R, updateFunc func(r R) R) (res UpdateResult) {
 	new := updateFunc(old)
 	res.Changed = me.Change(g.Some(old), g.Some(new))
 	return
-	//newOpt := me.applyInsteadOf(g.Some(old), g.Some(new))
-	//// It can be done I just need to implement it.
-	//panicif.False(newOpt.Ok)
-	//new = newOpt.Value
-	//if new == old {
-	//	return
-	//}
-	//replaced, overwrote := me.set.Upsert(new)
-	//panicif.False(overwrote)
-	//panicif.NotEq(replaced, old)
-	//panicif.NotZero(me.cmp(replaced, old))
-	//// Is this lazy? Should the caller be triggering instead?
-	//res.Changed = true
-	//panicif.False(me.Changed(g.Some(old), g.Some(new)))
-	//return
 }
 
 // Should this only return a single value ever? Should we check?
@@ -191,53 +155,58 @@ func (me *table[R]) Contains(r R) bool {
 	return me.set.Contains(r)
 }
 
-func (me *table[R]) Changed(old, new g.Option[R]) bool {
+func (me *table[R]) Changed(old, new g.Option[R]) {
+	panicif.Eq(old, new)
+	for _, t := range me.indexTriggers {
+		t(old, new)
+	}
+	me.runTriggers(old, new)
+}
+
+// When you know the existing state and the destination state. Most efficient. This is used by
+// indexes, but allows insteadOf. Not sure if that's a good idea.
+func (me *table[R]) Change(old, new g.Option[R]) bool {
 	// You should not even be trying to change a table underneath iterators. We want to know about
 	// this even if nothing happens.
 	me.incVersion()
 	// Make sure nothing invalidates the old/new values we're handling.
 	me.Poison()
 	defer me.Unpoison()
-	if !old.Ok && !new.Ok {
-		return false
-	}
-	if old.Ok && new.Ok {
-		// I believe we have that Records are value-comparable.
-		if old.Value == new.Value {
-			return false
-		}
-	}
-	for _, t := range me.indexTriggers {
-		t(old, new)
-	}
-	me.runTriggers(old, new)
-	return true
-}
-
-// When you know the existing state and the destination state. Most efficient. This is used by
-// indexes, but allows insteadOf. Not sure if that's a good idea.
-func (me *table[R]) Change(old, new g.Option[R]) bool {
 	new = me.applyInsteadOf(old, new)
 	if old.Ok {
 		if new.Ok {
-			// We can't guard deletion in case the compare function is partial, because we may be
-			// updating unordered fields.
-			_, deleted := me.set.Delete(old.Value)
-			panicif.False(deleted)
-			_, overwrote := me.set.Upsert(new.Value)
+			if old.Value == new.Value {
+				return false
+			}
+			replaced, overwrote := me.set.Upsert(new.Value)
 			// What about deleting only if the upsert doesn't clobber here?
-			panicif.True(overwrote)
+			if overwrote {
+				panicif.NotEq(replaced, old.Value)
+			} else {
+				actual, removed := me.set.Delete(old.Value)
+				panicif.False(removed)
+				panicif.NotEq(old.Value, actual)
+			}
 		} else {
-			_, deleted := me.set.Delete(old.Value)
-			panicif.False(deleted)
+			actual, deleted := me.set.Delete(old.Value)
+			if !deleted {
+				return false
+			}
+			// Actually we should allow this since there's no shortcut to prevent unnecessary
+			// changes, and we avoid a lookup to get the full value.
+			panicif.NotZero(me.cmp(old.Value, actual))
+			old.Value = actual
 		}
 	} else {
 		if new.Ok {
 			_, overwrote := me.set.Upsert(new.Value)
 			panicif.True(overwrote)
+		} else {
+			return false
 		}
 	}
-	return me.Changed(old, new)
+	me.Changed(old, new)
+	return true
 }
 
 func (me *table[R]) GetFirst() (r R, ok bool) {
@@ -253,12 +222,7 @@ func (me *table[R]) GetFirst() (r R, ok bool) {
 
 // Gets the first record greater than or equal. Hope to avoid allocation for iterator.
 func (me *table[R]) GetGte(r R) (ret g.Option[R]) {
-	// Don't need version checking since we don't iterate.
-	for ret.Value = range me.IterFrom(r) {
-		ret.Ok = true
-		break
-	}
-	return
+	return me.set.GetGte(r)
 }
 
 // Not count because that could imply more than O(1) work.

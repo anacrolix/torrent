@@ -14,6 +14,7 @@ import (
 	g "github.com/anacrolix/generics"
 	analog "github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/panicif"
+	"github.com/anacrolix/torrent/internal/amortize"
 	"github.com/anacrolix/torrent/internal/extracmp"
 	"github.com/anacrolix/torrent/internal/indexed"
 	"github.com/anacrolix/torrent/internal/mytimer"
@@ -27,6 +28,7 @@ import (
 type regularTrackerAnnounceDispatcher struct {
 	torrentClient *Client
 	logger        *slog.Logger
+	slow          amortize.Value
 
 	trackerClients map[trackerAnnouncerKey]*trackerClientsValue
 	announceStates map[torrentTrackerAnnouncerKey]*announceState
@@ -416,9 +418,17 @@ func (me *regularTrackerAnnounceDispatcher) timerFunc() mytimer.TimeValue {
 
 // The progress method, called by the timer.
 func (me *regularTrackerAnnounceDispatcher) step() mytimer.TimeValue {
-	for t := range me.pendingTorrentInputUpdates {
-		me.updateTorrentInput(t)
-		delete(me.pendingTorrentInputUpdates, t)
+	if len(me.pendingTorrentInputUpdates) != 0 {
+		started := time.Now()
+		inputs := len(me.pendingTorrentInputUpdates)
+		for t := range me.pendingTorrentInputUpdates {
+			me.updateTorrentInput(t)
+			delete(me.pendingTorrentInputUpdates, t)
+		}
+		since := time.Since(started)
+		if since >= 20*time.Millisecond && me.slow.Try() {
+			me.logger.Warn("updating torrent inputs was slow", "took", since, "torrents", inputs)
+		}
 	}
 	me.dispatchAnnounces()
 	// We *are* the Sen... Timer.

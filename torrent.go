@@ -1556,10 +1556,11 @@ func (t *Torrent) updatePeerRequestsForPiece(piece pieceIndex, reason updateRequ
 	}
 }
 
-// Stuff we don't want to run when the pending pieces change while benchmarking.
+// Stuff to do when pending pieces changes. We avoid running this in some benchmarks.
 func (t *Torrent) onPiecePendingTriggers(piece pieceIndex) {
 	t.maybeNewConns()
 	t.deferPublishPieceStateChange(piece)
+	t.deferUpdateRegularTrackerAnnouncing()
 }
 
 // Pending pieces is an old bitmap of stuff we want. I think it's more nuanced than that now with

@@ -23,12 +23,6 @@ func (me *clientUnlockHandlers) init() {
 	g.MakeMap(&me.changedPieceStates)
 }
 
-func (me *clientUnlockHandlers) deferUpdateTorrentRegularTrackerAnnouncing(t *Torrent) {
-	g.MakeMapIfNil(&me.torrentActions)
-	value := me.torrentActions[t]
-	me.torrentActions[t] = value
-}
-
 func (me *clientUnlockHandlers) addUpdateComplete(t *Torrent) {
 	v := me.torrentActions[t]
 	v.updateComplete = true

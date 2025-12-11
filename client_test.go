@@ -84,7 +84,6 @@ func TestTorrentInitialState(t *testing.T) {
 	defer os.RemoveAll(dir)
 	var cl Client
 	cl.init(TestingConfig(t))
-	cl.initLogger()
 	tor := cl.newTorrent(
 		mi.HashInfoBytes(),
 		storage.NewFileWithCompletion(t.TempDir(), storage.NewMapPieceCompletion()),

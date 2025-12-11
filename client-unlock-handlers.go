@@ -1,6 +1,9 @@
 package torrent
 
 import (
+	"log/slog"
+	"time"
+
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
 )
@@ -34,9 +37,12 @@ func (me *clientUnlockHandlers) addUpdateComplete(t *Torrent) {
 	me.torrentActions[t] = v
 }
 
-func (me *clientUnlockHandlers) run() {
+func (me *clientUnlockHandlers) run(logger *slog.Logger) {
+	trackers := 0
+	started := time.Now()
 	for t, v := range me.torrentActions {
 		if v.updateRegularTrackerAnnouncing {
+			trackers++
 			t.updateRegularTrackerAnnouncing()
 		}
 		if v.updateComplete {
@@ -44,9 +50,14 @@ func (me *clientUnlockHandlers) run() {
 		}
 		delete(me.torrentActions, t)
 	}
-	panicif.NotEq(len(me.torrentActions), 0)
+	since := time.Since(started)
+	// Around here the Go scheduler starts to do crazy stuff.
+	if since > 20*time.Millisecond {
+		logger.Warn("client unlock handlers took a long time", "duration", since, "trackers", trackers)
+	}
 	for p := range me.changedPieceStates {
 		p.publishStateChange()
 		delete(me.changedPieceStates, p)
 	}
+	panicif.NotEq(len(me.torrentActions), 0)
 }

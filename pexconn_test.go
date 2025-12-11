@@ -13,7 +13,6 @@ import (
 func TestPexConnState(t *testing.T) {
 	var cl Client
 	cl.init(TestingConfig(t))
-	cl.initLogger()
 	torrent := cl.newTorrentForTesting()
 	addr := &net.TCPAddr{IP: net.IPv6loopback, Port: 4747}
 	c := cl.newConnection(nil, newConnectionOpts{

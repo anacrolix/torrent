@@ -32,7 +32,7 @@ func (me *lockWithDeferreds) Unlock() {
 	defer me.internal.Unlock()
 	panicif.False(me.allowDefers)
 	me.allowDefers = false
-	me.client.unlockHandlers.run()
+	me.client.unlockHandlers.run(me.client.slogger)
 	startLen := len(me.unlockActions)
 	var i int
 	for i = 0; i < len(me.unlockActions); i++ {

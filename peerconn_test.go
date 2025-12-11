@@ -108,7 +108,6 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	ts := &torrentStorage{}
 	cfg.DefaultStorage = &torrentStorageClient{ts}
 	cl.init(cfg)
-	cl.initLogger()
 	t, _ := cl.AddTorrentOpt(AddTorrentOpts{
 		InfoHash:                 testingTorrentInfoHash,
 		Storage:                  &torrentStorageClient{ts},

@@ -1630,7 +1630,7 @@ func (t *Torrent) logPieceRequestOrder() {
 	// benchmarking.
 	if false {
 		if pro != nil {
-			for item := range pro.Iter() {
+			for item := range pro.Iter {
 				t.slogger().Debug("piece request order item",
 					"infohash", item.Key.InfoHash,
 					"piece", item.Key.Index,

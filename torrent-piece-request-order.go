@@ -98,7 +98,7 @@ func (t *Torrent) checkPendingPiecesMatchesRequestOrder() {
 	}
 	short := *t.canonicalShortInfohash()
 	var proBitmap roaring.Bitmap
-	for item := range t.getPieceRequestOrder().Iter() {
+	for item := range t.getPieceRequestOrder().Iter {
 		if item.Key.InfoHash.Value() != short {
 			continue
 		}

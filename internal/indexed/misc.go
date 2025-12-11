@@ -6,6 +6,8 @@ import (
 	"github.com/anacrolix/missinggo/v2/panicif"
 )
 
+type InsteadOf[R any] func(old, new g.Option[R]) g.Option[R]
+
 type triggerFunc[R any] func(old, new g.Option[R])
 
 type CompareFunc[T any] func(a, b T) int

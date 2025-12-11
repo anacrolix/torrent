@@ -119,9 +119,11 @@ func BenchmarkRequestStrategy(b *testing.B) {
 		for completed := 0; completed <= numPieces; completed += 1 {
 			storageClient.completed = completed
 			if completed > 0 {
-				tor.cl.lock()
-				tor.updatePieceCompletion(completed - 1)
-				tor.cl.unlock()
+				func() {
+					tor.cl.lock()
+					defer tor.cl.unlock()
+					tor.updatePieceCompletion(completed - 1)
+				}()
 			}
 			// Starting and stopping timers around this part causes lots of GC overhead.
 			rs := peer.getDesiredRequestState()

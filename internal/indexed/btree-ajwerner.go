@@ -4,6 +4,7 @@ import (
 	"iter"
 
 	"github.com/anacrolix/btree"
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
 )
 
@@ -66,6 +67,15 @@ func (me *ajwernerBtreeSet[R]) IterFrom(start R) iter.Seq[R] {
 			me.assertIteratorVersion(it)
 		}
 	}
+}
+
+func (me *ajwernerBtreeSet[R]) GetGte(start R) (_ g.Option[R]) {
+	it := me.getBtreeIterator()
+	it.SeekGE(start)
+	if !it.Valid() {
+		return
+	}
+	return g.Some(it.Cur())
 }
 
 func makeAjwernerSet[R any](cmp func(R, R) int) *ajwernerBtreeSet[R] {

@@ -171,7 +171,7 @@ func (me *regularTrackerAnnounceDispatcher) initTables() {
 		if old.Ok {
 			me.updateTrackerAnnounceHead(old.Value.Left.url)
 		}
-		if new.Ok {
+		if new.Ok && (!old.Ok || old.Value.Left.url != new.Value.Left.url) {
 			me.updateTrackerAnnounceHead(new.Value.Left.url)
 		}
 	})
@@ -278,12 +278,11 @@ func (me *regularTrackerAnnounceDispatcher) getTrackerNextAnnounce(key trackerAn
 	panicif.NotEq(me.announceIndex.Len(), me.announceData.Len())
 	gte := me.announceIndex.MinRecord()
 	gte.url = key
-	// TODO: There were better optimized versions of this but I am playing it safe.
-	ret = indexed.IterClusteredWhere(me.announceIndex, gte, func(r nextAnnounceRecord) bool {
-		return r.url == key
-	}).First()
-	// Active announces are the last and so there's nothing to wait for this tracker.
-	if ret.Ok && ret.Value.active {
+	ret = me.announceIndex.GetGte(gte)
+	if !ret.Ok {
+		return
+	}
+	if ret.Value.active || ret.Value.url != key {
 		ret.SetNone()
 	}
 	return
@@ -421,8 +420,8 @@ func (me *regularTrackerAnnounceDispatcher) timerFunc() mytimer.TimeValue {
 func (me *regularTrackerAnnounceDispatcher) step() mytimer.TimeValue {
 	for t := range me.pendingTorrentInputUpdates {
 		me.updateTorrentInput(t)
+		delete(me.pendingTorrentInputUpdates, t)
 	}
-	clear(me.pendingTorrentInputUpdates)
 	me.dispatchAnnounces()
 	// We *are* the Sen... Timer.
 	return me.nextTimerDelay()

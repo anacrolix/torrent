@@ -57,8 +57,6 @@ type regularTrackerAnnounceDispatcher struct {
 
 type announceDataRow = indexed.Pair[torrentTrackerAnnouncerKey, nextAnnounceInput]
 
-type trackerAnnouncingR = indexed.Pair[trackerAnnouncerKey, int]
-
 type trackerAnnounceHeadRecord struct {
 	trackerRequests int // Count of active concurrent requests to a given tracker.
 	nextAnnounceRecord

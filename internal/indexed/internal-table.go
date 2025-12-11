@@ -32,7 +32,7 @@ func (me *table[R]) SetMinRecord(min R) {
 
 func (me *table[R]) Init(cmp func(a, b R) int) {
 	panicif.True(me.inited)
-	me.set = makeTidwallBtreeSet[R](cmp)
+	me.set = makeAjwernerSet(cmp)
 	me.cmp = cmp
 	me.inited = true
 }

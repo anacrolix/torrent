@@ -1,6 +1,7 @@
 package amortize
 
 import (
+	"math/bits"
 	"sync/atomic"
 )
 
@@ -24,4 +25,13 @@ var global Atomic
 
 func Try() bool {
 	return global.Try()
+}
+
+type Value struct {
+	count uint
+}
+
+func (me *Value) Try() bool {
+	me.count++
+	return bits.OnesCount(me.count) == 1
 }

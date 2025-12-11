@@ -34,6 +34,7 @@ import (
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
+	"github.com/anacrolix/torrent/internal/amortize"
 	"github.com/anacrolix/torrent/internal/extracmp"
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/webtorrent"
@@ -66,6 +67,7 @@ type Client struct {
 
 	_mu            lockWithDeferreds
 	unlockHandlers clientUnlockHandlers
+	check          amortize.Value
 	// Used in constrained situations when the lock is held.
 	roaringIntIterator roaring.IntIterator
 	event              sync.Cond
@@ -1595,13 +1597,17 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	for _, url := range spec.Webseeds {
 		t.addWebSeed(url)
 	}
-	for _, peerAddr := range spec.PeerAddrs {
-		t.addPeer(PeerInfo{
-			Addr:    StringAddr(peerAddr),
-			Source:  PeerSourceDirect,
-			Trusted: true,
-		})
-	}
+	t.addPeersIter(func(yield func(PeerInfo) bool) {
+		for _, peerAddr := range spec.PeerAddrs {
+			if !yield(PeerInfo{
+				Addr:    StringAddr(peerAddr),
+				Source:  PeerSourceDirect,
+				Trusted: true,
+			}) {
+				return
+			}
+		}
+	})
 	if spec.ChunkSize != 0 {
 		panic("chunk size cannot be changed for existing Torrent")
 	}

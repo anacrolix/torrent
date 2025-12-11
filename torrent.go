@@ -38,7 +38,6 @@ import (
 	"github.com/anacrolix/missinggo/v2/pubsub"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
-
 	"github.com/pion/webrtc/v4"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
@@ -52,7 +51,6 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	utHolepunch "github.com/anacrolix/torrent/peer_protocol/ut-holepunch"
 	"github.com/anacrolix/torrent/segments"
-
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
@@ -369,6 +367,7 @@ func (t *Torrent) appendConns(ret []*PeerConn, f func(*PeerConn) bool) []*PeerCo
 	return ret
 }
 
+// Don't call this directly, call Torrent.addPeers* to handle events.
 func (t *Torrent) addPeer(p PeerInfo) (added bool) {
 	cl := t.cl
 	torrent.Add(fmt.Sprintf("peers added by source %q", p.Source), 1)
@@ -1723,21 +1722,25 @@ func (t *Torrent) maxHalfOpen() int {
 }
 
 func (t *Torrent) openNewConns() (initiated int) {
-	defer t.updateWantPeersEvent()
-	for t.peers.Len() != 0 {
-		if !t.wantOutgoingConns() {
-			return
-		}
+	if len(t.cl.dialers) == 0 {
+		return
+	}
+	if !t.wantOutgoingConns() {
+		return
+	}
+	numPeers := t.peers.Len()
+	for numPeers != 0 {
 		if len(t.halfOpen) >= t.maxHalfOpen() {
-			return
-		}
-		if len(t.cl.dialers) == 0 {
 			return
 		}
 		if t.cl.numHalfOpen >= t.cl.config.TotalHalfOpenConns {
 			return
 		}
 		p := t.peers.PopMax()
+		numPeers--
+		if numPeers == t.cl.config.TorrentPeersLowWater {
+			t.deferUpdateRegularTrackerAnnouncing()
+		}
 		opts := outgoingConnOpts{
 			peerInfo:                 p,
 			t:                        t,
@@ -1748,6 +1751,9 @@ func (t *Torrent) openNewConns() (initiated int) {
 		}
 		initiateConn(opts, false)
 		initiated++
+		if t.cl.check.Try() {
+			panicif.NotEq(numPeers, t.peers.Len())
+		}
 	}
 	return
 }
@@ -2279,24 +2285,23 @@ func (t *Torrent) announceRequest(
 func (t *Torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
 	cl := t.cl
 	for v := range pvs {
-		cl.lock()
-		added := 0
+		peerInfos := make([]PeerInfo, 0, len(v.Peers))
 		for _, cp := range v.Peers {
 			if cp.Port == 0 {
 				// Can't do anything with this.
 				continue
 			}
-			if t.addPeer(PeerInfo{
+			peerInfos = append(peerInfos, PeerInfo{
 				Addr:   ipPortAddr{cp.IP, cp.Port},
 				Source: PeerSourceDhtGetPeers,
-			}) {
-				added++
-			}
+			})
 		}
-		cl.unlock()
-		// if added != 0 {
-		// 	log.Printf("added %v peers from dht for %v", added, t.InfoHash().HexString())
-		// }
+		if len(peerInfos) > 0 {
+			cl.lock()
+			t.addPeers(peerInfos)
+			cl.unlock()
+
+		}
 	}
 }
 
@@ -2412,10 +2417,18 @@ func (t *Torrent) dhtAnnouncer(s DhtServer) {
 }
 
 func (t *Torrent) addPeers(peers []PeerInfo) (added int) {
-	for _, p := range peers {
+	return t.addPeersIter(slices.Values(peers))
+}
+
+func (t *Torrent) addPeersIter(peers iter.Seq[PeerInfo]) (added int) {
+	wantPeers := t.wantPeers()
+	for p := range peers {
 		if t.addPeer(p) {
 			added++
 		}
+	}
+	if t.wantPeers() != wantPeers {
+		t.deferUpdateRegularTrackerAnnouncing()
 	}
 	return
 }

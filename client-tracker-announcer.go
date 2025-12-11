@@ -436,8 +436,8 @@ func (me *regularTrackerAnnounceDispatcher) dispatchAnnounces() {
 			expected := me.makeTorrentInput(t)
 			if actual != expected {
 				me.logger.Warn("announce dispatcher torrent input is not synced",
-					"expected", expected,
-					"actual", actual)
+					"expected", fmt.Sprintf("%#v", expected),
+					"actual", fmt.Sprintf("%#v", actual))
 			}
 		}
 		if !next.Value.overdue {

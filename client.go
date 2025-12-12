@@ -28,6 +28,7 @@ import (
 	"github.com/anacrolix/dht/v2/krpc"
 	. "github.com/anacrolix/generics"
 	g "github.com/anacrolix/generics"
+	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
@@ -2002,19 +2003,28 @@ func (cl *Client) startPieceHashers() {
 	if !cl.canStartPieceHashers() {
 		return
 	}
-	ts := make([]*Torrent, 0, len(cl.torrents))
+	var ts []*Torrent
+	// Maybe we don't actually want to preallocate all this. It might often be empty.
+	//ts := make([]*Torrent, 0, len(cl.torrents))
+
 	for t := range cl.torrents {
 		if !t.considerStartingHashers() {
 			continue
 		}
 		ts = append(ts, t)
 	}
-	// Sort largest torrents first, as those are preferred by webseeds, and will cause less thrashing.
-	slices.SortFunc(ts, func(a, b *Torrent) int {
-		return -cmp.Compare(a.length(), b.length())
+	if len(ts) == 0 {
+		return
+	}
+	// Sort largest torrents first, as those are preferred by webseeds, and will cause less
+	// thrashing.
+	h := heap.InterfaceForSlice(&ts, func(a, b *Torrent) bool {
+		return a.length() > b.length()
 	})
-	for _, t := range ts {
-		t.startPieceHashers()
+	heap.Init(h)
+	for h.Len() > 0 {
+		t := heap.Pop(h)
+		_ = t.startPieceHashers()
 		if !cl.canStartPieceHashers() {
 			break
 		}

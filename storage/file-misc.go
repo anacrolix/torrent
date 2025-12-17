@@ -45,8 +45,13 @@ func fsync(filePath string) (err error) {
 func CreateNativeZeroLengthFile(name string) error {
 	os.MkdirAll(filepath.Dir(name), dirPerm)
 	var f io.Closer
-	f, err := os.Create(name)
+	// Must request write perms to create and trunc. But we don't need those for a zero-length file.
+	f, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_TRUNC, filePerm)
 	if err != nil {
+		stat, statErr := os.Stat(name)
+		if statErr == nil && stat.Mode().IsRegular() && stat.Size() == 0 {
+			return nil
+		}
 		return err
 	}
 	return f.Close()

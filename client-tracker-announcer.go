@@ -380,6 +380,10 @@ func (me *regularTrackerAnnounceDispatcher) addKey(key torrentTrackerAnnouncerKe
 		return
 	}
 	t := me.torrentFromShortInfohash(key.ShortInfohash)
+	if t == nil {
+		// Crude, but the torrent was already dropped. We probably called AddTrackers late.
+		return
+	}
 	g.MakeMapIfNil(&me.torrentForAnnounceRequests)
 	// This can be duplicated when there's multiple trackers for a short infohash. That's fine.
 	me.torrentForAnnounceRequests[key.ShortInfohash] = weak.Make(t)
@@ -630,7 +634,7 @@ func (me *regularTrackerAnnounceDispatcher) makeTorrentInput(t *Torrent) (_ g.Op
 	// No torrent means the client has lost interest and the dispatcher just does followup actions.
 	// If we drop a torrent, we still end up here but with a torrent that should result in None, so
 	// check for that.
-	if t == nil || !g.MapContains(me.torrentClient.torrents, t) {
+	if t == nil || t.isDropped() {
 		return
 	}
 	return g.Some(nextAnnounceTorrentInput{

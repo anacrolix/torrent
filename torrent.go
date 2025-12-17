@@ -1917,6 +1917,11 @@ func appendMissingTrackerTiers(existing [][]string, minNumTiers int) (ret [][]st
 }
 
 func (t *Torrent) addTrackers(announceList [][]string) {
+	if t.isDropped() {
+		// Can't alter dropped Torrent because it may have skipped registering announce states with
+		// the announce dispatcher.
+		return
+	}
 	fullAnnounceList := &t.announceList
 	t.announceList = appendMissingTrackerTiers(*fullAnnounceList, len(announceList))
 	for tierIndex, trackerURLs := range announceList {

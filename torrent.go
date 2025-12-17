@@ -1940,8 +1940,7 @@ func (t *Torrent) modifyTrackers(announceList [][]string) {
 		})
 	}
 	workers.Wait()
-
-	clear(t.announceList)
+	t.announceList = nil
 	t.addTrackers(announceList)
 }
 

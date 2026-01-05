@@ -7,7 +7,7 @@ require (
 	github.com/alexflint/go-arg v1.4.3
 	github.com/anacrolix/bargle v1.0.0
 	github.com/anacrolix/bargle/v2 v2.0.0
-	github.com/anacrolix/btree v0.0.0-20251201064447-d86c3fa41bd8
+	github.com/anacrolix/btree v0.1.1
 	github.com/anacrolix/chansync v0.7.0
 	github.com/anacrolix/dht/v2 v2.23.0
 	github.com/anacrolix/envpprof v1.4.0

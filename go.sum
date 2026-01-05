@@ -70,8 +70,8 @@ github.com/anacrolix/bargle v1.0.0 h1:jc4EKULEJx4GV10rpERpQp1jsiJWWOEGplsqssc4sA
 github.com/anacrolix/bargle v1.0.0/go.mod h1:9xUiZbkh+94FbiIAL1HXpAIBa832f3Mp07rRPl5c5RQ=
 github.com/anacrolix/bargle/v2 v2.0.0 h1:jeKsKOCiAWKMi0HJdlrux/+V12I7PVX5dny/HxQ3xZw=
 github.com/anacrolix/bargle/v2 v2.0.0/go.mod h1:rKvwnOHgcXKPJTINj5RmkifgpxgEGC9bkJiv5kM4ctM=
-github.com/anacrolix/btree v0.0.0-20251201064447-d86c3fa41bd8 h1:c02PsmoaChabVqAFm7pqPI1UIkDdDAjUaWa6ZmfxybQ=
-github.com/anacrolix/btree v0.0.0-20251201064447-d86c3fa41bd8/go.mod h1:7stWJ39LeusmMI8mjJuhFNRqep//vx0AsaySRoK9or0=
+github.com/anacrolix/btree v0.1.1 h1:igdFPLrt82L6qovzbEGSMkTeiwcU3EFIGl2K8XWocAc=
+github.com/anacrolix/btree v0.1.1/go.mod h1:KHWYRZuUULATjUGJC4dQDXx/BPOnWrJozGR6TndjOmc=
 github.com/anacrolix/chansync v0.7.0 h1:wgwxbsJRmOqNjil4INpxHrDp4rlqQhECxR8/WBP4Et0=
 github.com/anacrolix/chansync v0.7.0/go.mod h1:DZsatdsdXxD0WiwcGl0nJVwyjCKMDv+knl1q2iBjA2k=
 github.com/anacrolix/dht/v2 v2.23.0 h1:EuD17ykTTEkAMPLjBsS5QjGOwuBgLTdQhds6zPAjeVY=

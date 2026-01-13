@@ -47,7 +47,8 @@ type mmapFileIo struct {
 	mu sync.RWMutex
 	// We could automatically expire fileMmaps by using weak.Pointers? Currently, the store never
 	// relinquishes its extra ref so we never clean up anyway.
-	paths map[string]*fileMmap
+	paths  map[string]*fileMmap
+	closed bool
 }
 
 func (me *mmapFileIo) Close() error {
@@ -57,6 +58,14 @@ func (me *mmapFileIo) Close() error {
 		me.closeName(name)
 	}
 	me.paths = nil
+	me.closed = true
+	return nil
+}
+
+func (me *mmapFileIo) closedErr() error {
+	if me.closed {
+		return fs.ErrClosed
+	}
 	return nil
 }
 
@@ -145,6 +154,10 @@ func (me *mmapFileIo) openForRead(name string) (_ fileReader, err error) {
 func (me *mmapFileIo) openReadOnly(name string) (_ *mmapSharedFileHandle, err error) {
 	me.mu.Lock()
 	defer me.mu.Unlock()
+	err = me.closedErr()
+	if err != nil {
+		return
+	}
 	v, ok := me.paths[name]
 	if ok {
 		return newMmapFile(v), nil
@@ -166,6 +179,10 @@ func (me *mmapFileIo) openReadOnly(name string) (_ *mmapSharedFileHandle, err er
 func (me *mmapFileIo) openForWrite(name string, size int64) (_ fileWriter, err error) {
 	me.mu.Lock()
 	defer me.mu.Unlock()
+	err = me.closedErr()
+	if err != nil {
+		return
+	}
 	v, ok := me.paths[name]
 	if ok {
 		if int64(len(v.m)) == size && v.writable {

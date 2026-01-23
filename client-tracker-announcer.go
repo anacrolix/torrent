@@ -340,7 +340,11 @@ func (me *regularTrackerAnnounceDispatcher) putNextAnnounceRecordCols(
 	t := me.torrentFromShortInfohash(r.ShortInfohash)
 	progress := "dropped"
 	if t != nil {
-		progress = fmt.Sprintf("%d%%", int(100*t.progressUnitFloat()))
+		if t.haveInfo() {
+			progress = fmt.Sprintf("%d%%", int(100*t.progressUnitFloat()))
+		} else {
+			progress = "noinfo"
+		}
 	}
 	tab.cols(
 		r.url,

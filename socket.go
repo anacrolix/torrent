@@ -121,6 +121,8 @@ type tcpSocket struct {
 	NetworkDialer
 }
 
+type listenFunc func(n network, addr string, f firewallCallback, logger log.Logger) (socket, error)
+
 func listenAll(
 	networks []network,
 	getHost func(string) string,
@@ -136,7 +138,7 @@ func listenAll(
 		nahs = append(nahs, networkAndHost{n, getHost(n.String())})
 	}
 	for {
-		ss, retry, err := listenAllRetry(nahs, port, f, logger)
+		ss, retry, err := listenAllRetry(nahs, port, f, logger, listen)
 		if !retry {
 			return ss, err
 		}
@@ -167,6 +169,7 @@ func listenAllRetry(
 	port int,
 	f firewallCallback,
 	logger log.Logger,
+	lf listenFunc,
 ) (ss []socket, retry bool, err error) {
 	// Close all sockets on error or retry.
 	defer func() {
@@ -181,7 +184,7 @@ func listenAllRetry(
 	portStr := strconv.FormatInt(int64(port), 10)
 	for _, nah := range nahs {
 		var s socket
-		s, err = listen(nah.Network, net.JoinHostPort(nah.Host, portStr), f, logger)
+		s, err = lf(nah.Network, net.JoinHostPort(nah.Host, portStr), f, logger)
 		if err != nil {
 			if isUnsupportedNetworkError(err) {
 				err = nil

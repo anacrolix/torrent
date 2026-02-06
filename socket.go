@@ -123,12 +123,25 @@ type tcpSocket struct {
 
 type listenFunc func(n network, addr string, f firewallCallback, logger log.Logger) (socket, error)
 
+const listenAllRetryLimit = 10
+
 func listenAll(
 	networks []network,
 	getHost func(string) string,
 	port int,
 	f firewallCallback,
 	logger log.Logger,
+) ([]socket, error) {
+	return listenAllWithListenFunc(networks, getHost, port, f, logger, listen)
+}
+
+func listenAllWithListenFunc(
+	networks []network,
+	getHost func(string) string,
+	port int,
+	f firewallCallback,
+	logger log.Logger,
+	lf listenFunc,
 ) ([]socket, error) {
 	if len(networks) == 0 {
 		return nil, nil
@@ -137,10 +150,15 @@ func listenAll(
 	for _, n := range networks {
 		nahs = append(nahs, networkAndHost{n, getHost(n.String())})
 	}
+	retries := 0
 	for {
-		ss, retry, err := listenAllRetry(nahs, port, f, logger, listen)
+		ss, retry, err := listenAllRetry(nahs, port, f, logger, lf)
 		if !retry {
 			return ss, err
+		}
+		retries++
+		if retries >= listenAllRetryLimit {
+			return nil, err
 		}
 	}
 }

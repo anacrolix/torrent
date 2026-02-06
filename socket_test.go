@@ -71,3 +71,37 @@ func TestListenAllRetryFirstListenFails(t *testing.T) {
 	assert.Nil(t, ss)
 	assert.False(t, retry, "should not retry when first listen fails")
 }
+
+// TestListenAllRetryLimit verifies that listenAll gives up after the retry limit when the
+// subsequent listen always fails. Without a limit this would loop infinitely.
+func TestListenAllRetryLimit(t *testing.T) {
+	callCount := 0
+	mockListen := func(n network, addr string, f firewallCallback, logger log.Logger) (socket, error) {
+		callCount++
+		if callCount%2 == 1 {
+			// First listen in each attempt succeeds.
+			return mockSocket{addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345}}, nil
+		}
+		// Second listen always fails.
+		return nil, &os.SyscallError{
+			Syscall: "bind",
+			Err:     syscall.EACCES,
+		}
+	}
+
+	networks := []network{
+		{Tcp: true, Ipv4: true},
+		{Udp: true, Ipv4: true},
+	}
+
+	ss, err := listenAllWithListenFunc(
+		networks,
+		func(string) string { return "127.0.0.1" },
+		0, nil, log.Default, mockListen,
+	)
+	require.Error(t, err)
+	assert.Nil(t, ss)
+	// Each attempt calls listen twice (first succeeds, second fails), so expect 2 * limit calls.
+	expectedCalls := 2 * listenAllRetryLimit
+	assert.Equal(t, expectedCalls, callCount, "should stop retrying after the limit")
+}

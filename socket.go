@@ -196,7 +196,7 @@ func listenAllRetry(
 			} else {
 				err = fmt.Errorf("subsequent listen: %w", err)
 			}
-			retry = missinggo.IsAddrInUse(err) && port == 0
+			retry = port == 0 && len(ss) > 0
 			return
 		}
 		ss = append(ss, s)

@@ -18,6 +18,6 @@ jobs:
           go-version: ${{ matrix.go-version }}
       - run: go mod download
       - name: Test torrent package
-        run: go test -race -count=1 -v .
+        run: go test -count=1 -v .
         env:
           CGO_ENABLED: "0"

@@ -232,7 +232,13 @@ func (cl *Client) request(
 			}
 			// Force a reconnection. Probably any error is worth doing this for, but the one we're
 			// specifically interested in is ConnectionIdMissmatchNul.
-			cl.connIdIssued = time.Time{}
+			// Lock before writing connIdIssued to avoid racing with concurrent
+			// requestWriter goroutines that read it via writeRequest -> connect ->
+			// shouldReconnect.
+			if lockErr := cl.mu.LockCtx(ctx); lockErr == nil {
+				cl.connIdIssued = time.Time{}
+				cl.mu.Unlock()
+			}
 		} else {
 			err = fmt.Errorf("unexpected response action %v", dr.Header.Action)
 		}

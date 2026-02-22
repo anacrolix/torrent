@@ -8,7 +8,8 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        go-version: [stable]
+        go-version: [stable, oldstable]
+      fail-fast: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -17,7 +18,7 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
       - run: go mod download
-      - name: Test torrent package
-        run: go test -count=1 -v .
+      - name: Test packages
+        run: go test -count=1 ./...
         env:
           CGO_ENABLED: "0"

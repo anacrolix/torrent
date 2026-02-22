@@ -15,6 +15,19 @@ var (
 	DefaultBep20Prefix   = "-GT0003-"
 	DefaultHttpUserAgent string
 	DefaultUpnpId        string
+
+	// libtorrent/src/http_tracker_connection.cpp
+	AnonymousHttpUserAgent = "curl/7.81.0"
+
+	// ExtendedHandshakeMessage struct: V string `bencode:"v,omitempty"`
+	// so the "v" field is omitted when empty
+	AnonymousExtendedHandshakeClientVersion = ""
+
+	AnonymousBep20Prefix string
+
+	// libtorrent/src/upnp.cpp
+	// NewPortMappingDescription is empty
+	AnonymousUpnpId = ""
 )
 
 func init() {
@@ -58,4 +71,8 @@ func init() {
 		longPackageName,
 		torrentVersion,
 	)
+	// libtorrent/bindings/c/library.cpp
+	// fingerprint fing("LT", lt::version_major, lt::version_minor, lt::version_tiny, 0);
+	// libtorrent 2.0.11 = 2025-01-28
+	AnonymousBep20Prefix = GenerateFingerprint("LT", 2, 0, 11, 0)
 }

@@ -54,6 +54,7 @@ import (
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/types/infohash"
 	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
+	"github.com/anacrolix/torrent/version"
 )
 
 const webseedRequestUpdateTimerInterval = 5 * time.Second
@@ -276,6 +277,12 @@ func (cl *Client) init(cfg *ClientConfig) {
 	cl.initLogger()
 	cl.regularTrackerAnnounceDispatcher.init(cl)
 	cfg.setRateLimiterBursts()
+	if cfg.AnonymousMode {
+		cfg.HTTPUserAgent = version.AnonymousHttpUserAgent
+		cfg.ExtendedHandshakeClientVersion = version.AnonymousExtendedHandshakeClientVersion
+		cfg.Bep20 = version.AnonymousBep20Prefix
+		cfg.UpnpID = version.AnonymousUpnpId
+	}
 	g.MakeMap(&cl.dopplegangerAddrs)
 	g.MakeMap(&cl.torrentsByShortHash)
 	g.MakeMap(&cl.torrents)

@@ -4,7 +4,7 @@
 
 This repository implements BitTorrent-related packages and command-line utilities in Go. The emphasis is on use as a library from other projects. It's been used 24/7 in production by downstream services since late 2014. The implementation was specifically created to explore Go's concurrency capabilities, and to include the ability to stream data directly from the BitTorrent network. To this end it [supports seeking, readaheads and other features](https://pkg.go.dev/github.com/anacrolix/torrent#Reader) exposing torrents and their files with the various Go idiomatic `io` package interfaces. This is also demonstrated through [torrentfs](#torrentfs).
 
-There is [support for protocol encryption, DHT, PEX, uTP, WebTorrent, WebSeeds (BEP 19), BitTorrent v2, and various extensions](https://pkg.go.dev/github.com/anacrolix/torrent). There are [several data storage backends provided](https://pkg.go.dev/github.com/anacrolix/torrent/storage): blob, file, bolt, mmap, and sqlite, to name a few. You can [write your own](https://pkg.go.dev/github.com/anacrolix/torrent/storage#ClientImpl) to store data for example on S3, or in a database.
+There is support for [protocol encryption, DHT, PEX, uTP, WebTorrent, WebSeeds, BitTorrent v2, holepunching, and many more features and BEPs](https://pkg.go.dev/github.com/anacrolix/torrent). There are [several data storage backends provided](https://pkg.go.dev/github.com/anacrolix/torrent/storage): blob, file, bolt, mmap, and sqlite, to name a few. You can [write your own](https://pkg.go.dev/github.com/anacrolix/torrent/storage#ClientImpl) to store data for example on S3, or in a database.
 
 Some noteworthy package dependencies that can be used for other purposes include:
 

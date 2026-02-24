@@ -120,7 +120,6 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	}))
 	//t.storage = &storage.Torrent{TorrentImpl: storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}}
 	//t.onSetInfo()
-	t._pendingPieces.Add(0)
 	r, w := net.Pipe()
 	b.Logf("pipe reader remote addr: %v", r.RemoteAddr())
 	cn := cl.newConnection(r, newConnectionOpts{

@@ -43,6 +43,7 @@ jobs:
         run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
 
       - name: Test global installability
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           # Create isolated environment
           TMPDIR=$(mktemp -d)

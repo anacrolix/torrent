@@ -83,7 +83,14 @@ func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
 	var cl Client
-	cl.init(TestingConfig(t))
+	cfg := TestingConfig(t)
+	cfg.DefaultStorage = storage.NewFileWithCompletion(cfg.DataDir, storage.NewMapPieceCompletion())
+	cl.init(cfg)
+	t.Cleanup(func() {
+		for _, f := range cl.onClose {
+			f()
+		}
+	})
 	tor := cl.newTorrent(
 		mi.HashInfoBytes(),
 		storage.NewFileWithCompletion(t.TempDir(), storage.NewMapPieceCompletion()),

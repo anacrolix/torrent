@@ -308,17 +308,18 @@ func (tc *TrackerClient) announce(event tracker.AnnounceEvent, infoHash [20]byte
 	}
 
 	tc.mu.Lock()
-	defer tc.mu.Unlock()
 	err = tc.writeMessage(data)
 	if err != nil {
+		tc.mu.Unlock()
 		tc.OnAnnounceError(infohash.T(infoHash).HexString(), err)
 		return fmt.Errorf("write AnnounceRequest: %w", err)
 	}
-	tc.OnAnnounceSuccessful(infohash.T(infoHash).HexString())
 	g.MakeMapIfNil(&tc.outboundOffers)
 	for _, offer := range offers {
 		g.MapInsert(tc.outboundOffers, offer.offerId, offer.outboundOfferValue)
 	}
+	tc.mu.Unlock()
+	tc.OnAnnounceSuccessful(infohash.T(infoHash).HexString())
 	return nil
 }
 

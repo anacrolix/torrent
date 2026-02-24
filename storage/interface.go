@@ -32,17 +32,20 @@ type TorrentImpl struct {
 	// Preferred over PieceWithHash. Called with the piece hash if it's available.
 	PieceWithHash func(p metainfo.Piece, pieceHash g.Option[[]byte]) PieceImpl
 	Close         func() error
-	Flush         func() error
 	// Storages that share the same space, will provide equal pointers. The function is called once
 	// to determine the storage for torrents sharing the same function pointer, and mutated in
 	// place.
 	Capacity TorrentCapacity
+
+	NewReader      func() TorrentReader
+	NewPieceReader func(p Piece) PieceReader
 }
 
-// Interacts with torrent piece data. Optional interfaces to implement include:
+// Interacts with torrent piece data. Optional interfaces to implement include://
 //
-//	io.WriterTo, such as when a piece supports a more efficient way to write out incomplete chunks.
-//	SelfHashing, such as when a piece supports a more efficient way to hash its contents.
+//		io.WriterTo, such as when a piece supports a more efficient way to write out incomplete chunks.
+//		SelfHashing, such as when a piece supports a more efficient way to hash its contents.
+//	 	PieceReaderer when it has a stateful Reader interface that is more efficient.
 type PieceImpl interface {
 	// These interfaces are not as strict as normally required. They can
 	// assume that the parameters are appropriate for the dimensions of the
@@ -54,18 +57,33 @@ type PieceImpl interface {
 	// fit.
 	MarkComplete() error
 	MarkNotComplete() error
-	// Returns true if the piece is complete.
+	// Returns the state of a piece. Typically, this is implemented in some kind of storage to avoid
+	// rehashing, and cheap checks are performed here. (The implementation maintains a cache in
+	// Torrent).
 	Completion() Completion
 }
 
-// TODO: Yo where the fuck is the documentation.
+// Completion state of a piece.
 type Completion struct {
+	Err error
+	// The state is known or cached.
+	Ok bool
+	// If Ok, whether the data is correct. TODO: Check all callsites test Ok first.
 	Complete bool
-	Ok       bool
-	Err      error
 }
 
-// Allows a storage backend to override hashing (i.e. if it can do it more efficiently than the torrent client can)
+// Allows a storage backend to override hashing (i.e. if it can do it more efficiently than the
+// torrent client can).
 type SelfHashing interface {
 	SelfHash() (metainfo.Hash, error)
+}
+
+// Piece supports dedicated reader.
+type PieceReaderer interface {
+	NewReader() (PieceReader, error)
+}
+
+type PieceReader interface {
+	io.ReaderAt
+	io.Closer
 }

@@ -66,21 +66,17 @@ func serve() (cmd bargle.Command) {
 					TorrentDirMaker: nil,
 					PieceCompletion: pc,
 				}),
+				InfoBytes: mi.InfoBytes,
 			})
 			defer to.Drop()
-			err = to.MergeSpec(&torrent.TorrentSpec{
-				InfoBytes: mi.InfoBytes,
-				Trackers: [][]string{{
-					`wss://tracker.btorrent.xyz`,
-					`wss://tracker.openwebtorrent.com`,
-					"http://p4p.arenabg.com:1337/announce",
-					"udp://tracker.opentrackr.org:1337/announce",
-					"udp://tracker.openbittorrent.com:6969/announce",
-				}},
-			})
-			if err != nil {
-				return fmt.Errorf("setting trackers: %w", err)
-			}
+			// TODO: Builtin trackers?
+			to.AddTrackers([][]string{{
+				`wss://tracker.btorrent.xyz`,
+				`wss://tracker.openwebtorrent.com`,
+				"http://p4p.arenabg.com:1337/announce",
+				"udp://tracker.opentrackr.org:1337/announce",
+				"udp://tracker.openbittorrent.com:6969/announce",
+			}})
 			fmt.Printf("%v: %v\n", to, to.Metainfo().Magnet(&ih, &info))
 		}
 		select {}

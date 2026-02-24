@@ -9,10 +9,10 @@ import (
 	"path"
 	"sort"
 	"strconv"
+	"sync"
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/resource"
-	"github.com/anacrolix/sync"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -23,12 +23,12 @@ type piecePerResource struct {
 }
 
 type ResourcePiecesOpts struct {
+	Capacity TorrentCapacity
 	// After marking a piece complete, don't bother deleting its incomplete blobs.
 	LeaveIncompleteChunks bool
 	// Sized puts require being able to stream from a statement executed on another connection.
 	// Without them, we buffer the entire read and then put that.
 	NoSizedPuts bool
-	Capacity    TorrentCapacity
 }
 
 func NewResourcePieces(p PieceProvider) ClientImpl {
@@ -60,11 +60,12 @@ func (s piecePerResource) OpenTorrent(
 		s,
 		make([]sync.RWMutex, info.NumPieces()),
 	}
-	return TorrentImpl{
+	ret := TorrentImpl{
 		PieceWithHash: t.Piece,
 		Close:         t.Close,
 		Capacity:      s.opts.Capacity,
-	}, nil
+	}
+	return ret, nil
 }
 
 func (s piecePerResourceTorrentImpl) Piece(p metainfo.Piece, pieceHash g.Option[[]byte]) PieceImpl {
@@ -88,6 +89,10 @@ type ConsecutiveChunkReader interface {
 	ReadConsecutiveChunks(prefix string) (io.ReadCloser, error)
 }
 
+type ChunksReaderer interface {
+	ChunksReader(dir string) (PieceReader, error)
+}
+
 type PrefixDeleter interface {
 	DeletePrefix(prefix string) error
 }
@@ -102,7 +107,10 @@ type piecePerResourcePiece struct {
 	mu *sync.RWMutex
 }
 
-var _ io.WriterTo = piecePerResourcePiece{}
+var _ interface {
+	io.WriterTo
+	PieceReaderer
+} = piecePerResourcePiece{}
 
 func (s piecePerResourcePiece) WriteTo(w io.Writer) (int64, error) {
 	s.mu.RLock()
@@ -142,7 +150,7 @@ func (s piecePerResourcePiece) writeConsecutiveChunks(
 // Returns if the piece is complete. Ok should be true, because we are the definitive source of
 // truth here.
 func (s piecePerResourcePiece) mustIsComplete() bool {
-	completion := s.Completion()
+	completion := s.completionLocked()
 	if !completion.Ok {
 		panic("must know complete definitively")
 	}
@@ -150,11 +158,15 @@ func (s piecePerResourcePiece) mustIsComplete() bool {
 }
 
 func (s piecePerResourcePiece) Completion() (_ Completion) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.completionLocked()
+}
+
+func (s piecePerResourcePiece) completionLocked() (_ Completion) {
 	if !s.pieceHash.Ok {
 		return
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	fi, err := s.completedInstance().Stat()
 	if s.hasMovePrefix() {
 		return Completion{
@@ -234,17 +246,14 @@ func (s piecePerResourcePiece) MarkNotComplete() error {
 	return s.completedInstance().Delete()
 }
 
-func (s piecePerResourcePiece) ReadAt(b []byte, off int64) (int, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.mustIsComplete() {
-		if s.hasMovePrefix() {
-			chunks := s.getChunks(s.completedDirPath())
-			return chunks.ReadAt(b, off)
-		}
-		return s.completedInstance().ReadAt(b, off)
+func (s piecePerResourcePiece) ReadAt(b []byte, off int64) (n int, err error) {
+	r, err := s.NewReader()
+	if err != nil {
+		return
 	}
-	return s.getChunks(s.incompleteDirPath()).ReadAt(b, off)
+	defer r.Close()
+	n, err = r.ReadAt(b, off)
+	return
 }
 
 func (s piecePerResourcePiece) WriteAt(b []byte, off int64) (n int, err error) {
@@ -265,8 +274,8 @@ func (s piecePerResourcePiece) WriteAt(b []byte, off int64) (n int, err error) {
 }
 
 type chunk struct {
-	offset   int64
 	instance resource.Instance
+	offset   int64
 }
 
 type chunks []chunk
@@ -323,7 +332,7 @@ func (s piecePerResourcePiece) getChunks(dir string) (chunks chunks) {
 		if err != nil {
 			panic(err)
 		}
-		chunks = append(chunks, chunk{offset, i})
+		chunks = append(chunks, chunk{i, offset})
 	}
 	sort.Slice(chunks, func(i, j int) bool {
 		return chunks[i].offset < chunks[j].offset
@@ -353,6 +362,7 @@ func (s piecePerResourcePiece) completedInstance() resource.Instance {
 	return i
 }
 
+// TODO: Add DirPrefix methods that include the "/" because it's easy to forget and always required.
 func (s piecePerResourcePiece) incompleteDirPath() string {
 	return path.Join("incompleted", s.hashHex())
 }
@@ -373,3 +383,41 @@ func (me piecePerResourcePiece) hasMovePrefix() bool {
 	_, ok := me.rp.(MovePrefixer)
 	return ok
 }
+
+// Chunks are in dirs, we add the prefix ourselves.
+func (s piecePerResourcePiece) getChunksReader(dir string) (PieceReader, error) {
+	if opt, ok := s.rp.(ChunksReaderer); ok {
+		return opt.ChunksReader(dir)
+	}
+	return chunkPieceReader{s.getChunks(dir)}, nil
+}
+
+func (s piecePerResourcePiece) NewReader() (PieceReader, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.mustIsComplete() {
+		if s.hasMovePrefix() {
+			return s.getChunksReader(s.completedDirPath())
+		}
+		return instancePieceReader{s.completedInstance()}, nil
+	}
+	return s.getChunksReader(s.incompleteDirPath())
+}
+
+type instancePieceReader struct {
+	resource.Instance
+}
+
+func (instancePieceReader) Close() error {
+	return nil
+}
+
+type chunkPieceReader struct {
+	chunks
+}
+
+func (chunkPieceReader) Close() error {
+	return nil
+}
+
+// TODO: Make an embedded Closer using reflect?

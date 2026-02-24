@@ -7,14 +7,12 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 
 	g "github.com/anacrolix/generics"
-	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
-	qt "github.com/frankban/quicktest"
+	"github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -88,15 +86,13 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 		numPieces   = 13410
 		pieceLength = 256 << 10
 	)
-	cl := &Client{config: TestingConfig(b)}
-	cl.initLogger()
+	cl := newTestingClient(b)
 	t := cl.newTorrentForTesting()
-	require.NoError(b, t.setInfo(&metainfo.Info{
+	require.NoError(b, t.setInfoUnlocked(&metainfo.Info{
 		Pieces:      make([]byte, metainfo.HashSize*numPieces),
 		PieceLength: pieceLength,
 		Length:      pieceLength * numPieces,
 	}))
-	t.onSetInfo()
 	assert.EqualValues(b, 13410, t.numPieces())
 	for i := 0; i < 7; i += 1 {
 		r := t.NewReader()
@@ -108,8 +104,10 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 		t._completedPieces.Add(bitmap.BitIndex(i))
 	}
 	t.DownloadPieces(0, t.numPieces())
-	for i := 0; i < b.N; i += 1 {
+	for b.Loop() {
+		cl.lock()
 		t.updateAllPiecePriorities("")
+		cl.unlock()
 	}
 }
 
@@ -153,11 +151,13 @@ func TestPieceHashFailed(t *testing.T) {
 	cl := newTestingClient(t)
 	tt := cl.newTorrent(mi.HashInfoBytes(), badStorage{})
 	tt.setChunkSize(2)
+	tt.cl.lock()
 	require.NoError(t, tt.setInfoBytesLocked(mi.InfoBytes))
+	tt.cl.unlock()
 	tt.cl.lock()
 	tt.dirtyChunks.AddRange(
-		uint64(tt.pieceRequestIndexOffset(1)),
-		uint64(tt.pieceRequestIndexOffset(1)+3))
+		uint64(tt.pieceRequestIndexBegin(1)),
+		uint64(tt.pieceRequestIndexBegin(1)+3))
 	require.True(t, tt.pieceAllDirty(1))
 	tt.pieceHashed(1, false, nil)
 	// Dirty chunks should be cleared so we can try again.
@@ -224,33 +224,28 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 }
 
 func TestRelativeAvailabilityHaveNone(t *testing.T) {
-	c := qt.New(t)
 	var err error
-	cl := Client{
-		config: TestingConfig(t),
-	}
-	tt := Torrent{
-		cl:           &cl,
-		logger:       log.Default,
-		gotMetainfoC: make(chan struct{}),
-	}
+	cl := newTestingClient(t)
+	mi, _ := testutil.Greeting.Generate(5)
+	tt := cl.newTorrentOpt(AddTorrentOpts{InfoHash: mi.HashInfoBytes()})
 	tt.setChunkSize(2)
 	g.MakeMapIfNil(&tt.conns)
 	pc := PeerConn{}
-	pc.t = &tt
+	pc.t = tt
 	pc.legacyPeerImpl = &pc
 	pc.initRequestState()
 	g.InitNew(&pc.callbacks)
+	tt.cl.lock()
 	tt.conns[&pc] = struct{}{}
 	err = pc.peerSentHave(0)
-	c.Assert(err, qt.IsNil)
-	info := testutil.Greeting.Info(5)
-	err = tt.setInfo(&info)
-	c.Assert(err, qt.IsNil)
-	tt.onSetInfo()
+	tt.cl.unlock()
+	qt.Assert(t, qt.IsNil(err))
+	err = tt.SetInfoBytes(mi.InfoBytes)
+	qt.Assert(t, qt.IsNil(err))
+	tt.cl.lock()
 	err = pc.peerSentHaveNone()
-	c.Assert(err, qt.IsNil)
-	var wg sync.WaitGroup
-	tt.close(&wg)
+	tt.cl.unlock()
+	qt.Assert(t, qt.IsNil(err))
+	tt.Drop()
 	tt.assertAllPiecesRelativeAvailabilityZero()
 }

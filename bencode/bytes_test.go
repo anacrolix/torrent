@@ -3,7 +3,7 @@ package bencode
 import (
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 )
 
 func TestBytesMarshalNil(t *testing.T) {
@@ -18,8 +18,7 @@ type structWithBytes struct {
 
 func TestMarshalNilStructBytes(t *testing.T) {
 	_, err := Marshal(structWithBytes{B: Bytes("i42e")})
-	c := qt.New(t)
-	c.Assert(err, qt.IsNotNil)
+	qt.Assert(t, qt.IsNotNil(err))
 }
 
 type structWithOmitEmptyBytes struct {
@@ -28,12 +27,11 @@ type structWithOmitEmptyBytes struct {
 }
 
 func TestMarshalNilStructBytesOmitEmpty(t *testing.T) {
-	c := qt.New(t)
 	b, err := Marshal(structWithOmitEmptyBytes{B: Bytes("i42e")})
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	t.Logf("%q", b)
 	var s structWithBytes
 	err = Unmarshal(b, &s)
-	c.Assert(err, qt.IsNil)
-	c.Check(s.B, qt.DeepEquals, Bytes("i42e"))
+	qt.Assert(t, qt.IsNil(err))
+	qt.Check(t, qt.DeepEquals(s.B, Bytes("i42e")))
 }

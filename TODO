@@ -3,3 +3,14 @@
  * dht: Randomize triedAddrs bloom filter to allow different Addr sets on each Announce.
  * data/blob: Deleting incomplete data triggers io.ErrUnexpectedEOF that isn't recovered from.
  * Handle wanted pieces more efficiently, it's slow in in fillRequests, since the prioritization system was changed.
+ * fix the lib dir for possum storage tests. it uses a package i made up called testlink to guess at the right directory. but that doesn't work if GOWORK=off.
+
+webseeds:
+ * Favor giving requests to larger torrents. It appears R2 for example limits speed per object, so large ones will take longer.
+ * Force webseed requests to be applied synchronously to an available object reader and contiguous.
+ * Always make open-ended webseed requests so that more requests can be applied.
+ * Can possibly use expanding requests windows with webseeds with the above changes.
+ * After synchronously searching for more requests for an open object, close it if none are forthcoming which opens up another slot.
+
+cross-torrent request priority:
+ * Could use the unverified bytes window to do per-connection requesting as needed? Might require abandoning a fix piece order per storage/torrent. Could make webseeding cooperate much more effectively with regular peers.

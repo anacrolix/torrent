@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 )
 
 func FuzzJsonBinaryStrings(f *testing.F) {
@@ -23,9 +23,8 @@ func FuzzJsonBinaryStrings(f *testing.F) {
 			t.Fatal(err)
 		}
 		// t.Logf("%q", jsonStr)
-		c := qt.New(t)
 		out, err := decodeJsonByteString(jsonStr, []byte{})
-		c.Assert(err, qt.IsNil)
-		c.Assert(out, qt.DeepEquals, in)
+		qt.Assert(t, qt.IsNil(err))
+		qt.Assert(t, qt.DeepEquals(out, in))
 	})
 }

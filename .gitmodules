@@ -1,0 +1,3 @@
+[submodule "storage/possum/lib"]
+	path = storage/possum/lib
+	url = https://github.com/anacrolix/possum

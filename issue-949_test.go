@@ -3,7 +3,7 @@ package torrent
 import (
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -19,11 +19,10 @@ func TestIssue949LastPieceZeroPadding(t *testing.T) {
 		panic(err)
 	}
 	lastPiece := info.Piece(info.NumPieces() - 1)
-	c := qt.New(t)
-	c.Assert(info.FilesArePieceAligned(), qt.IsTrue)
+	qt.Assert(t, qt.IsTrue(info.FilesArePieceAligned()))
 	// Check the v1 piece length includes the trailing padding file.
-	c.Check(lastPiece.V1Length(), qt.Equals, info.PieceLength)
+	qt.Check(t, qt.Equals(lastPiece.V1Length(), info.PieceLength))
 	// The v2 piece should only include the file data, which fits inside the piece length for this
 	// file.
-	c.Check(lastPiece.Length(), qt.Equals, int64(3677645))
+	qt.Check(t, qt.Equals(lastPiece.Length(), int64(3677645)))
 }

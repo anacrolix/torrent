@@ -66,12 +66,11 @@ func testReceiveChunkStorageFailure(t *testing.T, seederFast bool) {
 		data:   make([]byte, info.TotalLength()),
 	}
 	defer leecherStorage.Close()
-	leecherTorrent, new, err := leecherClient.AddTorrentSpec(&torrent.TorrentSpec{
+	leecherTorrent, new := leecherClient.AddTorrentOpt(torrent.AddTorrentOpts{
 		InfoHash: metainfo.HashInfoBytes(),
 		Storage:  &leecherStorage,
 	})
 	leecherStorage.t = leecherTorrent
-	require.NoError(t, err)
 	assert.True(t, new)
 	seederTorrent, err := seederClient.AddTorrent(metainfo)
 	require.NoError(t, err)
@@ -177,7 +176,8 @@ func (me pieceImpl) MarkComplete() error {
 }
 
 func (me pieceImpl) MarkNotComplete() error {
-	panic("implement me")
+	me.state().complete = false
+	return nil
 }
 
 func (me pieceImpl) Completion() storage.Completion {

@@ -6,7 +6,7 @@ import (
 	g "github.com/anacrolix/generics"
 	list "github.com/bahlo/generic-list-go"
 
-	"github.com/anacrolix/torrent/typed-roaring"
+	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 )
 
 type orderedBitmap[T typedRoaring.BitConstraint] struct {

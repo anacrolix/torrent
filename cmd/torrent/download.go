@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"expvar"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -358,7 +360,14 @@ func statsEnabled(flags downloadFlags) bool {
 	return flags.Stats
 }
 
-func downloadErr(ctx context.Context, flags downloadFlags) error {
+func downloadErr(ctx context.Context, flags downloadFlags, logger *slog.Logger) error {
+	if flags.Quiet {
+		// This will only affect the client, and this function.
+		logger = slog.New(slogLevelFilterHandler{
+			minLevel: slog.LevelError,
+			inner:    logger.Handler(),
+		})
+	}
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.DisableWebseeds = flags.DisableWebseeds
 	clientConfig.DisableTCP = !flags.TcpPeers
@@ -394,23 +403,15 @@ func downloadErr(ctx context.Context, flags downloadFlags) error {
 	if flags.UploadRate != nil {
 		clientConfig.UploadRateLimiter = rate.NewLimiter(
 			rate.Limit(*flags.UploadRate),
-			// Need to ensure the expected peer request length <= the upload
-			// burst. We can't really encode this logic into the ClientConfig as
-			// helper because it's quite specific. We're assuming the
-			// MaxAllocPeerRequestDataPerConn flag is being used to support
-			// this.
+			// Need to ensure the expected peer request length <= the upload burst. We can't really
+			// encode this logic into the ClientConfig as helper because it's quite specific. We're
+			// assuming the MaxAllocPeerRequestDataPerConn flag is being used to support this.
 			max(int(*flags.MaxAllocPeerRequestDataPerConn), 256<<10))
 	}
 	if flags.DownloadRate != nil {
-		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(*flags.DownloadRate), 1<<16)
+		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(*flags.DownloadRate), 0)
 	}
-	{
-		logger := log.Default.WithNames("main", "client")
-		if flags.Quiet {
-			logger = logger.FilterLevel(log.Critical)
-		}
-		clientConfig.Logger = logger
-	}
+	clientConfig.Slogger = logger
 	if flags.RequireFastExtension {
 		clientConfig.MinPeerExtensions.SetBit(pp.ExtensionBitFast, true)
 	}
@@ -456,7 +457,7 @@ func downloadErr(ctx context.Context, flags downloadFlags) error {
 	select {
 	case <-wgWaited:
 		if ctx.Err() == nil {
-			log.Print("downloaded ALL the torrents")
+			slog.Info("downloaded ALL the torrents")
 		} else {
 			err = ctx.Err()
 		}
@@ -477,15 +478,19 @@ func downloadErr(ctx context.Context, flags downloadFlags) error {
 			<-ctx.Done()
 		}
 	}
-	fmt.Printf("chunks received: %v\n", &torrent.ChunksReceived)
-	spew.Dump(client.ConnStats())
-	clStats := client.ConnStats()
-	sentOverhead := clStats.BytesWritten.Int64() - clStats.BytesWrittenData.Int64()
-	log.Printf(
-		"client read %v, %.1f%% was useful data. sent %v non-data bytes",
-		humanize.Bytes(uint64(clStats.BytesRead.Int64())),
-		100*float64(clStats.BytesReadUsefulData.Int64())/float64(clStats.BytesRead.Int64()),
-		humanize.Bytes(uint64(sentOverhead)))
+	if flags.Stats {
+		fmt.Printf("chunks received: %v\n", &torrent.ChunksReceived)
+		var buf bytes.Buffer
+		spew.Fdump(&buf, client.Stats())
+		os.Stdout.Write(buf.Bytes())
+		clStats := client.ConnStats()
+		sentOverhead := clStats.BytesWritten.Int64() - clStats.BytesWrittenData.Int64()
+		slog.Info(fmt.Sprintf(
+			"client read %v, %.1f%% was useful data. sent %v non-data bytes",
+			humanize.Bytes(uint64(clStats.BytesRead.Int64())),
+			100*float64(clStats.BytesReadUsefulData.Int64())/float64(clStats.BytesRead.Int64()),
+			humanize.Bytes(uint64(sentOverhead))))
+	}
 	return err
 }
 

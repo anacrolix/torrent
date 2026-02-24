@@ -39,7 +39,6 @@ func server() {
 		index++
 
 		w.Write([]byte("OK"))
-		return
 	})
 
 	if err := http.ListenAndServe(":8080", mux); err != nil {

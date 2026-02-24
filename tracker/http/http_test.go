@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -68,9 +68,8 @@ func TestSetAnnounceInfohashParamWithSpaces(t *testing.T) {
 		},
 		AnnounceOpt{})
 	t.Logf("%q", someUrl)
-	qt.Assert(t, someUrl.Query().Get("info_hash"), qt.Equals, string(ihBytes[:]))
+	qt.Assert(t, qt.Equals(someUrl.Query().Get("info_hash"), string(ihBytes[:])))
 	qt.Check(t,
-		someUrl.String(),
-		qt.Contains,
-		"info_hash=%2Bv%0A%A1x%93%200%C8G%DC%DF%8E%AE%BFV%0A%1B%D1l")
+		qt.StringContains(someUrl.String(),
+			"info_hash=%2Bv%0A%A1x%93%200%C8G%DC%DF%8E%AE%BFV%0A%1B%D1l"))
 }

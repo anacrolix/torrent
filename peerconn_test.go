@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -11,8 +12,7 @@ import (
 	"testing"
 
 	g "github.com/anacrolix/generics"
-	"github.com/frankban/quicktest"
-	qt "github.com/frankban/quicktest"
+	"github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
@@ -24,14 +24,17 @@ import (
 // Ensure that no race exists between sending a bitfield, and a subsequent
 // Have that would potentially alter it.
 func TestSendBitfieldThenHave(t *testing.T) {
-	var cl Client
-	cl.init(TestingConfig(t))
-	cl.initLogger()
-	qtc := qt.New(t)
+	cl := newTestingClient(t)
 	c := cl.newConnection(nil, newConnectionOpts{network: "io.Pipe"})
 	c.setTorrent(cl.newTorrentForTesting())
-	err := c.t.setInfo(&metainfo.Info{Pieces: make([]byte, metainfo.HashSize*3)})
-	qtc.Assert(err, qt.IsNil)
+	// I think code to handle zero size, no-name torrents is missing. It should be fine to a point.
+	err := c.t.setInfoUnlocked(&metainfo.Info{
+		Pieces:      make([]byte, metainfo.HashSize*3),
+		Name:        "dummy",
+		PieceLength: 1,
+		Length:      3,
+	})
+	qt.Assert(t, qt.IsNil(err))
 	r, w := io.Pipe()
 	// c.r = r
 	c.w = w
@@ -79,7 +82,7 @@ func (me *torrentStorage) MarkNotComplete() error {
 }
 
 func (me *torrentStorage) ReadAt([]byte, int64) (int, error) {
-	panic("shouldn't be called")
+	return 0, errors.New("not implemented")
 }
 
 func (me *torrentStorage) WriteAt(b []byte, _ int64) (int, error) {
@@ -90,26 +93,38 @@ func (me *torrentStorage) WriteAt(b []byte, _ int64) (int, error) {
 	return len(b), nil
 }
 
+type torrentStorageClient struct {
+	ts *torrentStorage
+}
+
+func (t torrentStorageClient) OpenTorrent(ctx context.Context, info *metainfo.Info, infoHash metainfo.Hash) (storage.TorrentImpl, error) {
+	ts := t.ts
+	return storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}, nil
+}
+
 func BenchmarkConnectionMainReadLoop(b *testing.B) {
-	c := quicktest.New(b)
 	var cl Client
-	cl.init(&ClientConfig{
-		DownloadRateLimiter: unlimited,
-	})
-	cl.initLogger()
+	cfg := TestingConfig(b)
 	ts := &torrentStorage{}
-	t := cl.newTorrentForTesting()
-	t.initialPieceCheckDisabled = true
-	require.NoError(b, t.setInfo(&metainfo.Info{
+	cfg.DefaultStorage = &torrentStorageClient{ts}
+	cl.init(cfg)
+	t, _ := cl.AddTorrentOpt(AddTorrentOpts{
+		InfoHash:                 testingTorrentInfoHash,
+		Storage:                  &torrentStorageClient{ts},
+		DisableInitialPieceCheck: true,
+	})
+	require.NoError(b, t.setInfoUnlocked(&metainfo.Info{
 		Pieces:      make([]byte, 20),
 		Length:      1 << 20,
 		PieceLength: 1 << 20,
 	}))
-	t.storage = &storage.Torrent{TorrentImpl: storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}}
-	t.onSetInfo()
-	t._pendingPieces.Add(0)
+	//t.storage = &storage.Torrent{TorrentImpl: storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}}
+	//t.onSetInfo()
+	cl.lock()
+	t.updatePiecePriority(0, "benchmark setup")
+	cl.unlock()
 	r, w := net.Pipe()
-	c.Logf("pipe reader remote addr: %v", r.RemoteAddr())
+	b.Logf("pipe reader remote addr: %v", r.RemoteAddr())
 	cn := cl.newConnection(r, newConnectionOpts{
 		outgoing: true,
 		// TODO: This is a hack to give the pipe a bannable remote address.
@@ -117,10 +132,10 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		network:    r.RemoteAddr().Network(),
 		connString: regularNetConnPeerConnConnString(r),
 	})
-	c.Assert(cn.bannableAddr.Ok, qt.IsTrue)
+	qt.Assert(b, qt.IsTrue(cn.bannableAddr.Ok))
 	cn.setTorrent(t)
-	requestIndexBegin := t.pieceRequestIndexOffset(0)
-	requestIndexEnd := t.pieceRequestIndexOffset(1)
+	requestIndexBegin := t.pieceRequestIndexBegin(0)
+	requestIndexEnd := t.pieceRequestIndexBegin(1)
 	eachRequestIndex := func(f func(ri RequestIndex)) {
 		for ri := requestIndexBegin; ri < requestIndexEnd; ri++ {
 			f(ri)
@@ -187,9 +202,9 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			break
 		}
 	}
-	c.Assert(err, qt.IsNil)
-	c.Assert(cn._stats.ChunksReadUseful.Int64(), quicktest.Equals, int64(b.N)*int64(numRequests))
-	c.Assert(t.smartBanCache.HasBlocks(), qt.IsTrue)
+	qt.Assert(b, qt.IsNil(err))
+	qt.Assert(b, qt.Equals(cn._stats.ChunksReadUseful.Int64(), int64(b.N)*int64(numRequests)))
+	qt.Assert(b, qt.IsTrue(t.smartBanCache.HasBlocks()))
 }
 
 func TestConnPexPeerFlags(t *testing.T) {
@@ -217,7 +232,6 @@ func TestConnPexPeerFlags(t *testing.T) {
 }
 
 func TestConnPexEvent(t *testing.T) {
-	c := qt.New(t)
 	var (
 		udpAddr     = &net.UDPAddr{IP: net.IPv6loopback, Port: 4848}
 		tcpAddr     = &net.TCPAddr{IP: net.IPv6loopback, Port: 4848}
@@ -260,49 +274,49 @@ func TestConnPexEvent(t *testing.T) {
 		},
 	}
 	for i, tc := range testcases {
-		c.Run(fmt.Sprintf("%v", i), func(c *qt.C) {
+		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
 			e, err := tc.c.pexEvent(tc.t)
-			c.Assert(err, qt.IsNil)
-			c.Check(e, qt.Equals, tc.e)
+			qt.Assert(t, qt.IsNil(err))
+			qt.Check(t, qt.Equals(e, tc.e))
 		})
 	}
 }
 
 func TestHaveAllThenBitfield(t *testing.T) {
-	c := qt.New(t)
 	cl := newTestingClient(t)
 	tt := cl.newTorrentForTesting()
-	// cl.newConnection()
+	//pc := cl.newConnection(nil, newConnectionOpts{})
 	pc := PeerConn{
 		Peer: Peer{t: tt},
 	}
 	pc.initRequestState()
 	pc.legacyPeerImpl = &pc
 	tt.conns[&pc] = struct{}{}
-	c.Assert(pc.onPeerSentHaveAll(), qt.IsNil)
-	c.Check(pc.t.connsWithAllPieces, qt.DeepEquals, map[*Peer]struct{}{&pc.Peer: {}})
+	g.InitNew(&pc.callbacks)
+	qt.Assert(t, qt.IsNil(pc.onPeerSentHaveAll()))
+	qt.Check(t, qt.DeepEquals(pc.t.connsWithAllPieces, map[*Peer]struct{}{&pc.Peer: {}}))
 	pc.peerSentBitfield([]bool{false, false, true, false, true, true, false, false})
-	c.Check(pc.peerMinPieces, qt.Equals, 6)
-	c.Check(pc.t.connsWithAllPieces, qt.HasLen, 0)
-	c.Assert(pc.t.setInfo(&metainfo.Info{
-		PieceLength: 0,
+	qt.Check(t, qt.Equals(pc.peerMinPieces, 6))
+	qt.Check(t, qt.HasLen(pc.t.connsWithAllPieces, 0))
+	qt.Assert(t, qt.IsNil(pc.t.setInfoUnlocked(&metainfo.Info{
+		Name:        "herp",
+		Length:      7,
+		PieceLength: 1,
 		Pieces:      make([]byte, pieceHash.Size()*7),
-	}), qt.IsNil)
-	pc.t.onSetInfo()
-	c.Check(tt.numPieces(), qt.Equals, 7)
-	c.Check(tt.pieceAvailabilityRuns(), qt.DeepEquals, []pieceAvailabilityRun{
+	})))
+	qt.Check(t, qt.Equals(tt.numPieces(), 7))
+	qt.Check(t, qt.DeepEquals(tt.pieceAvailabilityRuns(), []pieceAvailabilityRun{
 		// The last element of the bitfield is irrelevant, as the Torrent actually only has 7
 		// pieces.
 		{2, 0}, {1, 1}, {1, 0}, {2, 1}, {1, 0},
-	})
+	}))
 }
 
 func TestApplyRequestStateWriteBufferConstraints(t *testing.T) {
-	c := qt.New(t)
-	c.Check(interestedMsgLen, qt.Equals, 5)
-	c.Check(requestMsgLen, qt.Equals, 17)
-	c.Check(maxLocalToRemoteRequests >= 8, qt.IsTrue)
-	c.Logf("max local to remote requests: %v", maxLocalToRemoteRequests)
+	qt.Check(t, qt.Equals(interestedMsgLen, 5))
+	qt.Check(t, qt.Equals(requestMsgLen, 17))
+	qt.Check(t, qt.IsTrue(maxLocalToRemoteRequests >= 8))
+	t.Logf("max local to remote requests: %v", maxLocalToRemoteRequests)
 }
 
 func peerConnForPreferredNetworkDirection(
@@ -328,42 +342,34 @@ func peerConnForPreferredNetworkDirection(
 
 func TestPreferredNetworkDirection(t *testing.T) {
 	pc := peerConnForPreferredNetworkDirection
-	c := qt.New(t)
 
 	// Prefer outgoing to lower peer ID
 
-	c.Check(
-		pc(1, 2, true, false, false).hasPreferredNetworkOver(pc(1, 2, false, false, false)),
-		qt.IsFalse,
+	qt.Check(t,
+		qt.IsFalse(pc(1, 2, true, false, false).hasPreferredNetworkOver(pc(1, 2, false, false, false))),
 	)
-	c.Check(
-		pc(1, 2, false, false, false).hasPreferredNetworkOver(pc(1, 2, true, false, false)),
-		qt.IsTrue,
+	qt.Check(t,
+		qt.IsTrue(pc(1, 2, false, false, false).hasPreferredNetworkOver(pc(1, 2, true, false, false))),
 	)
-	c.Check(
-		pc(2, 1, false, false, false).hasPreferredNetworkOver(pc(2, 1, true, false, false)),
-		qt.IsFalse,
+	qt.Check(t,
+		qt.IsFalse(pc(2, 1, false, false, false).hasPreferredNetworkOver(pc(2, 1, true, false, false))),
 	)
 
 	// Don't prefer uTP
-	c.Check(
-		pc(1, 2, false, true, false).hasPreferredNetworkOver(pc(1, 2, false, false, false)),
-		qt.IsFalse,
+	qt.Check(t,
+		qt.IsFalse(pc(1, 2, false, true, false).hasPreferredNetworkOver(pc(1, 2, false, false, false))),
 	)
 	// Prefer IPv6
-	c.Check(
-		pc(1, 2, false, false, false).hasPreferredNetworkOver(pc(1, 2, false, false, true)),
-		qt.IsFalse,
+	qt.Check(t,
+		qt.IsFalse(pc(1, 2, false, false, false).hasPreferredNetworkOver(pc(1, 2, false, false, true))),
 	)
 	// No difference
-	c.Check(
-		pc(1, 2, false, false, false).hasPreferredNetworkOver(pc(1, 2, false, false, false)),
-		qt.IsFalse,
+	qt.Check(t,
+		qt.IsFalse(pc(1, 2, false, false, false).hasPreferredNetworkOver(pc(1, 2, false, false, false))),
 	)
 }
 
 func TestReceiveLargeRequest(t *testing.T) {
-	c := qt.New(t)
 	cl := newTestingClient(t)
 	pc := cl.newConnection(nil, newConnectionOpts{network: "test"})
 	tor := cl.newTorrentForTesting()
@@ -375,26 +381,25 @@ func TestReceiveLargeRequest(t *testing.T) {
 	pc.initMessageWriter()
 	req := Request{}
 	req.Length = defaultChunkSize
-	c.Assert(pc.fastEnabled(), qt.IsTrue)
-	c.Check(pc.onReadRequest(req, false), qt.IsNil)
-	c.Check(pc.peerRequests, qt.HasLen, 1)
+	qt.Assert(t, qt.IsTrue(pc.fastEnabled()))
+	qt.Check(t, qt.IsNil(pc.onReadRequest(req, false)))
+	qt.Check(t, qt.HasLen(pc.unreadPeerRequests, 1))
 	req.Length = 2 << 20
-	c.Check(pc.onReadRequest(req, false), qt.IsNil)
-	c.Check(pc.peerRequests, qt.HasLen, 2)
-	pc.peerRequests = nil
+	qt.Check(t, qt.IsNil(pc.onReadRequest(req, false)))
+	qt.Check(t, qt.HasLen(pc.unreadPeerRequests, 2))
+	pc.unreadPeerRequests = nil
 	pc.t.cl.config.UploadRateLimiter = rate.NewLimiter(1, defaultChunkSize)
 	req.Length = defaultChunkSize
-	c.Check(pc.onReadRequest(req, false), qt.IsNil)
-	c.Check(pc.peerRequests, qt.HasLen, 1)
+	qt.Check(t, qt.IsNil(pc.onReadRequest(req, false)))
+	qt.Check(t, qt.HasLen(pc.unreadPeerRequests, 1))
 	req.Length = 2 << 20
-	c.Check(pc.onReadRequest(req, false), qt.IsNil)
-	c.Check(pc.messageWriter.writeBuffer.Len(), qt.Equals, 17)
+	qt.Check(t, qt.IsNil(pc.onReadRequest(req, false)))
+	qt.Check(t, qt.Equals(pc.messageWriter.writeBuffer.Len(), 17))
 }
 
 func TestChunkOverflowsPiece(t *testing.T) {
-	c := qt.New(t)
 	check := func(begin, length, limit pp.Integer, expected bool) {
-		c.Check(chunkOverflowsPiece(ChunkSpec{begin, length}, limit), qt.Equals, expected)
+		qt.Check(t, qt.Equals(chunkOverflowsPiece(ChunkSpec{begin, length}, limit), expected))
 	}
 	check(2, 3, 1, true)
 	check(2, pp.IntegerMax, 1, true)

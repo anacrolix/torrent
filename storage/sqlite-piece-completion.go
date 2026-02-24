@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/go-llsqlite/adapter"
+	sqlite "github.com/go-llsqlite/adapter"
 	"github.com/go-llsqlite/adapter/sqlitex"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -26,6 +26,10 @@ type sqlitePieceCompletion struct {
 	mu     sync.Mutex
 	closed bool
 	db     *sqlite.Conn
+}
+
+func (me *sqlitePieceCompletion) Persistent() bool {
+	return true
 }
 
 var _ PieceCompletion = (*sqlitePieceCompletion)(nil)
@@ -48,6 +52,10 @@ func NewSqlitePieceCompletion(dir string) (ret *sqlitePieceCompletion, err error
 func (me *sqlitePieceCompletion) Get(pk metainfo.PieceKey) (c Completion, err error) {
 	me.mu.Lock()
 	defer me.mu.Unlock()
+	if me.closed {
+		err = errors.New("closed")
+		return
+	}
 	err = sqlitex.Exec(
 		me.db, `select complete from piece_completion where infohash=? and "index"=?`,
 		func(stmt *sqlite.Stmt) error {

@@ -8,14 +8,13 @@ import (
 	"testing"
 
 	"github.com/anacrolix/log"
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 )
 
 // Show that multiple connections from the same local TCP port to the same remote port will fail.
 func TestTcpPortReuseIsABadIdea(t *testing.T) {
 	remote, err := net.Listen("tcp", "localhost:0")
-	c := qt.New(t)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer remote.Close()
 	dialer := net.Dialer{}
 	// Show that we can't duplicate an existing connection even with various socket options.
@@ -26,16 +25,16 @@ func TestTcpPortReuseIsABadIdea(t *testing.T) {
 	}
 	// Tie up a local port to the remote.
 	first, err := dialer.Dial("tcp", remote.Addr().String())
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer first.Close()
 	// Show that dialling the remote with the same local port fails.
 	dialer.LocalAddr = first.LocalAddr()
 	_, err = dialer.Dial("tcp", remote.Addr().String())
-	c.Assert(err, qt.IsNotNil)
+	qt.Assert(t, qt.IsNotNil(err))
 	// Show that not fixing the local port again allows connections to succeed.
 	dialer.LocalAddr = nil
 	second, err := dialer.Dial("tcp", remote.Addr().String())
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	second.Close()
 }
 
@@ -43,9 +42,8 @@ func TestTcpPortReuseIsABadIdea(t *testing.T) {
 // succeed. This is necessary for ut_holepunch to work.
 func TestUtpLocalPortIsReusable(t *testing.T) {
 	const network = "udp"
-	c := qt.New(t)
 	remote, err := NewUtpSocket(network, "localhost:0", nil, log.Default)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer remote.Close()
 	var remoteAccepts int32
 	doneAccepting := make(chan struct{})
@@ -65,15 +63,15 @@ func TestUtpLocalPortIsReusable(t *testing.T) {
 		}
 	}()
 	local, err := NewUtpSocket(network, "localhost:0", nil, log.Default)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer local.Close()
 	first, err := local.DialContext(context.Background(), network, remote.Addr().String())
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer first.Close()
 	second, err := local.DialContext(context.Background(), network, remote.Addr().String())
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer second.Close()
 	remote.Close()
 	<-doneAccepting
-	c.Assert(atomic.LoadInt32(&remoteAccepts), qt.Equals, int32(2))
+	qt.Assert(t, qt.Equals(atomic.LoadInt32(&remoteAccepts), int32(2)))
 }

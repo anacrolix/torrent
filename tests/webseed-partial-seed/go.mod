@@ -4,7 +4,7 @@ go 1.23
 
 require (
 	github.com/anacrolix/torrent v1.56.1
-	github.com/frankban/quicktest v1.14.6
+	github.com/go-quicktest/qt v1.101.0
 )
 
 require (
@@ -72,7 +72,7 @@ require (
 	github.com/pion/webrtc/v3 v3.1.42 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/rogpeppe/go-internal v1.9.0 // indirect
+	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/rs/dnscache v0.0.0-20211102005908-e0241e321417 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/tidwall/btree v1.6.0 // indirect

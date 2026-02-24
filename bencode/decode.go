@@ -324,7 +324,7 @@ func getDictField(dict reflect.Type, key reflect.Value) (_ dictField, err error)
 		return getStructFieldForKey(dict, key.String()), nil
 		// if sf.r.PkgPath != "" {
 		//	panic(&UnmarshalFieldError{
-		//		Key:   key,
+		//		First:   key,
 		//		Type:  dict.Type(),
 		//		Field: sf.r,
 		//	})

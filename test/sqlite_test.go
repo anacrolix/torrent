@@ -7,11 +7,12 @@
 package test
 
 import (
+	"errors"
 	"net"
 	"net/http"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/bencode"
@@ -20,18 +21,17 @@ import (
 )
 
 func TestSqliteStorageClosed(t *testing.T) {
-	c := qt.New(t)
 	cfg := torrent.TestingConfig(t)
 	storage, err := sqliteStorage.NewDirectStorage(sqliteStorage.NewDirectStorageOpts{})
 	defer storage.Close()
 	cfg.DefaultStorage = storage
 	cfg.Debug = true
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	cl, err := torrent.NewClient(cfg)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer cl.Close()
 	l, err := net.Listen("tcp", "localhost:0")
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer l.Close()
 	// We need at least once piece to trigger a call to storage to determine completion state. We
 	// need non-zero content length to trigger piece hashing.
@@ -44,7 +44,7 @@ func TestSqliteStorageClosed(t *testing.T) {
 	}
 	mi := metainfo.MetaInfo{}
 	mi.InfoBytes, err = bencode.Marshal(i)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	s := http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			mi.Write(w)
@@ -53,16 +53,16 @@ func TestSqliteStorageClosed(t *testing.T) {
 	defer s.Close()
 	go func() {
 		err := s.Serve(l)
-		if err != http.ErrServerClosed {
+		if !errors.Is(err, http.ErrServerClosed) {
 			panic(err)
 		}
 	}()
 	// Close storage prematurely.
 	storage.Close()
-	tor, _, err := cl.AddTorrentSpec(&torrent.TorrentSpec{
+	tor, _ := cl.AddTorrentOpt(torrent.AddTorrentOpts{
 		InfoHash: mi.HashInfoBytes(),
-		Sources:  []string{"http://" + l.Addr().String()},
 	})
-	c.Assert(err, qt.IsNil)
+	tor.AddSources([]string{"http://" + l.Addr().String()})
+	qt.Assert(t, qt.IsNil(err))
 	<-tor.GotInfo()
 }

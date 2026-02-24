@@ -1,22 +1,14 @@
 package segments
 
 import (
+	"slices"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	"github.com/go-quicktest/qt"
 )
 
 func LengthIterFromSlice(ls []Length) LengthIter {
-	return func() (Length, bool) {
-		switch len(ls) {
-		case 0:
-			return -1, false
-		default:
-			l := ls[0]
-			ls = ls[1:]
-			return l, true
-		}
-	}
+	return slices.Values(ls)
 }
 
 type ScanCallbackValue struct {
@@ -50,7 +42,7 @@ func checkContiguous(
 		expected.scanCallback(firstExpectedIndex+i, e)
 	}
 	nl(LengthIterFromSlice(ls))(needle, actual.scanCallback)
-	qt.Check(t, actual, qt.DeepEquals, expected)
+	qt.Check(t, qt.DeepEquals(actual, expected))
 }
 
 func testLocater(t *testing.T, newLocater newLocater) {
@@ -86,14 +78,63 @@ func testLocater(t *testing.T, newLocater newLocater) {
 			{0, 1536},
 			{0, 667},
 		})
+	checkContiguous(t, newLocater,
+		[]Length{0, 2, 0, 2, 0}, // 128737588
+		Extent{1, 2},
+		1,
+		[]Extent{
+			{1, 1},
+			{0, 0},
+			{0, 1},
+		})
+	checkContiguous(t, newLocater,
+		[]Length{2, 0, 2, 0}, // 128737588
+		Extent{1, 3},
+		0,
+		[]Extent{
+			{1, 1},
+			{0, 0},
+			{0, 2},
+		})
+	checkContiguous(t, newLocater,
+		[]Length{2, 0, 1, 0, 0, 1},
+		Extent{3, 2},
+		5,
+		[]Extent{
+			{0, 1},
+		})
+	checkContiguous(t, newLocater,
+		[]Length{2, 0, 1, 0, 0, 1},
+		Extent{2, 2},
+		2,
+		[]Extent{
+			{0, 1},
+			{0, 0},
+			{0, 0},
+			{0, 1},
+		})
+	checkContiguous(t, newLocater,
+		[]Length{},
+		Extent{1, 1},
+		0,
+		[]Extent{})
+	checkContiguous(t, newLocater,
+		[]Length{0},
+		Extent{1, 1},
+		0,
+		[]Extent{})
 }
 
-func TestScan(t *testing.T) {
-	testLocater(t, LocaterFromLengthIter)
-}
-
-func TestIndex(t *testing.T) {
+func TestIndexLocateIter(t *testing.T) {
 	testLocater(t, func(li LengthIter) Locater {
-		return NewIndex(li).Locate
+		index := NewIndex(li)
+		return func(extent Extent, callback Callback) bool {
+			for i, e := range index.LocateIter(extent) {
+				if !callback(i, e) {
+					return false
+				}
+			}
+			return true
+		}
 	})
 }

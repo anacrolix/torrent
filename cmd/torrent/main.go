@@ -7,40 +7,30 @@ import (
 	"fmt"
 	"io"
 	stdLog "log"
+	"log/slog"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/anacrolix/bargle"
 	"github.com/anacrolix/envpprof"
 	app "github.com/anacrolix/gostdapp"
 	"github.com/anacrolix/log"
 	xprometheus "github.com/anacrolix/missinggo/v2/prometheus"
+
 	"github.com/davecgh/go-spew/spew"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	"go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/version"
 )
 
 func init() {
+	stdLog.SetFlags(stdLog.Flags() | stdLog.Lshortfile)
 	prometheus.MustRegister(xprometheus.NewExpvarCollector())
 	http.Handle("/metrics", promhttp.Handler())
-}
-
-func shutdownTracerProvider(ctx context.Context, tp *trace.TracerProvider) {
-	started := time.Now()
-	err := tp.Shutdown(ctx)
-	elapsed := time.Since(started)
-	logger := log.Default.Slogger()
-	logger.Debug("shutting down tracer provider", "took", elapsed)
-	if err != nil && ctx.Err() == nil {
-		log.Default.Slogger().Error("error shutting down tracer provider", "err", err)
-	}
+	log.Default = log.NewLogger().WithDefaultLevel(log.Info)
+	log.Default.SetHandlers(log.SlogHandlerAsHandler{slog.Default().Handler()})
 }
 
 func main() {
@@ -48,22 +38,18 @@ func main() {
 }
 
 func mainErr(ctx context.Context) error {
-	defer stdLog.SetFlags(stdLog.Flags() | stdLog.Lshortfile)
-
-	tracingExporter, err := otlptracegrpc.New(ctx)
-	if err != nil {
-		return fmt.Errorf("creating tracing exporter: %w", err)
-	}
-	tracerProvider := trace.NewTracerProvider(trace.WithBatcher(tracingExporter))
-	otel.SetTracerProvider(tracerProvider)
-
 	main := bargle.Main{}
 	main.Defer(envpprof.Stop)
-	main.Defer(func() { shutdownTracerProvider(ctx, tracerProvider) })
 	debug := false
 	debugFlag := bargle.NewFlag(&debug)
 	debugFlag.AddLong("debug")
 	main.Options = append(main.Options, debugFlag.Make())
+	main.AfterParseFunc = func(ctx bargle.Context) error {
+		if debug {
+			slog.SetLogLoggerLevel(slog.LevelDebug)
+		}
+		return nil
+	}
 	main.Positionals = append(main.Positionals,
 		bargle.Subcommand{Name: "metainfo", Command: metainfoCmd()},
 		bargle.Subcommand{Name: "announce", Command: func() bargle.Command {
@@ -87,10 +73,14 @@ func mainErr(ctx context.Context) error {
 			var dlc DownloadCmd
 			cmd := bargle.FromStruct(&dlc)
 			cmd.DefaultAction = func() error {
-				return downloadErr(ctx, downloadFlags{
-					Debug:       debug,
-					DownloadCmd: dlc,
-				})
+				return downloadErr(
+					ctx,
+					downloadFlags{
+						Debug:       debug,
+						DownloadCmd: dlc,
+					},
+					slog.Default(),
+				)
 			}
 			return cmd
 		}()},

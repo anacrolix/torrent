@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -11,10 +12,13 @@ import (
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
+
 	"github.com/pion/webrtc/v4"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/iplist"
+	"github.com/anacrolix/torrent/metainfo"
+
 	"github.com/anacrolix/torrent/mse"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/version"
@@ -29,13 +33,16 @@ type ClientTrackerConfig struct {
 	TrackerDialContext func(ctx context.Context, network, addr string) (net.Conn, error)
 	// Defines ListenPacket func to use for UDP tracker announcements
 	TrackerListenPacket func(network, addr string) (net.PacketConn, error)
-	// Takes a tracker's hostname and requests DNS A and AAAA records.
-	// Used in case DNS lookups require a special setup (i.e., dns-over-https)
+	// Deprecated. Takes a tracker's hostname and requests DNS A and AAAA records. Used in case DNS lookups
+	// require a special setup (i.e., dns-over-https). TODO: Wire back into UDP tracker client
+	// implementation, or deprecate in favour of a Client DNS resolver. It was done manually before
+	// calling the Announce.Do wrapper.
 	LookupTrackerIp func(*url.URL) ([]net.IP, error)
 }
 
 type ClientDhtConfig struct {
 	// Don't create a DHT.
+	// cfg.NoDHT aka cfg.DisableDHT
 	NoDHT            bool `long:"disable-dht"`
 	DhtStartingNodes func(network string) dht.StartingNodesGetter
 	// Called for each anacrolix/dht Server created for the Client.
@@ -45,18 +52,20 @@ type ClientDhtConfig struct {
 	DHTOnQuery func(query *krpc.Msg, source net.Addr) (propagate bool)
 }
 
-// Probably not safe to modify this after it's given to a Client.
+// Probably not safe to modify this after it's given to a Client, or to pass it to multiple Clients.
 type ClientConfig struct {
 	ClientTrackerConfig
 	ClientDhtConfig
+	MetainfoSourcesConfig
 
-	// Store torrent file data in this directory unless .DefaultStorage is
+	// Store torrent file data in this directory unless DefaultStorage is
 	// specified.
 	DataDir string `long:"data-dir" description:"directory to store downloaded torrent data"`
 	// The address to listen for new uTP and TCP BitTorrent protocol connections. DHT shares a UDP
 	// socket with uTP unless configured otherwise.
 	ListenHost              func(network string) string
 	ListenPort              int
+	// cfg.NoDefaultPortForwarding aka cfg.DisableUpnp
 	NoDefaultPortForwarding bool
 	UpnpID                  string
 	DisablePEX              bool `long:"disable-pex"`
@@ -78,6 +87,8 @@ type ClientConfig struct {
 	// rate-limiting io.Reader minus one. This is likely to be the larger of the main read loop
 	// buffer (~4096), and the requested chunk size (~16KiB, see TorrentSpec.ChunkSize). If limit is
 	// not Inf, and burst is left at 0, the implementation will choose a suitable burst.
+	//
+	// If the field is nil, no rate limiting is applied. And it can't be adjusted dynamically.
 	DownloadRateLimiter *rate.Limiter
 	// Maximum unverified bytes across all torrents. Not used if zero.
 	MaxUnverifiedBytes int64
@@ -104,8 +115,11 @@ type ClientConfig struct {
 	DisableIPv4      bool
 	DisableIPv4Peers bool
 	// Perform logging and any other behaviour that will help debug.
-	Debug  bool `help:"enable debugging"`
+	Debug bool `help:"enable debugging"`
+	// If Slogger is set, will be forwarded automatically to Slogger. This is recommended.
 	Logger log.Logger
+	// If unset, falls back to deferring to the old analog Logger.
+	Slogger *slog.Logger
 
 	// Used for torrent sources and webseeding if set.
 	WebTransport http.RoundTripper
@@ -150,7 +164,8 @@ type ClientConfig struct {
 	// How long between writes before sending a keep alive message on a peer connection that we want
 	// to maintain.
 	KeepAliveTimeout time.Duration
-	// Maximum bytes to buffer per peer connection for peer request data before it is sent.
+	// Maximum bytes to buffer per peer connection for peer request data before it is sent. This
+	// must be >= the request chunk size from peers.
 	MaxAllocPeerRequestDataPerConn int
 
 	// The IP addresses as our peers should see them. May differ from the
@@ -168,6 +183,8 @@ type ClientConfig struct {
 	// bit of a special case, since a peer could also be useless if they're just not interested, or
 	// we don't intend to obtain all of a torrent's data.
 	DropMutuallyCompletePeers bool
+	// Use dialers to obtain connections to regular peers.
+	DialForPeerConns bool
 	// Whether to accept peer connections at all.
 	AcceptPeerConnections bool
 	// Whether a Client should want conns without delegating to any attached Torrents. This is
@@ -225,7 +242,6 @@ func NewDefaultClientConfig() *ClientConfig {
 		MaxAllocPeerRequestDataPerConn: 1 << 20,
 		ListenHost:                     func(string) string { return "" },
 		UploadRateLimiter:              unlimited,
-		DownloadRateLimiter:            unlimited,
 		DisableAcceptRateLimiting:      true,
 		DropMutuallyCompletePeers:      true,
 		HeaderObfuscationPolicy: HeaderObfuscationPolicy{
@@ -236,6 +252,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		CryptoProvides:         mse.AllSupportedCrypto,
 		ListenPort:             42069,
 		Extensions:             defaultPeerExtensionBytes(),
+		DialForPeerConns:       true,
 		AcceptPeerConnections:  true,
 		MaxUnverifiedBytes:     64 << 20,
 		DialRateLimiter:        rate.NewLimiter(10, 10),
@@ -245,6 +262,9 @@ func NewDefaultClientConfig() *ClientConfig {
 		return func() ([]dht.Addr, error) { return dht.GlobalBootstrapAddrs(network) }
 	}
 	cc.PeriodicallyAnnounceTorrentsToDht = true
+	cc.MetainfoSourcesMerger = func(t *Torrent, info *metainfo.MetaInfo) error {
+		return t.MergeSpec(TorrentSpecFromMetaInfo(info))
+	}
 	return cc
 }
 
@@ -254,15 +274,27 @@ type HeaderObfuscationPolicy struct {
 }
 
 func (cfg *ClientConfig) setRateLimiterBursts() {
-	// Create a helper for rate limiters to avoid mistakes? What if the limit is greater than what
-	// can be represented by int?
-	if cfg.UploadRateLimiter.Limit() != rate.Inf && cfg.UploadRateLimiter.Burst() == 0 {
-		// What about chunk size?
+	// What about chunk size?
+	if cfg.UploadRateLimiter.Burst() == 0 {
 		cfg.UploadRateLimiter.SetBurst(cfg.MaxAllocPeerRequestDataPerConn)
 	}
-	if cfg.DownloadRateLimiter.Limit() != rate.Inf && cfg.DownloadRateLimiter.Burst() == 0 {
-		// 64 KiB used to be a rough default buffer for sockets on Windows. I'm sure it's bigger
-		// these days. What about the read buffer size mentioned elsewhere?
-		cfg.DownloadRateLimiter.SetBurst(min(int(cfg.DownloadRateLimiter.Limit()), 1<<16))
+	setDefaultDownloadRateLimiterBurstIfZero(cfg.DownloadRateLimiter)
+}
+
+// Returns the download rate.Limit handling the special nil case.
+func EffectiveDownloadRateLimit(l *rate.Limiter) rate.Limit {
+	if l == nil {
+		return rate.Inf
 	}
+	return l.Limit()
+}
+
+type MetainfoSourcesConfig struct {
+	// Used for torrent metainfo sources only. Falls back to the http.Client created to wrap
+	// WebTransport.
+	MetainfoSourcesClient *http.Client
+	// If a sources successfully fetches metainfo, this function is called to apply the metainfo. t
+	// is provided to prevent a race as the fetcher for the source was bound to it. Returning an
+	// error will kill the respective sourcer.
+	MetainfoSourcesMerger func(t *Torrent, info *metainfo.MetaInfo) error
 }

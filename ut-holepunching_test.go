@@ -15,7 +15,7 @@ import (
 
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/iter"
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
@@ -26,7 +26,6 @@ import (
 // Check that after completing leeching, a leecher transitions to a seeding
 // correctly. Connected in a chain like so: Seeder <-> Leecher <-> LeecherLeecher.
 func TestHolepunchConnect(t *testing.T) {
-	c := qt.New(t)
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
 
@@ -101,7 +100,7 @@ func TestHolepunchConnect(t *testing.T) {
 		defer wg.Done()
 		r := llg.NewReader()
 		defer r.Close()
-		qt.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), qt.IsNil)
+		qt.Check(t, qt.IsNil(iotest.TestReader(r, []byte(testutil.GreetingFileContents))))
 	}()
 	go seederTorrent.AddClientPeer(leecher)
 	waitForConns(seederTorrent)
@@ -123,13 +122,13 @@ func TestHolepunchConnect(t *testing.T) {
 	llg.cl.unlock()
 	wg.Wait()
 
-	c.Check(seeder.dialedSuccessfullyAfterHolepunchConnect, qt.Not(qt.HasLen), 0)
-	c.Check(leecherLeecher.probablyOnlyConnectedDueToHolepunch, qt.Not(qt.HasLen), 0)
+	qt.Check(t, qt.Not(qt.HasLen(seeder.dialedSuccessfullyAfterHolepunchConnect, 0)))
+	qt.Check(t, qt.Not(qt.HasLen(leecherLeecher.probablyOnlyConnectedDueToHolepunch, 0)))
 
 	llClientStats := leecherLeecher.Stats()
-	c.Check(llClientStats.NumPeersUndialableWithoutHolepunch, qt.Not(qt.Equals), 0)
-	c.Check(llClientStats.NumPeersUndialableWithoutHolepunchDialedAfterHolepunchConnect, qt.Not(qt.Equals), 0)
-	c.Check(llClientStats.NumPeersProbablyOnlyConnectedDueToHolepunch, qt.Not(qt.Equals), 0)
+	qt.Check(t, qt.Not(qt.Equals(llClientStats.NumPeersUndialableWithoutHolepunch, 0)))
+	qt.Check(t, qt.Not(qt.Equals(llClientStats.NumPeersUndialableWithoutHolepunchDialedAfterHolepunchConnect, 0)))
+	qt.Check(t, qt.Not(qt.Equals(llClientStats.NumPeersProbablyOnlyConnectedDueToHolepunch, 0)))
 }
 
 func waitForConns(t *Torrent) {
@@ -146,11 +145,10 @@ func waitForConns(t *Torrent) {
 // Show that dialling TCP will complete before the other side accepts.
 func TestDialTcpNotAccepting(t *testing.T) {
 	l, err := net.Listen("tcp", "localhost:0")
-	c := qt.New(t)
-	c.Check(err, qt.IsNil)
+	qt.Check(t, qt.IsNil(err))
 	defer l.Close()
 	dialedConn, err := net.Dial("tcp", l.Addr().String())
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	dialedConn.Close()
 }
 
@@ -168,14 +166,13 @@ func TestTcpSimultaneousOpen(t *testing.T) {
 			return dialer.DialContext(ctx, network, remoteAddr)
 		}
 	}
-	c := qt.New(t)
 	// I really hate doing this in unit tests, but we would need to pick apart Dialer to get
 	// perfectly synchronized simultaneous dials.
 	for range iter.N(10) {
 		first, second := randPortPair()
 		t.Logf("ports are %v and %v", first, second)
 		err := testSimultaneousOpen(
-			c.Cleanup,
+			t.Cleanup,
 			makeDialer(first, fmt.Sprintf("localhost:%d", second)),
 			makeDialer(second, fmt.Sprintf("localhost:%d", first)),
 		)
@@ -311,7 +308,6 @@ const defaultMsg = "hello"
 // for one or both peers involved.
 func TestUtpSimultaneousOpen(t *testing.T) {
 	t.Parallel()
-	c := qt.New(t)
 	const network = "udp"
 	ctx := context.Background()
 	newUtpSocket := func(addr string) utpSocket {
@@ -323,7 +319,7 @@ func TestUtpSimultaneousOpen(t *testing.T) {
 			},
 			log.Default,
 		)
-		c.Assert(err, qt.IsNil)
+		qt.Assert(t, qt.IsNil(err))
 		return socket
 	}
 	first := newUtpSocket("localhost:0")
@@ -338,7 +334,7 @@ func TestUtpSimultaneousOpen(t *testing.T) {
 	t.Logf("first addr is %v. second addr is %v", first.Addr().String(), second.Addr().String())
 	for range iter.N(10) {
 		err := testSimultaneousOpen(
-			c.Cleanup,
+			t.Cleanup,
 			getDial(first, second.Addr().String()),
 			getDial(second, first.Addr().String()),
 		)
@@ -370,14 +366,13 @@ func skipGoUtpDialIssue(t *testing.T, err error) {
 // same connection.
 func TestUtpDirectDialMsg(t *testing.T) {
 	t.Parallel()
-	c := qt.New(t)
 	const network = "udp4"
 	ctx := context.Background()
 	newUtpSocket := func(addr string) utpSocket {
 		socket, err := NewUtpSocket(network, addr, func(net.Addr) bool {
 			return false
 		}, log.Default)
-		c.Assert(err, qt.IsNil)
+		qt.Assert(t, qt.IsNil(err))
 		return socket
 	}
 	for range iter.N(10) {
@@ -392,8 +387,8 @@ func TestUtpDirectDialMsg(t *testing.T) {
 			}
 			defer writer.Close()
 			reader, err := second.Accept()
+			qt.Assert(t, qt.IsNil(err))
 			defer reader.Close()
-			c.Assert(err, qt.IsNil)
 			return writeAndReadMsg(reader, writer)
 		}()
 		if err == nil {

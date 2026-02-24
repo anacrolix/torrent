@@ -7,11 +7,24 @@ import (
 // Due to ConnStats, may require special alignment on some platforms. See
 // https://github.com/anacrolix/torrent/issues/383.
 type TorrentStats struct {
+	AllConnStats
+	TorrentStatCounters
+	TorrentGauges
+}
+
+type AllConnStats struct {
 	// Aggregates stats over all connections past and present. Some values may not have much meaning
 	// in the aggregate context.
 	ConnStats
-	TorrentStatCounters
-	TorrentGauges
+	WebSeeds  ConnStats
+	PeerConns ConnStats
+}
+
+func (me *AllConnStats) Copy() (ret AllConnStats) {
+	ret.ConnStats = me.ConnStats.Copy()
+	ret.WebSeeds = me.WebSeeds.Copy()
+	ret.PeerConns = me.PeerConns.Copy()
+	return
 }
 
 // Instantaneous metrics in Torrents, and aggregated for Clients.
@@ -31,7 +44,6 @@ func (me *TorrentGauges) Add(agg TorrentGauges) {
 	for i := 0; i < reflect.TypeFor[TorrentGauges]().NumField(); i++ {
 		*dst.Field(i).Addr().Interface().(*int) += src.Field(i).Interface().(int)
 	}
-	return
 }
 
 type TorrentStatCounters struct {

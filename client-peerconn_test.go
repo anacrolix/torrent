@@ -1,14 +1,16 @@
 package torrent
 
 import (
+	"cmp"
 	"io"
 	"os"
 	"testing"
 	"testing/iotest"
 
+	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
-	"github.com/frankban/quicktest"
+	"github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
@@ -21,7 +23,9 @@ func TestPeerConnEstablished(t *testing.T) {
 	missinggo.CopyExact(&expectedPeerId, "12345123451234512345")
 
 	gotPeerConnectedEvt := false
-	gotPeerDisconnectedEvt := false
+	// Disconnect occurs asynchronously to Client/Torrent lifetime.
+	var gotPeerDisconnectedEvt chansync.SetOnce
+
 	ps := testClientTransferParams{
 		ConfigureSeeder: ConfigureClient{
 			Config: func(cfg *ClientConfig) {
@@ -35,7 +39,8 @@ func TestPeerConnEstablished(t *testing.T) {
 				cfg.Debug = false
 				cfg.DisableTrackers = true
 				cfg.EstablishedConnsPerTorrent = 1
-				cfg.Callbacks.StatusUpdated = append(cfg.Callbacks.StatusUpdated,
+				cfg.Callbacks.StatusUpdated = append(
+					cfg.Callbacks.StatusUpdated,
 					func(e StatusUpdatedEvent) {
 						if e.Event == PeerConnected {
 							gotPeerConnectedEvt = true
@@ -45,9 +50,10 @@ func TestPeerConnEstablished(t *testing.T) {
 					},
 					func(e StatusUpdatedEvent) {
 						if e.Event == PeerDisconnected {
-							gotPeerDisconnectedEvt = true
 							require.Equal(t, expectedPeerId, e.PeerId)
 							require.NoError(t, e.Error)
+							// Signal after checking the values.
+							gotPeerDisconnectedEvt.Set()
 						}
 					},
 				)
@@ -58,7 +64,7 @@ func TestPeerConnEstablished(t *testing.T) {
 	testClientTransfer(t, ps)
 	// double check that the callbacks were called
 	require.True(t, gotPeerConnectedEvt)
-	require.True(t, gotPeerDisconnectedEvt)
+	<-gotPeerDisconnectedEvt.Done()
 }
 
 type ConfigureClient struct {
@@ -85,9 +91,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	cfg.Seed = true
 	// Some test instances don't like this being on, even when there's no cache involved.
 	cfg.DropMutuallyCompletePeers = false
-	if ps.SeederUploadRateLimiter != nil {
-		cfg.UploadRateLimiter = ps.SeederUploadRateLimiter
-	}
+	cfg.UploadRateLimiter = cmp.Or(ps.SeederUploadRateLimiter, cfg.UploadRateLimiter)
 	cfg.DataDir = greetingTempDir
 	if ps.ConfigureSeeder.Config != nil {
 		ps.ConfigureSeeder.Config(cfg)
@@ -185,5 +189,5 @@ func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
 	pos, err := r.Seek(0, io.SeekStart)
 	assert.NoError(t, err)
 	assert.EqualValues(t, 0, pos)
-	quicktest.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), quicktest.IsNil)
+	qt.Check(t, qt.IsNil(iotest.TestReader(r, []byte(testutil.GreetingFileContents))))
 }

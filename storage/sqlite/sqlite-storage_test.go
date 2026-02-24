@@ -12,7 +12,7 @@ import (
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/squirrel"
 	"github.com/dustin/go-humanize"
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/storage"
 	test_storage "github.com/anacrolix/torrent/storage/test"
@@ -47,7 +47,6 @@ func BenchmarkMarkComplete(b *testing.B) {
 	runBench := func(b *testing.B, ci storage.ClientImpl) {
 		test_storage.BenchmarkPieceMarkComplete(b, ci, pieceSize, test_storage.DefaultNumPieces, capacity)
 	}
-	c := qt.New(b)
 	b.Run("CustomDirect", func(b *testing.B) {
 		var opts squirrel.NewCacheOpts
 		opts.Capacity = capacity
@@ -55,7 +54,7 @@ func BenchmarkMarkComplete(b *testing.B) {
 		benchOpts := func(b *testing.B) {
 			opts.Path = filepath.Join(b.TempDir(), "storage.db")
 			ci, err := NewDirectStorage(opts)
-			c.Assert(err, qt.IsNil)
+			qt.Assert(b, qt.IsNil(err))
 			defer ci.Close()
 			runBench(b, ci)
 		}
@@ -75,7 +74,7 @@ func BenchmarkMarkComplete(b *testing.B) {
 					if errors.As(err, &ujm) {
 						b.Skipf("setting journal mode %q: %v", opts.SetJournalMode, err)
 					}
-					c.Assert(err, qt.IsNil)
+					qt.Assert(b, qt.IsNil(err))
 					defer ci.Close()
 					runBench(b, ci)
 				}

@@ -1,34 +1,41 @@
 package torrent
 
 import (
+	"io"
+
 	"github.com/RoaringBitmap/roaring"
 
 	"github.com/anacrolix/torrent/metainfo"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
-// Contains implementation details that differ between peer types, like Webseeds and regular
+// Contains implementation details that differ between peer types, like WebSeeds and regular
 // BitTorrent protocol connections. These methods are embedded in the child types of Peer for legacy
 // expectations that they exist on the child type. Some methods are underlined to avoid collisions
 // with legacy PeerConn methods. New methods and calls that are fixed up should be migrated over to
 // newHotPeerImpl.
 type legacyPeerImpl interface {
-	// Trigger the actual request state to get updated
-	handleUpdateRequests()
-	writeInterested(interested bool) bool
+	// Whether the peer should be told to update requests. Sometimes this is skipped if it's high
+	// priority adjustments to requests. This is kind of only relevant to PeerConn but hasn't been
+	// fully migrated over yet.
+	isLowOnRequests() bool
+	// Notify that the peers requests should be updated for the provided reason.
+	onNeedUpdateRequests(reason updateRequestReason)
 
-	// _cancel initiates cancellation of a request and returns acked if it expects the cancel to be
-	// handled by a follow-up event.
-	_cancel(RequestIndex) (acked bool)
-	_request(Request) bool
+	// handleCancel initiates cancellation of a request
+	handleCancel(ri RequestIndex)
+	cancelAllRequests()
 	connectionFlags() string
 	onClose()
-	onGotInfo(*metainfo.Info)
+	onGotInfo(info *metainfo.Info)
 	// Drop connection. This may be a no-op if there is no connection.
 	drop()
 	// Rebuke the peer
-	ban()
+	providedBadData()
 	String() string
+	// Per peer-impl lines for WriteStatus.
 	peerImplStatusLines() []string
+	peerImplWriteStatus(w io.Writer)
 
 	// All if the peer should have everything, known if we know that for a fact. For example, we can
 	// guess at how many pieces are in a torrent, and assume they have all pieces based on them
@@ -41,4 +48,10 @@ type legacyPeerImpl interface {
 // Abstract methods implemented by subclasses of Peer.
 type newHotPeerImpl interface {
 	lastWriteUploadRate() float64
+	// Bookkeeping for a chunk being received and any specific checks.
+	checkReceivedChunk(ri RequestIndex, msg *pp.Message, req Request) (intended bool, err error)
+	// Whether we're expecting to receive chunks because we have outstanding requests. Used for
+	// example to calculate download rate.
+	expectingChunks() bool
+	allConnStatsImplField(*AllConnStats) *ConnStats
 }

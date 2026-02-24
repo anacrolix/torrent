@@ -10,7 +10,7 @@ import (
 
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/filecache"
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
@@ -207,7 +207,7 @@ func testSeedAfterDownloading(t *testing.T, disableUtp bool) {
 		go func() {
 			defer wg.Done()
 			defer r.Close()
-			qt.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), qt.IsNil)
+			qt.Check(t, qt.IsNil(iotest.TestReader(r, []byte(testutil.GreetingFileContents))))
 		}()
 	}
 	go leecherGreeting.AddClientPeer(seeder)

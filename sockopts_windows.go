@@ -13,3 +13,7 @@ func setReusePortSockOpts(fd uintptr) (err error) {
 func setSockNoLinger(fd uintptr) (err error) {
 	return syscall.SetsockoptLinger(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_LINGER, &lingerOffVal)
 }
+
+func setSockIPTOS(fd uintptr, val int) (err error) {
+	return nil
+}

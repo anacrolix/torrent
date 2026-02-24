@@ -1,0 +1,19 @@
+name: golangci-lint
+
+on:
+  pull_request:
+
+jobs:
+  golint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: -D errcheck,unused
+          only-new-issues: true

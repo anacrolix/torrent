@@ -7,15 +7,14 @@ import (
 	"testing"
 
 	"github.com/anacrolix/log"
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 	"github.com/pion/webrtc/v4"
 )
 
 func TestClosingPeerConnectionDoesNotCloseUnopenedDataChannel(t *testing.T) {
-	c := qt.New(t)
 	var tc TrackerClient
 	pc, dc, _, err := tc.newOffer(log.Default, "", [20]byte{})
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer pc.Close()
 	defer dc.Close()
 	peerConnClosed := make(chan struct{})
@@ -33,6 +32,6 @@ func TestClosingPeerConnectionDoesNotCloseUnopenedDataChannel(t *testing.T) {
 		t.Logf("data channel error: %v", err)
 	})
 	pc.Close()
-	c.Check(dc.ReadyState(), qt.Equals, webrtc.DataChannelStateClosed)
+	qt.Check(t, qt.Equals(dc.ReadyState(), webrtc.DataChannelStateClosed))
 	<-peerConnClosed
 }

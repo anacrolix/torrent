@@ -15,7 +15,7 @@ import (
 	"github.com/edsrzf/mmap-go"
 
 	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/mmap_span"
+	mmapSpan "github.com/anacrolix/torrent/mmap-span"
 )
 
 type mmapClientImpl struct {
@@ -46,7 +46,7 @@ func (s *mmapClientImpl) OpenTorrent(
 		span:     span,
 		pc:       s.pc,
 	}
-	return TorrentImpl{Piece: t.Piece, Close: t.Close, Flush: t.Flush}, err
+	return TorrentImpl{Piece: t.Piece, Close: t.Close}, err
 }
 
 func (s *mmapClientImpl) Close() error {
@@ -55,15 +55,14 @@ func (s *mmapClientImpl) Close() error {
 
 type mmapTorrentStorage struct {
 	infoHash metainfo.Hash
-	span     *mmap_span.MMapSpan
+	span     *mmapSpan.MMapSpan
 	pc       PieceCompletionGetSetter
 }
 
 func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
 	return mmapStoragePiece{
-		pc:       ts.pc,
+		t:        ts,
 		p:        p,
-		ih:       ts.infoHash,
 		ReaderAt: io.NewSectionReader(ts.span, p.Offset(), p.Length()),
 		WriterAt: missinggo.NewSectionWriter(ts.span, p.Offset(), p.Length()),
 	}
@@ -73,28 +72,25 @@ func (ts *mmapTorrentStorage) Close() error {
 	return ts.span.Close()
 }
 
-func (ts *mmapTorrentStorage) Flush() error {
-	errs := ts.span.Flush()
-	if len(errs) > 0 {
-		return errs[0]
-	}
-	return nil
-}
-
 type mmapStoragePiece struct {
-	pc PieceCompletionGetSetter
-	p  metainfo.Piece
-	ih metainfo.Hash
+	t *mmapTorrentStorage
+	p metainfo.Piece
 	io.ReaderAt
 	io.WriterAt
 }
 
+func (me mmapStoragePiece) Flush() error {
+	// TODO: Flush just the regions of the files we care about. At least this is no worse than it
+	// was previously.
+	return me.t.span.Flush()
+}
+
 func (me mmapStoragePiece) pieceKey() metainfo.PieceKey {
-	return metainfo.PieceKey{me.ih, me.p.Index()}
+	return metainfo.PieceKey{me.t.infoHash, me.p.Index()}
 }
 
 func (sp mmapStoragePiece) Completion() Completion {
-	c, err := sp.pc.Get(sp.pieceKey())
+	c, err := sp.t.pc.Get(sp.pieceKey())
 	if err != nil {
 		panic(err)
 	}
@@ -102,14 +98,18 @@ func (sp mmapStoragePiece) Completion() Completion {
 }
 
 func (sp mmapStoragePiece) MarkComplete() error {
-	return sp.pc.Set(sp.pieceKey(), true)
+	err := sp.t.pc.Set(sp.pieceKey(), true)
+	if err == nil {
+		err = sp.Flush()
+	}
+	return err
 }
 
 func (sp mmapStoragePiece) MarkNotComplete() error {
-	return sp.pc.Set(sp.pieceKey(), false)
+	return sp.t.pc.Set(sp.pieceKey(), false)
 }
 
-func mMapTorrent(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, err error) {
+func mMapTorrent(md *metainfo.Info, location string) (mms *mmapSpan.MMapSpan, err error) {
 	var mMaps []FileMapping
 	defer func() {
 		if err != nil {
@@ -133,7 +133,7 @@ func mMapTorrent(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, e
 		}
 		mMaps = append(mMaps, mm)
 	}
-	return mmap_span.New(mMaps, md.FileSegmentsIndex()), nil
+	return mmapSpan.New(mMaps, md.FileSegmentsIndex()), nil
 }
 
 func mmapFile(name string, size int64) (_ FileMapping, err error) {
@@ -144,7 +144,7 @@ func mmapFile(name string, size int64) (_ FileMapping, err error) {
 		return
 	}
 	var file *os.File
-	file, err = os.OpenFile(name, os.O_CREATE|os.O_RDWR, 0o666)
+	file, err = os.OpenFile(name, os.O_CREATE|os.O_RDWR, filePerm)
 	if err != nil {
 		return
 	}
@@ -198,7 +198,7 @@ func WrapFileMapping(region mmap.MMap, file *os.File) FileMapping {
 	}
 }
 
-type FileMapping = mmap_span.Mmap
+type FileMapping = mmapSpan.Mmap
 
 // Handles closing the mmap's file handle (needed for Windows). Could be implemented differently by
 // OS.

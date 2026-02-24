@@ -1,12 +1,14 @@
 package torrent
 
 import (
+	"fmt"
 	"io"
 	"net"
 
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
 	peer_store "github.com/anacrolix/dht/v2/peer-store"
+	"github.com/davecgh/go-spew/spew"
 )
 
 // DHT server interface for use by a Torrent or Client. It's reasonable for this to make assumptions
@@ -60,3 +62,9 @@ func (me AnacrolixDhtServerWrapper) Ping(addr *net.UDPAddr) {
 }
 
 var _ DhtServer = AnacrolixDhtServerWrapper{}
+
+func writeDhtServerStatus(w io.Writer, s DhtServer) {
+	dhtStats := s.Stats()
+	fmt.Fprintf(w, " ID: %x\n", s.ID())
+	spew.Fdump(w, dhtStats)
+}

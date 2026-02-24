@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/internal/testutil"
@@ -15,7 +15,6 @@ import (
 )
 
 func TestBoltPieceCompletionClosedWhenClientClosed(t *testing.T) {
-	c := qt.New(t)
 	cfg := TestingConfig(t)
 	pc, err := storage.NewBoltPieceCompletion(cfg.DataDir)
 	require.NoError(t, err)
@@ -23,7 +22,7 @@ func TestBoltPieceCompletionClosedWhenClientClosed(t *testing.T) {
 	defer ci.Close()
 	cfg.DefaultStorage = ci
 	cl, err := NewClient(cfg)
-	c.Assert(err, qt.IsNil, qt.Commentf("%#v", err))
+	qt.Assert(t, qt.IsNil(err), qt.Commentf("%#v", err))
 	cl.Close()
 	// And again, https://github.com/anacrolix/torrent/issues/158
 	cl, err = NewClient(cfg)
@@ -51,22 +50,21 @@ func TestIssue335(t *testing.T) {
 	cfg.Debug = true
 	cfg.DataDir = dir
 	comp, err := storage.NewBoltPieceCompletion(dir)
-	c := qt.New(t)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer logErr(comp.Close, "closing bolt piece completion")
 	mmapStorage := storage.NewMMapWithCompletion(dir, comp)
-	defer logErr(mmapStorage.Close, "closing mmap storage")
+	defer mmapStorage.Close()
 	cfg.DefaultStorage = mmapStorage
 	cl, err := NewClient(cfg)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer cl.Close()
 	tor, new, err := cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
-	c.Assert(err, qt.IsNil)
-	c.Assert(new, qt.IsTrue)
-	c.Assert(cl.WaitAll(), qt.IsTrue)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.IsTrue(new))
+	qt.Assert(t, qt.IsTrue(cl.WaitAll()))
 	tor.Drop()
 	_, new, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
-	c.Assert(err, qt.IsNil)
-	c.Assert(new, qt.IsTrue)
-	c.Assert(cl.WaitAll(), qt.IsTrue)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.IsTrue(new))
+	qt.Assert(t, qt.IsTrue(cl.WaitAll()))
 }

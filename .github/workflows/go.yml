@@ -3,117 +3,57 @@ name: Go
 on: [push, pull_request]
 
 jobs:
-
   test:
-    timeout-minutes: 10
+    timeout-minutes: 20
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        go-version: [ '1.22' ]
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        go-version: [ stable, oldstable]
+        # windows-latest removed for now: known issues with file handles to
+        # resolved. could set classic file io mode.
+        os: [macos-latest, ubuntu-latest]
       fail-fast: false
     steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/go-common
-    - run: go test -race $(go list ./... | grep -v /fs | grep -v /possum)
-      continue-on-error: true
-    - run: go test -race -timeout 1m ./fs/...
-      if: ${{ ! contains(matrix.os, 'windows') }}
-      continue-on-error: true
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+      - run: brew install macfuse fuse-t && echo 'FUSE_FORCE_BACKEND=fuse-t' >> $GITHUB_ENV
+        if: matrix.os == 'macos-latest'
+      - run: |
+          sudo apt update
+          sudo apt install -y fuse
+        if: matrix.os == 'ubuntu-latest'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install just
+        run: cargo install just
+      - name: Build possum
+        run: |
+          cd storage/possum/lib
+          cargo build --lib
+      # Separate to remove downloading spam and possible caching improvement.
+      - run: go mod download
+      - run: just test
+        # Test on 386 for atomic alignment and other bad 64-bit assumptions
+      - if: matrix.os != 'macos-latest'
+        run: GOARCH=386 go test -run @ ./...
+      - name: Some packages compile for WebAssembly
+        run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
 
-  test-benchmarks:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: [ '1.22' ]
-      fail-fast: false
-    steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/go-common
-    - run: go test -race -run @ -bench . -benchtime 2x $(go list ./... | grep -v /possum)
+      - name: Test global installability
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          # Create isolated environment
+          TMPDIR=$(mktemp -d)
+          cd "$TMPDIR"
 
-  bench:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: [ '1.22' ]
-      fail-fast: false
-    steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/go-common
-    - run: go test -run @ -bench . $(go list ./... | grep -v /possum)
+          # Init a dummy module to avoid any local go.mod influence
+          go mod init dummy
 
-  test-386:
-    timeout-minutes: 5
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: [ '1.22' ]
-      fail-fast: false
-    steps:
-    - uses: actions/checkout@v2
-    - uses: ./.github/actions/go-common
-    - run: GOARCH=386 go test -run @ $(go list ./... | grep -v /possum)
+          # This should succeed if your module is properly published
+          go install github.com/anacrolix/torrent/cmd/torrent@${{ github.ref_name }}
 
-  build-wasm:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: [ '1.22' ]
-      fail-fast: false
-    steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/go-common
-    - name: Some packages compile for WebAssembly
-      run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
-
-  torrentfs-linux:
-    continue-on-error: true
-    timeout-minutes: 5
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        go-version: [ '1.22' ]
-        os: [ubuntu-latest]
-      fail-fast: false
-    steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/go-common
-        
-    - name: Install godo
-      run: |
-        # Need master for cross-compiling fix
-        go install -v -x github.com/anacrolix/godo@v1
-        echo $PATH
-
-    - name: Apt packages
-      run: sudo apt install pv fuse
-
-    - name: torrentfs end-to-end test
-      # Test on 386 for atomic alignment and other bad 64-bit assumptions
-      run: GOARCH=386 fs/test.sh
-    - run: mount
-
-# Github broke FUSE on MacOS, I'm not sure what the state is.
-
-#  torrentfs-macos:
-#    timeout-minutes: 15
-#    runs-on: ${{ matrix.os }}
-#    strategy:
-#      matrix:
-#        go-version: [ '1.20' ]
-#        os: [macos-latest]
-#      fail-fast: false
-#    steps:
-#    - uses: actions/checkout@v2
-#    - uses: ./.github/actions/go-common
-#
-#    - run: brew install macfuse pv md5sha1sum bash
-#
-#    - name: Install godo
-#      run: go install -v github.com/anacrolix/godo@master
-#
-#    - name: torrentfs end-to-end test
-#      run: fs/test.sh
-#      # Pretty sure macos on GitHub CI has issues with the fuse driver now.
-#      continue-on-error: true
+          # Verify it runs
+          $(go env GOPATH)/bin/torrent version

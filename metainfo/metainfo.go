@@ -14,21 +14,21 @@ import (
 
 // Also known as a torrent file.
 type MetaInfo struct {
-	InfoBytes    bencode.Bytes `bencode:"info,omitempty"`                              // BEP 3
-	Announce     string        `bencode:"announce,omitempty"`                          // BEP 3
-	AnnounceList AnnounceList  `bencode:"announce-list,omitempty"`                     // BEP 12
-	Nodes        []Node        `bencode:"nodes,omitempty,ignore_unmarshal_type_error"` // BEP 5
+	InfoBytes    bencode.Bytes `bencode:"info,omitempty"`                                                        // BEP 3
+	Announce     string        `bencode:"announce,omitempty" mapstructure:",omitempty"`                          // BEP 3
+	AnnounceList AnnounceList  `bencode:"announce-list,omitempty"`                                               // BEP 12
+	Nodes        []Node        `bencode:"nodes,omitempty,ignore_unmarshal_type_error" mapstructure:",omitempty"` // BEP 5
 	// Where's this specified? Mentioned at
 	// https://wiki.theory.org/index.php/BitTorrentSpecification: (optional) the creation time of
 	// the torrent, in standard UNIX epoch format (integer, seconds since 1-Jan-1970 00:00:00 UTC)
 	CreationDate int64   `bencode:"creation date,omitempty,ignore_unmarshal_type_error"`
 	Comment      string  `bencode:"comment,omitempty"`
 	CreatedBy    string  `bencode:"created by,omitempty"`
-	Encoding     string  `bencode:"encoding,omitempty"`
-	UrlList      UrlList `bencode:"url-list,omitempty"` // BEP 19 WebSeeds
+	Encoding     string  `bencode:"encoding,omitempty" mapstructure:",omitempty"` // BEP 54
+	UrlList      UrlList `bencode:"url-list,omitempty"`                           // BEP 19 WebSeeds
 	// BEP 52 (BitTorrent v2): Keys are file merkle roots ("pieces root"s), and the values are the
 	// concatenated hashes of the merkle tree layer that corresponds to the piece length.
-	PieceLayers map[string]string `bencode:"piece layers,omitempty"`
+	PieceLayers map[string]string `bencode:"piece layers,omitempty" mapstructure:",omitempty"`
 }
 
 // Load a MetaInfo from an io.Reader. Returns a non-nil error in case of failure.

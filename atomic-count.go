@@ -31,9 +31,11 @@ func (me *Count) MarshalJSON() ([]byte, error) {
 
 // TODO: Can this use more generics to speed it up? Should we be checking the field types?
 func copyCountFields[T any](src *T) (dst T) {
+	srcValue := reflect.ValueOf(src).Elem()
+	dstValue := reflect.ValueOf(&dst).Elem()
 	for i := 0; i < reflect.TypeFor[T]().NumField(); i++ {
-		n := reflect.ValueOf(src).Elem().Field(i).Addr().Interface().(*Count).Int64()
-		reflect.ValueOf(&dst).Elem().Field(i).Addr().Interface().(*Count).Add(n)
+		n := srcValue.Field(i).Addr().Interface().(*Count).Int64()
+		dstValue.Field(i).Addr().Interface().(*Count).Add(n)
 	}
 	return
 }

@@ -10,6 +10,7 @@ import (
 
 type PieceIndex = int
 
+// TODO: Where is the doc/spec calling it this?
 type ChunkSpec struct {
 	Begin, Length pp.Integer
 }

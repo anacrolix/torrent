@@ -30,10 +30,11 @@ type AnnounceResponse = trHttp.AnnounceResponse
 
 type Peer = trHttp.Peer
 
-type AnnounceEvent = udp.AnnounceEvent
+type AnnounceEvent = shared.AnnounceEvent
 
 var ErrBadScheme = errors.New("unknown scheme")
 
+// Deprecated. Use tracker.NewClient and friends instead.
 type Announce struct {
 	TrackerUrl          string
 	Request             AnnounceRequest

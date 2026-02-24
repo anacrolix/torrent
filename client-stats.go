@@ -39,7 +39,7 @@ type ClientStats struct {
 }
 
 func (cl *Client) statsLocked() (stats ClientStats) {
-	stats.ConnStats = copyCountFields(&cl.connStats)
+	stats.AllConnStats = cl.connStats.Copy()
 	stats.TorrentStatCounters = copyCountFields(&cl.counters)
 	for t := range cl.torrents {
 		stats.TorrentGauges.Add(t.gauges())

@@ -20,6 +20,8 @@ func TestDropTorrentWithMmapStorageWhileHashing(t *testing.T) {
 	// Ensure the data is present when the torrent is added, and not obtained
 	// over the network as the test runs.
 	cfg.DownloadRateLimiter = rate.NewLimiter(0, 0)
+	cfg.DialForPeerConns = false
+	cfg.AcceptPeerConnections = false
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer cl.Close()
@@ -27,12 +29,11 @@ func TestDropTorrentWithMmapStorageWhileHashing(t *testing.T) {
 	td, mi := testutil.GreetingTestTorrent()
 	mms := storage.NewMMap(td)
 	defer mms.Close()
-	tt, new, err := cl.AddTorrentSpec(&TorrentSpec{
+	tt, new := cl.AddTorrentOpt(AddTorrentOpts{
 		Storage:   mms,
 		InfoHash:  mi.HashInfoBytes(),
 		InfoBytes: mi.InfoBytes,
 	})
-	require.NoError(t, err)
 	assert.True(t, new)
 
 	r := tt.NewReader()

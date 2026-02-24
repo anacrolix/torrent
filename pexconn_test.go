@@ -8,11 +8,19 @@ import (
 	"github.com/stretchr/testify/require"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	"github.com/anacrolix/torrent/storage"
 )
 
 func TestPexConnState(t *testing.T) {
 	var cl Client
-	cl.init(TestingConfig(t))
+	cfg := TestingConfig(t)
+	cfg.DefaultStorage = storage.NewFileWithCompletion(cfg.DataDir, storage.NewMapPieceCompletion())
+	cl.init(cfg)
+	t.Cleanup(func() {
+		for _, f := range cl.onClose {
+			f()
+		}
+	})
 	torrent := cl.newTorrentForTesting()
 	addr := &net.TCPAddr{IP: net.IPv6loopback, Port: 4747}
 	c := cl.newConnection(nil, newConnectionOpts{

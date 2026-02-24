@@ -111,7 +111,7 @@ func (tc *TrackerClient) doWebsocket() error {
 		return fmt.Errorf("dialing tracker: %w", err)
 	}
 	defer c.Close()
-	tc.Logger.WithDefaultLevel(log.Info).Printf("connected")
+	tc.Logger.Levelf(log.Debug, "connected")
 	tc.mu.Lock()
 	tc.wsConn = c
 	tc.cond.Broadcast()
@@ -159,13 +159,12 @@ func (tc *TrackerClient) run() error {
 	for !tc.closed {
 		tc.mu.Unlock()
 		err := tc.doWebsocket()
-		level := log.Info
 		tc.mu.Lock()
 		if tc.closed {
-			level = log.Debug
+			//level = log.Debug
 		}
 		tc.mu.Unlock()
-		tc.Logger.WithDefaultLevel(level).Printf("websocket instance ended: %v", err)
+		tc.Logger.WithDefaultLevel(log.Debug).Printf("websocket instance ended: %v", err)
 		time.Sleep(time.Minute)
 		tc.mu.Lock()
 	}
@@ -309,17 +308,18 @@ func (tc *TrackerClient) announce(event tracker.AnnounceEvent, infoHash [20]byte
 	}
 
 	tc.mu.Lock()
-	defer tc.mu.Unlock()
 	err = tc.writeMessage(data)
 	if err != nil {
+		tc.mu.Unlock()
 		tc.OnAnnounceError(infohash.T(infoHash).HexString(), err)
 		return fmt.Errorf("write AnnounceRequest: %w", err)
 	}
-	tc.OnAnnounceSuccessful(infohash.T(infoHash).HexString())
 	g.MakeMapIfNil(&tc.outboundOffers)
 	for _, offer := range offers {
 		g.MapInsert(tc.outboundOffers, offer.offerId, offer.outboundOfferValue)
 	}
+	tc.mu.Unlock()
+	tc.OnAnnounceSuccessful(infohash.T(infoHash).HexString())
 	return nil
 }
 

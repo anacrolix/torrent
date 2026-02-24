@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/anacrolix/chansync/events"
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/pubsub"
 	"github.com/anacrolix/sync"
 
@@ -302,4 +303,9 @@ func (t *Torrent) WebseedPeerConns() []*Peer {
 		ret = append(ret, &c.peer)
 	}
 	return ret
+}
+
+// Was dropped from the Client.
+func (t *Torrent) isDropped() bool {
+	return !g.MapContains(t.cl.torrents, t)
 }

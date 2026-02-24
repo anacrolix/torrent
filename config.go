@@ -33,13 +33,16 @@ type ClientTrackerConfig struct {
 	TrackerDialContext func(ctx context.Context, network, addr string) (net.Conn, error)
 	// Defines ListenPacket func to use for UDP tracker announcements
 	TrackerListenPacket func(network, addr string) (net.PacketConn, error)
-	// Takes a tracker's hostname and requests DNS A and AAAA records.
-	// Used in case DNS lookups require a special setup (i.e., dns-over-https)
+	// Deprecated. Takes a tracker's hostname and requests DNS A and AAAA records. Used in case DNS lookups
+	// require a special setup (i.e., dns-over-https). TODO: Wire back into UDP tracker client
+	// implementation, or deprecate in favour of a Client DNS resolver. It was done manually before
+	// calling the Announce.Do wrapper.
 	LookupTrackerIp func(*url.URL) ([]net.IP, error)
 }
 
 type ClientDhtConfig struct {
 	// Don't create a DHT.
+	// cfg.NoDHT aka cfg.DisableDHT
 	NoDHT            bool `long:"disable-dht"`
 	DhtStartingNodes func(network string) dht.StartingNodesGetter
 	// Called for each anacrolix/dht Server created for the Client.
@@ -62,6 +65,7 @@ type ClientConfig struct {
 	// socket with uTP unless configured otherwise.
 	ListenHost              func(network string) string
 	ListenPort              int
+	// cfg.NoDefaultPortForwarding aka cfg.DisableUpnp
 	NoDefaultPortForwarding bool
 	UpnpID                  string
 	DisablePEX              bool `long:"disable-pex"`
@@ -116,8 +120,10 @@ type ClientConfig struct {
 	DisableIPv4      bool
 	DisableIPv4Peers bool
 	// Perform logging and any other behaviour that will help debug.
-	Debug   bool `help:"enable debugging"`
-	Logger  log.Logger
+	Debug bool `help:"enable debugging"`
+	// If Slogger is set, will be forwarded automatically to Slogger. This is recommended.
+	Logger log.Logger
+	// If unset, falls back to deferring to the old analog Logger.
 	Slogger *slog.Logger
 
 	// Used for torrent sources and webseeding if set.

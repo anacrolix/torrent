@@ -64,6 +64,8 @@ type Piece struct {
 	marking bool
 	// The Completion.Ok field cached from the storage layer.
 	storageCompletionOk bool
+	// Sticks on once set for the first time.
+	storageCompletionHasBeenOk bool
 }
 
 func (p *Piece) String() string {

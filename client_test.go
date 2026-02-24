@@ -83,8 +83,14 @@ func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
 	var cl Client
-	cl.init(TestingConfig(t))
-	cl.initLogger()
+	cfg := TestingConfig(t)
+	cfg.DefaultStorage = storage.NewFileWithCompletion(cfg.DataDir, storage.NewMapPieceCompletion())
+	cl.init(cfg)
+	t.Cleanup(func() {
+		for _, f := range cl.onClose {
+			f()
+		}
+	})
 	tor := cl.newTorrent(
 		mi.HashInfoBytes(),
 		storage.NewFileWithCompletion(t.TempDir(), storage.NewMapPieceCompletion()),
@@ -907,4 +913,17 @@ func TestClientConfigSetHandlerNotIgnored(t *testing.T) {
 	qt.Assert(t, qt.HasLen(cl.logger.Handlers, 1))
 	h := cl.logger.Handlers[0].(log.StreamHandler)
 	qt.Check(t, qt.Equals(h.W, io.Discard))
+}
+
+func TestDroppedTorrentsNotReturned(t *testing.T) {
+	cl := newTestingClient(t)
+	tt, _ := cl.AddTorrentOpt(testingAddTorrentOpts)
+	tt1, ok := cl.Torrent(tt.InfoHash())
+	qt.Check(t, qt.IsTrue(ok))
+	qt.Check(t, qt.Equals(tt1, tt))
+	qt.Check(t, qt.SliceContains(cl.Torrents(), tt))
+	tt.Drop()
+	tt1, ok = cl.Torrent(tt.InfoHash())
+	qt.Check(t, qt.IsFalse(ok))
+	qt.Check(t, qt.HasLen(cl.Torrents(), 0))
 }

@@ -1,7 +1,6 @@
 package requestStrategy
 
 import (
-	"iter"
 	"unique"
 
 	g "github.com/anacrolix/generics"
@@ -13,7 +12,7 @@ import (
 type Btree interface {
 	Delete(PieceRequestOrderItem)
 	Add(PieceRequestOrderItem)
-	// TODO: Add an iterator variant of this and benchmark.
+	// This is an iterator. Go can't guarantee to not allocate if you return an iterator.
 	Scan(func(PieceRequestOrderItem) bool)
 	Contains(PieceRequestOrderItem) bool
 }
@@ -92,12 +91,10 @@ func (me *PieceRequestOrder) Len() int {
 	return len(me.keys)
 }
 
-func (me *PieceRequestOrder) Iter() iter.Seq[PieceRequestOrderItem] {
-	return func(yield func(PieceRequestOrderItem) bool) {
-		me.tree.Scan(func(item PieceRequestOrderItem) bool {
-			return yield(item)
-		})
-	}
+func (me *PieceRequestOrder) Iter(yield func(PieceRequestOrderItem) bool) {
+	me.tree.Scan(func(item PieceRequestOrderItem) bool {
+		return yield(item)
+	})
 }
 
 func (me *PieceRequestOrder) Get(key PieceRequestOrderKey) (ret g.Option[PieceRequestOrderState]) {

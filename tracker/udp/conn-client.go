@@ -2,9 +2,9 @@ package udp
 
 import (
 	"context"
+	"log/slog"
 	"net"
 
-	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
 )
 
@@ -18,7 +18,7 @@ type NewConnClientOpts struct {
 	// If non-nil, forces either IPv4 or IPv6 in the UDP tracker wire protocol.
 	Ipv6 *bool
 	// Logger to use for internal errors.
-	Logger log.Logger
+	Logger *slog.Logger
 	// Custom function to use as a substitute for net.ListenPacket
 	ListenPacket listenPacketFunc
 }
@@ -49,7 +49,10 @@ func (cc *ConnClient) reader() {
 		}
 		err = cc.d.Dispatch(b[:n], addr)
 		if err != nil {
-			cc.newOpts.Logger.Levelf(log.Debug, "dispatching packet received on %v: %v", cc.conn.LocalAddr(), err)
+			cc.newOpts.Logger.Debug("error dispatching received packet",
+				"source addr", addr,
+				"err", err,
+			)
 		}
 	}
 }
@@ -90,13 +93,13 @@ func NewConnClient(opts NewConnClientOpts) (cc *ConnClient, err error) {
 	} else {
 		conn, err = net.ListenPacket(opts.Network, ":0")
 	}
-
 	if err != nil {
 		return
 	}
-	if opts.Logger.IsZero() {
-		opts.Logger = log.Default
+	if opts.Logger == nil {
+		opts.Logger = slog.Default()
 	}
+	opts.Logger.Debug("new udp tracker client packet conn", "local addr", conn.LocalAddr())
 	cc = &ConnClient{
 		Client: Client{
 			Writer: clientWriter{

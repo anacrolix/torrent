@@ -26,6 +26,7 @@ func TestShortFile(t *testing.T) {
 	}
 	ts, err := s.OpenTorrent(context.Background(), info, metainfo.Hash{})
 	qt.Assert(t, qt.IsNil(err))
+	defer ts.Close()
 	f, err := os.Create(filepath.Join(td, "a"))
 	qt.Assert(t, qt.IsNil(err))
 	err = f.Truncate(1)

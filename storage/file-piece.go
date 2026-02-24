@@ -266,7 +266,7 @@ func (me *filePieceImpl) promotePartFile(f file) (err error) {
 
 // Rename from if exists, and if so, to must not exist.
 func (me *filePieceImpl) exclRenameIfExists(from, to string) (renamed bool, err error) {
-	err = os.Rename(from, to)
+	err = me.t.io.rename(from, to)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			err = nil

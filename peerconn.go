@@ -881,6 +881,8 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		var msg pp.Message
 		func() {
 			cl.unlock()
+			// TODO: Could TryLock and pump for more messages here until we can get the lock and
+			// process them in a batch.
 			defer cl.lock()
 			err = decoder.Decode(&msg)
 			if err != nil {
@@ -895,7 +897,6 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			return nil
 		}
 		if err != nil {
-			err = log.WithLevel(log.Info, err)
 			return err
 		}
 		c.lastMessageReceived = time.Now()
@@ -1243,7 +1244,6 @@ func (c *PeerConn) setTorrent(t *Torrent) {
 	panicif.NotNil(c.t)
 	c.t = t
 	c.initClosedCtx()
-	c.logger.WithDefaultLevel(log.Debug).Printf("set torrent=%v", t)
 	c.setPeerLoggers(t.logger, t.slogger())
 	c.reconcileHandshakeStats()
 }

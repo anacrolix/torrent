@@ -59,7 +59,7 @@ func (me *webseedPeer) cancelAllRequests() {
 	// Is there any point to this? Won't we fail to receive a chunk and cancel anyway? Should we
 	// Close requests instead?
 	for req := range me.activeRequests {
-		req.Cancel("all requests cancelled")
+		req.Cancel("all requests cancelled", me.peer.t)
 	}
 }
 
@@ -158,9 +158,10 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex, logger *slog.Logger
 		}
 		ws.peer.t.cl.dumpCurrentWebseedRequests()
 	}
-	ws.activeRequests[&wsReq] = struct{}{}
 	t := ws.peer.t
 	cl := t.cl
+	ws.activeRequests[&wsReq] = struct{}{}
+	t.deferUpdateRegularTrackerAnnouncing()
 	g.MakeMapIfNil(&cl.activeWebseedRequests)
 	g.MapMustAssignNew(cl.activeWebseedRequests, ws.getRequestKey(&wsReq), &wsReq)
 	ws.peer.updateExpectingChunks()
@@ -214,6 +215,11 @@ func (ws *webseedPeer) readChunksErrorLevel(err error, req *webseedRequest) slog
 	if errors.As(err, &ne) && ne.Timeout() {
 		return slog.LevelInfo
 	}
+	if errors.Is(err, webseed.ErrStatusOkForRangeRequest{}) {
+		// This can happen for uncached results, and we get passed directly to origin. We should be
+		// coming back later and then only warning if it happens for a long time.
+		return slog.LevelDebug
+	}
 	// Error if we aren't also using and/or have peers...?
 	return slog.LevelWarn
 }
@@ -259,6 +265,9 @@ func (ws *webseedPeer) sliceProcessor(webseedRequest *webseedRequest) {
 
 func (ws *webseedPeer) deleteActiveRequest(wr *webseedRequest) {
 	g.MustDelete(ws.activeRequests, wr)
+	if len(ws.activeRequests) == 0 {
+		ws.peer.t.deferUpdateRegularTrackerAnnouncing()
+	}
 	cl := ws.peer.cl
 	cl.numWebSeedRequests[ws.hostKey]--
 	g.MustDelete(cl.activeWebseedRequests, ws.getRequestKey(wr))
@@ -327,25 +336,26 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 		if webseed.PrintDebug && wr.cancelled.Load() {
 			fmt.Printf("webseed read %v after cancellation: %v\n", n, err)
 		}
+		// We need this early for the convict call.
+		ws.peer.locker().Lock()
 		if err != nil {
 			// TODO: Pick out missing files or associate error with file. See also
 			// webseed.ReadRequestPartError.
-			var badResponse webseed.ErrBadResponse
-			if errors.As(err, &badResponse) {
-				ws.convict(badResponse, time.Minute)
+			if !wr.cancelled.Load() {
+				ws.convict(err, time.Minute)
 			}
+			ws.peer.locker().Unlock()
 			err = fmt.Errorf("reading chunk: %w", err)
 			return
 		}
 		// TODO: This happens outside Client lock, and stats can be written out of sync with each
-		// other. Why even bother with atomics?
+		// other. Why even bother with atomics? This needs to happen after the err check above.
 		ws.peer.doChunkReadStats(int64(n))
 		// TODO: Clean up the parameters for receiveChunk.
 		msg.Piece = buf
 		msg.Index = reqSpec.Index
 		msg.Begin = reqSpec.Begin
 
-		ws.peer.locker().Lock()
 		// Ensure the request is pointing to the next chunk before receiving the current one. If
 		// webseed requests are triggered, we want to ensure our existing request is up to date.
 		wr.next++
@@ -355,7 +365,7 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 			if !ws.wantedChunksInDiscardWindow(wr) {
 				// This cancels the stream, but we don't stop su--reading to make the most of the
 				// buffered body.
-				wr.Cancel("no wanted chunks in discard window")
+				wr.Cancel("no wanted chunks in discard window", ws.peer.t)
 			}
 		}
 		ws.peer.locker().Unlock()

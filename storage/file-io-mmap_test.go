@@ -30,6 +30,9 @@ func TestFileIoImplementationsSeekDataDetection(t *testing.T) {
 		t.Run(impl.name, func(t *testing.T) {
 			// Create temporary directory and file
 			tempDir := t.TempDir()
+			// Close the fileIo after TempDir is registered so this cleanup runs
+			// first (LIFO), releasing mmap handles before TempDir removal.
+			t.Cleanup(func() { impl.fileIo.Close() })
 			t.Logf("tempDir: %s", tempDir)
 			testFile := filepath.Join(tempDir, "test.dat")
 

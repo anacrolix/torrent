@@ -44,7 +44,7 @@ func NewClient(urlStr string, opts NewClientOpts) (Client, error) {
 		cc, err := udp.NewConnClient(udp.NewConnClientOpts{
 			Network:      network,
 			Host:         _url.Host,
-			Logger:       opts.Logger,
+			Logger:       opts.Logger.Slogger(),
 			ListenPacket: opts.ListenPacket,
 		})
 		if err != nil {

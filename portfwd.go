@@ -35,12 +35,6 @@ func (cl *Client) addPortMapping(d upnp.Device, proto upnp.Protocol, internalPor
 }
 
 func (cl *Client) forwardPort() {
-	cl.lock()
-	defer cl.unlock()
-	if cl.config.NoDefaultPortForwarding {
-		return
-	}
-	cl.unlock()
 	ds := upnp.Discover(0, 2*time.Second, cl.logger.WithValues(UpnpDiscoverLogTag))
 	cl.lock()
 	cl.logger.WithDefaultLevel(log.Debug).Printf("discovered %d upnp devices", len(ds))
@@ -51,7 +45,6 @@ func (cl *Client) forwardPort() {
 		go cl.addPortMapping(d, upnp.TCP, port, id)
 		go cl.addPortMapping(d, upnp.UDP, port, id)
 	}
-	cl.lock()
 }
 
 func (cl *Client) deletePortMapping(d upnp.Device, proto upnp.Protocol, externalPort int) {

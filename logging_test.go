@@ -3,11 +3,13 @@ package torrent
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"math"
 	"strings"
 	"testing"
 
+	"github.com/anacrolix/torrent/tracker"
 	"github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/tracker/shared"
@@ -117,4 +119,20 @@ func TestSlogLoggerWithSameNameCreatesDuplicateGroups(t *testing.T) {
 	qt.Assert(t, qt.Equals(testGroup["key3"], "value3"))
 	_, hasKey1 := testGroup["key1"]
 	qt.Assert(t, qt.IsFalse(hasKey1), qt.Commentf("Due to JSON duplicate key handling, only the last group should be present"))
+}
+
+func TestSlogAnnounceRequest(t *testing.T) {
+	var buf bytes.Buffer
+	h := slog.NewJSONHandler(&buf, &slog.HandlerOptions{
+		AddSource: false,
+		Level:     nil,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			fmt.Println(groups, a)
+			a.Value.Any()
+			return a
+		},
+	})
+	l := slog.New(h)
+	l.Info("test", "req", tracker.AnnounceRequest{})
+	t.Log(buf.String())
 }

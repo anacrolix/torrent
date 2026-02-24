@@ -33,10 +33,10 @@ func (me rateLimitedReader) Read(b []byte) (n int, err error) {
 	if me.l.Burst() != 0 {
 		b = b[:min(len(b), me.l.Burst())]
 	}
-	t := time.Now()
 	n, err = me.r.Read(b)
-	r := me.l.ReserveN(t, n)
+	// golang.org/x/time/rate is completely fucking busted. TODO: Write my own rate limiter.
+	r := me.l.ReserveN(time.Now(), n)
 	panicif.False(r.OK())
-	time.Sleep(r.DelayFrom(t))
+	time.Sleep(r.Delay())
 	return
 }

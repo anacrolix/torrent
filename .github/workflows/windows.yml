@@ -1,0 +1,24 @@
+name: Windows
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    timeout-minutes: 20
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        go-version: [stable, oldstable]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+      - run: go mod download
+      - name: Test packages
+        run: go test -count=1 ./...
+        env:
+          CGO_ENABLED: "0"

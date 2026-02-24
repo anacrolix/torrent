@@ -80,7 +80,7 @@ func mainErr() error {
 						numPieces := int((f.Length + info.PieceLength - 1) / info.PieceLength)
 						endIndex := pieceIndex + numPieces
 						hash := "no v2 pieces root"
-						for a := range f.PiecesRoot.Iter() {
+						for a := range f.PiecesRoot.Iter {
 							hash = a.HexString()
 						}
 						fmt.Printf(

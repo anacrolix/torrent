@@ -166,6 +166,42 @@ func (cl *Client) LocalPort() (port int) {
 	return
 }
 
+// OnLPDAnnouncement implements lpdClient. It adds addr to any torrent matching
+// an announced infohash, and also to all other active torrents (LPD is the
+// only source of local IPs).
+func (cl *Client) OnLPDAnnouncement(addr string, infohashes []string) {
+	announced := make(map[*Torrent]struct{}, len(infohashes))
+	for _, ih := range infohashes {
+		if t, ok := cl.Torrent(metainfo.NewHashFromHex(ih)); ok {
+			lpdPeer(t, addr)
+			announced[t] = struct{}{}
+		}
+	}
+	cl.rLock()
+	var rest []*Torrent
+	for t := range cl.torrents {
+		if _, ok := announced[t]; !ok {
+			rest = append(rest, t)
+		}
+	}
+	cl.rUnlock()
+	for _, t := range rest {
+		lpdPeer(t, addr)
+	}
+}
+
+// TorrentInfohashesAndPort implements lpdClient. It returns a snapshot of
+// active torrent infohash hex strings and the listen port.
+func (cl *Client) TorrentInfohashesAndPort() (port int, infohashes []string) {
+	cl.rLock()
+	defer cl.rUnlock()
+	port = cl.LocalPort()
+	for t := range cl.torrents {
+		infohashes = append(infohashes, t.InfoHash().HexString())
+	}
+	return
+}
+
 // Writes out a human-readable status of the client, such as for writing to an HTTP status page.
 func (cl *Client) WriteStatus(_w io.Writer) {
 	cl.rLock()
@@ -428,7 +464,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 
 	if cfg.EnableLocalServiceDiscovery {
 		cl.lpd = &LPDServer{}
-		cl.lpd.lpdStart(cl)
+		cl.lpd.lpdStart(cl, cfg.LocalServiceDiscoveryConfig)
 		cl.onClose = append(cl.onClose, cl.lpd.lpdStop)
 	}
 

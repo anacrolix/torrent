@@ -78,7 +78,7 @@ func TestDiscovery(t *testing.T) {
 // TestLPDPeerDeduplication verifies that adding the same peer address twice
 // results in only one entry in the peers map.
 func TestLPDPeerDeduplication(t *testing.T) {
-	lpd := &LPDServer{peers: make(map[int64]string)}
+	lpd := &LPDServer{peers: make(map[string]time.Time)}
 	lpd.peer("1.2.3.4:6881")
 	lpd.peer("1.2.3.4:6881")
 	require.Len(t, lpd.peers, 1)
@@ -87,11 +87,10 @@ func TestLPDPeerDeduplication(t *testing.T) {
 // TestLPDPeerExpiry verifies that stale peers are removed after
 // 2 * bep14LongTimeout without activity, and that fresh peers survive.
 func TestLPDPeerExpiry(t *testing.T) {
-	lpd := &LPDServer{peers: make(map[int64]string)}
+	lpd := &LPDServer{peers: make(map[string]time.Time)}
 
 	// Inject a stale entry directly into the map.
-	staleKey := time.Now().Add(-3 * bep14LongTimeout).UnixNano()
-	lpd.peers[staleKey] = "1.2.3.4:6881"
+	lpd.peers["1.2.3.4:6881"] = time.Now().Add(-3 * bep14LongTimeout)
 	lpd.refresh()
 	require.Empty(t, lpd.peers, "stale peer should be removed after refresh")
 

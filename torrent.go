@@ -397,6 +397,10 @@ func (t *Torrent) addPeer(p PeerInfo) (added bool) {
 			torrent.Add("excess reserve peers discarded", 1)
 		}
 	}
+	log.Println("added", "added", added)
+	if (added) {
+		cl.event.Broadcast()
+	}
 	return
 }
 

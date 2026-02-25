@@ -144,6 +144,7 @@ func mainErr(ctx context.Context) error {
 		}},
 		bargle.Subcommand{Name: "serve", Command: serve()},
 		bargle.Subcommand{Name: "create", Command: create()},
+		bargle.Subcommand{Name: "lpd", Command: lpdCmd()},
 	)
 	// Well this sux, this old version of bargle doesn't return so we can let the gostdapp Context
 	// clean up.

@@ -2784,6 +2784,9 @@ func (t *Torrent) startSinglePieceHasher() bool {
 func (t *Torrent) pieceHasher(initial pieceIndex) {
 	t.finishHash(initial)
 	for {
+		if t.closed.IsSet() {
+			break
+		}
 		piOpt := t.getPieceToHash()
 		if !piOpt.Ok {
 			break

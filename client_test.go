@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"math/rand"
+	rand "math/rand/v2"
 	"net"
 	"net/netip"
 	"os"
@@ -161,7 +161,7 @@ func TestMergingTrackersByAddingSpecs(t *testing.T) {
 	require.NoError(t, err)
 	defer cl.Close()
 	spec := TorrentSpec{}
-	rand.Read(spec.InfoHash[:])
+	rand.NewChaCha8([32]byte{}).Read(spec.InfoHash[:])
 	T, new, _ := cl.AddTorrentSpec(&spec)
 	if !new {
 		t.FailNow()

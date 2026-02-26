@@ -915,7 +915,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			}
 			if !c.fastEnabled() {
 				c.deleteAllRequests("choked by non-fast PeerConn")
-			} else {
+			} else { //nolint:staticcheck // SA9003: intentionally empty, see comment below
 				// We don't decrement pending requests here, let's wait for the peer to either
 				// reject or satisfy the outstanding requests. Additionally, some peers may unchoke
 				// us and resume where they left off, we don't want to have piled on to those chunks

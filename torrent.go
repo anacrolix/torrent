@@ -948,7 +948,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 			func(l, r torrentTrackerAnnouncer) int {
 				lu := l.URL()
 				ru := r.URL()
-				var luns, runs url.URL = *lu, *ru
+				var luns, runs = *lu, *ru
 				luns.Scheme = ""
 				runs.Scheme = ""
 				var ml multiless.Computation

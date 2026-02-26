@@ -6,5 +6,5 @@ import (
 )
 
 func TestUnknownErrCodeError(t *testing.T) {
-	ErrCode(rand.Uint32()).Error()
+	_ = ErrCode(rand.Uint32()).Error()
 }

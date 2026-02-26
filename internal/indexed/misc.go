@@ -60,6 +60,7 @@ func NewFullMappedIndex[F, T comparable](
 	return index
 }
 
+//nolint:unused // false positive with generics: implements tableInterface, called via interface
 func (me *table[R]) addIndex(_ genericRelation, trigger triggerFunc[R]) {
 	me.indexTriggers = append(me.indexTriggers, trigger)
 }

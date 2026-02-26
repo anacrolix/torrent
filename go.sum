@@ -87,6 +87,8 @@ github.com/anacrolix/fuse v0.3.2/go.mod h1:vN3X/6E+uHNjg5F8Oy9FD9I+pYxeDWeB8mNjI
 github.com/anacrolix/generics v0.0.0-20230113004304-d6428d516633/go.mod h1:ff2rHB/joTV03aMSSn/AZNnaIpUw0h3njetGsaXcMy8=
 github.com/anacrolix/generics v0.1.1-0.20251125230353-15d98d46693b h1:Kuvx/A/TTJuT9x8mn7DeGx2KW9tWn1LI8bira67xdT0=
 github.com/anacrolix/generics v0.1.1-0.20251125230353-15d98d46693b/go.mod h1:NGehhfeXJPBujPx0s6cstSj8B+TERsTY32Xckfx5ftc=
+github.com/anacrolix/generics v0.2.0 h1:gPwGOs14irokFN9kUP1i1A0Bn0FPT7/hWWD3hHKSKNw=
+github.com/anacrolix/generics v0.2.0/go.mod h1:NGehhfeXJPBujPx0s6cstSj8B+TERsTY32Xckfx5ftc=
 github.com/anacrolix/go-libutp v1.3.2 h1:WswiaxTIogchbkzNgGHuHRfbrYLpv4o290mlvcx+++M=
 github.com/anacrolix/go-libutp v1.3.2/go.mod h1:fCUiEnXJSe3jsPG554A200Qv+45ZzIIyGEvE56SHmyA=
 github.com/anacrolix/gostdapp v0.2.1-0.20251125125325-fbac3f25c013 h1:fdjruiqT1gnhzeX9kzumnGaluIlRDq6dZXZDaUUiK1k=

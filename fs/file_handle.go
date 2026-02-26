@@ -80,9 +80,9 @@ func (me fileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse
 	case <-readDone:
 		return readErr
 	case <-me.fn.FS.destroyed:
-		return fuse.EIO
+		return fuse.EIO //nolint:staticcheck // fuse error type
 	case <-ctx.Done():
-		return fuse.EINTR
+		return fuse.EINTR //nolint:staticcheck // fuse error type
 	}
 }
 

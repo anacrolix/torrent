@@ -264,7 +264,14 @@ func assertPexMsgsEqual(t *testing.T, expected, actual pp.PexMsg) {
 func TestPexGenmsg0(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := *tc.in
+			// Copy via clone-like construction to avoid copying the embedded sync.RWMutex.
+			s := pexState{
+				tail: tc.in.tail,
+				hold: tc.in.hold,
+				rest: tc.in.rest,
+				nc:   tc.in.nc,
+				msg0: tc.in.msg0,
+			}
 			m, last := s.Genmsg(nil)
 			assertPexMsgsEqual(t, tc.targ, m)
 			if tc.update != nil {

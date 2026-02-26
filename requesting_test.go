@@ -68,7 +68,7 @@ func TestForLoopRepeatItem(t *testing.T) {
 			if !once && i == 2 {
 				once = true
 				// Can we actually modify the next value of i produced by the range?
-				i--
+				i-- //nolint:ineffassign // intentional: testing that range ignores mutation
 				continue
 			}
 		}

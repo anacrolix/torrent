@@ -180,7 +180,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	go func() {
 		// Wait until we get the metainfo, then check for the data.
 		<-seederTorrent.GotInfo()
-		seederTorrent.VerifyData()
+		seederTorrent.VerifyDataContext(context.TODO())
 	}()
 	cfg = torrent.NewDefaultClientConfig()
 	cfg.DisableTrackers = true

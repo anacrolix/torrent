@@ -203,7 +203,7 @@ func (cl *Client) updateWebseedRequests() {
 	}
 
 	printPlan := sync.OnceFunc(func() {
-		if webseed.PrintDebug {
+		if webseed.PrintDebug { //nolint:staticcheck // SA9003: intentionally empty, debug code
 			//fmt.Println(plan)
 			//fmt.Println(formatMap(existingRequests))
 		}

@@ -109,13 +109,15 @@ func (s *pexConnState) updateRemoteLiveConns(rx pp.PexMsg) (errs []error) {
 		addr := netip.AddrFrom4(*(*[4]byte)(added.IP.To4()))
 		addrPort := netip.AddrPortFrom(addr, uint16(added.Port))
 		flags := g.SliceGet(rx.AddedFlags, i)
-		g.MakeMapIfNilAndSet(&s.remoteLiveConns, addrPort, flags)
+		g.MakeMapIfNil(&s.remoteLiveConns)
+		g.MapInsert(s.remoteLiveConns, addrPort, flags)
 	}
 	for i, added := range rx.Added6 {
 		addr := netip.AddrFrom16(*(*[16]byte)(added.IP.To16()))
 		addrPort := netip.AddrPortFrom(addr, uint16(added.Port))
 		flags := g.SliceGet(rx.Added6Flags, i)
-		g.MakeMapIfNilAndSet(&s.remoteLiveConns, addrPort, flags)
+		g.MakeMapIfNil(&s.remoteLiveConns)
+		g.MapInsert(s.remoteLiveConns, addrPort, flags)
 	}
 	return
 }

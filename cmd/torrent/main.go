@@ -15,7 +15,7 @@ import (
 	"github.com/anacrolix/envpprof"
 	app "github.com/anacrolix/gostdapp"
 	"github.com/anacrolix/log"
-	xprometheus "github.com/anacrolix/missinggo/v2/prometheus"
+	expvar_prometheus "github.com/anacrolix/missinggo/v2/expvar-prometheus"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/prometheus/client_golang/prometheus"
@@ -27,10 +27,10 @@ import (
 
 func init() {
 	stdLog.SetFlags(stdLog.Flags() | stdLog.Lshortfile)
-	prometheus.MustRegister(xprometheus.NewExpvarCollector())
+	prometheus.MustRegister(expvar_prometheus.NewCollector())
 	http.Handle("/metrics", promhttp.Handler())
 	log.Default = log.NewLogger().WithDefaultLevel(log.Info)
-	log.Default.SetHandlers(log.SlogHandlerAsHandler{slog.Default().Handler()})
+	log.Default.SetHandlers(log.SlogHandlerAsHandler{SlogHandler: slog.Default().Handler()})
 }
 
 func main() {

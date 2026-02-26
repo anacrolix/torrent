@@ -54,10 +54,6 @@ func (cl *Client) getRequestStrategyInputCommon() requestStrategyInputCommon {
 	return requestStrategyInputCommon{cl.config.MaxUnverifiedBytes}
 }
 
-func (t *Torrent) getRequestStrategyInput() requestStrategy.Input {
-	return t.clientPieceRequestOrderKey().getRequestStrategyInput(t.cl)
-}
-
 // Wraps a Torrent to provide request-strategy.Torrent interface.
 type requestStrategyTorrent struct {
 	t *Torrent

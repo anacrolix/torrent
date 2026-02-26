@@ -13,7 +13,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/chansync"
-	. "github.com/anacrolix/generics"
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/panicif"
@@ -60,7 +60,7 @@ type (
 		// The local address as observed by the remote peer. WebRTC seems to get this right without needing hints from the
 		// config.
 		localPublicAddr peerLocalPublicAddr
-		bannableAddr    Option[bannableAddr]
+		bannableAddr    g.Option[bannableAddr]
 		// True if the connection is operating over MSE obfuscation.
 		headerEncrypted bool
 		cryptoMethod    mse.CryptoMethod

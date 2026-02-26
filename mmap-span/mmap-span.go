@@ -76,7 +76,7 @@ func (ms *MMapSpan) locateCopy(
 	p []byte,
 	off int64,
 ) (n int) {
-	for i, e := range ms.segmentLocater.LocateIter(segments.Extent{off, int64(len(p))}) {
+	for i, e := range ms.segmentLocater.LocateIter(segments.Extent{Start: off, Length: int64(len(p))}) {
 		mMapBytes := ms.mMaps[i].Bytes()[e.Start:]
 		// log.Printf("got segment %v: %v, copying %v, %v", i, e, len(p), len(mMapBytes))
 		_n := copyBytes(copyArgs(p, mMapBytes))

@@ -8,5 +8,5 @@ import (
 )
 
 func TestBoltLeecherStorage(t *testing.T) {
-	test.TestLeecherStorage(t, test.LeecherStorageTestCase{"Boltdb", storage.NewBoltDB, 0})
+	test.TestLeecherStorage(t, test.LeecherStorageTestCase{Name: "Boltdb", Factory: storage.NewBoltDB, GoMaxProcs: 0})
 }

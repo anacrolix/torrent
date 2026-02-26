@@ -16,7 +16,6 @@ import (
 	"github.com/anacrolix/torrent/merkle"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
-	"github.com/anacrolix/torrent/segments"
 	"github.com/anacrolix/torrent/storage"
 )
 
@@ -166,7 +165,6 @@ func (p *Piece) iterCleanChunks(it *roaring.IntIterator) iter.Seq[chunkIndexType
 				}
 			}
 		}
-		return
 	}
 }
 
@@ -442,14 +440,6 @@ func (p *Piece) numFiles() int {
 	return p.endFile - p.beginFile
 }
 
-func (p *Piece) hasActivePeerConnRequests() (ret bool) {
-	for ri := p.requestIndexBegin(); ri < p.requestIndexMaxEnd(); ri++ {
-		_, ok := p.t.requestState[ri]
-		ret = ret || ok
-	}
-	return
-}
-
 // The value of numVerifies after the next hashing operation that hasn't yet begun.
 func (p *Piece) nextNovelHashCount() (ret pieceVerifyCount) {
 	ret = p.numVerifies + 1
@@ -473,9 +463,3 @@ func (p *Piece) publishStateChange() {
 	}
 }
 
-func (p *Piece) fileExtents(offsetIntoPiece int64) iter.Seq2[int, segments.Extent] {
-	return p.t.fileSegmentsIndex.Unwrap().LocateIter(segments.Extent{
-		p.torrentBeginOffset() + offsetIntoPiece,
-		int64(p.length()) - offsetIntoPiece,
-	})
-}

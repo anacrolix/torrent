@@ -15,8 +15,6 @@ import (
 	"github.com/anacrolix/torrent/tracker/shared"
 )
 
-type testHandler struct{}
-
 func TestLazyLogValuer(t *testing.T) {
 	// This is a test to ensure that the lazyLogValuer type implements the slog.LogValuer interface.
 	// The test is intentionally left empty because the implementation is already verified by the

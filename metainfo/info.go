@@ -221,7 +221,7 @@ func (info *Info) FilesArePieceAligned() bool {
 func (info *Info) FileSegmentsIndex() segments.Index {
 	return segments.NewIndexFromSegments(slices.Collect(func(yield func(segments.Extent) bool) {
 		for fi := range info.UpvertedFilesIter() {
-			yield(segments.Extent{fi.TorrentOffset, fi.Length})
+			yield(segments.Extent{Start: fi.TorrentOffset, Length: fi.Length})
 		}
 	}))
 }

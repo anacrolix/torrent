@@ -30,8 +30,8 @@ var defaultPathEscapeTestCases = []struct {
 	{"he//o#world/world", []string{"he//o#world", "world"}},
 	{`ノ┬─┬ノ ︵ ( \o°o)\`, []string{`ノ┬─┬ノ ︵ ( \o°o)\`}},
 	{
-		`%aa + %bb/Parsi Tv - سرقت و باز کردن در ماشین در کم‌تر از ۳ ثانیه + فیلم.webm`,
-		[]string{`%aa + %bb`, `Parsi Tv - سرقت و باز کردن در ماشین در کم‌تر از ۳ ثانیه + فیلم.webm`},
+		"%aa + %bb/Parsi Tv - سرقت و باز کردن در ماشین در کم\u200cتر از ۳ ثانیه + فیلم.webm",
+		[]string{"%aa + %bb", "Parsi Tv - سرقت و باز کردن در ماشین در کم\u200cتر از ۳ ثانیه + فیلم.webm"},
 	},
 }
 

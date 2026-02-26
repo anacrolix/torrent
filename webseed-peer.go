@@ -25,9 +25,8 @@ import (
 
 type webseedPeer struct {
 	// First field for stats alignment.
-	peer           Peer
-	logger         *slog.Logger
-	client         webseed.Client
+	peer   Peer
+	client webseed.Client
 	activeRequests map[*webseedRequest]struct{}
 	locker         sync.Locker
 	hostKey        webseedHostKeyHandle
@@ -129,15 +128,11 @@ func (ws *webseedPeer) onGotInfo(info *metainfo.Info) {
 // Webseeds check the next request is wanted before reading it.
 func (ws *webseedPeer) handleCancel(RequestIndex) {}
 
-func (ws *webseedPeer) requestIndexTorrentOffset(r RequestIndex) int64 {
-	return ws.peer.t.requestIndexBegin(r)
-}
-
 func (ws *webseedPeer) intoSpec(begin, end RequestIndex) webseed.RequestSpec {
 	t := ws.peer.t
 	start := t.requestIndexBegin(begin)
 	endOff := t.requestIndexEnd(end - 1)
-	return webseed.RequestSpec{start, endOff - start}
+	return webseed.RequestSpec{Start: start, Length: endOff - start}
 }
 
 func (ws *webseedPeer) spawnRequest(begin, end RequestIndex, logger *slog.Logger) {

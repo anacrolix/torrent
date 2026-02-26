@@ -23,10 +23,10 @@ import (
 func TestSqliteStorageClosed(t *testing.T) {
 	cfg := torrent.TestingConfig(t)
 	storage, err := sqliteStorage.NewDirectStorage(sqliteStorage.NewDirectStorageOpts{})
+	qt.Assert(t, qt.IsNil(err))
 	defer storage.Close()
 	cfg.DefaultStorage = storage
 	cfg.Debug = true
-	qt.Assert(t, qt.IsNil(err))
 	cl, err := torrent.NewClient(cfg)
 	qt.Assert(t, qt.IsNil(err))
 	defer cl.Close()

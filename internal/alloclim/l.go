@@ -42,10 +42,7 @@ func (me *Limiter) Reserve(n int64) *Reservation {
 }
 
 func (me *Limiter) doWakesLocked() {
-	for {
-		if len(me.waiting) == 0 {
-			break
-		}
+	for len(me.waiting) > 0 {
 		r := me.waiting[0]
 		switch {
 		case r.cancelled.IsSet():

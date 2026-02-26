@@ -103,9 +103,8 @@ func TestStreamSintelMagnet(t *testing.T) {
 		return
 	})
 	<-conn.Ready
-	err = conn.MountError
-	if err != nil {
-		err = fmt.Errorf("conn mount error: %w", err)
+	if mountErr := conn.MountError; mountErr != nil {
+		t.Fatalf("conn mount error: %v", mountErr)
 	}
 
 	go func() {

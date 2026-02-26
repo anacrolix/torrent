@@ -36,7 +36,7 @@ func BenchmarkPieceMarkComplete(
 	}
 	ti, err := ci.OpenTorrent(context.Background(), info, metainfo.Hash{})
 	qt.Assert(b, qt.IsNil(err))
-	tw := storage.Torrent{ti}
+	tw := storage.Torrent{TorrentImpl: ti}
 	defer tw.Close()
 	rand.Read(info.Pieces)
 	data := make([]byte, pieceSize)

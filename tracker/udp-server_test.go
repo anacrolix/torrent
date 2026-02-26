@@ -75,10 +75,10 @@ func (s *server) serveOne() (err error) {
 		}
 		connId := s.newConn()
 		err = s.respond(addr, udp.ResponseHeader{
-			udp.ActionConnect,
-			h.TransactionId,
+			Action:        udp.ActionConnect,
+			TransactionId: h.TransactionId,
 		}, udp.ConnectionResponse{
-			connId,
+			ConnectionId: connId,
 		})
 		return
 	case udp.ActionAnnounce:

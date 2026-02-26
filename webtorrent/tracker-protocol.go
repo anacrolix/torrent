@@ -66,7 +66,7 @@ func decodeJsonByteString(s string, b []byte) ([]byte, error) {
 		}
 		panic(fmt.Sprintf("%q", s))
 	}()
-	for _, c := range []rune(s) {
+	for _, c := range s {
 		if c < 0 || c > math.MaxUint8 {
 			return b, fmt.Errorf("rune out of bounds: %v", c)
 		}

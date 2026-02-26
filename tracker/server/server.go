@@ -180,7 +180,8 @@ func (me *AnnounceHandler) Serve(
 		op.Value, op.Ok = me.ongoingUpstreamAugmentations[infoHash]
 		if !op.Ok {
 			op.Set(me.augmentPeersFromUpstream(req.InfoHash))
-			generics.MakeMapIfNilAndSet(&me.ongoingUpstreamAugmentations, infoHash, op.Value)
+			generics.MakeMapIfNil(&me.ongoingUpstreamAugmentations)
+			generics.MapInsert(me.ongoingUpstreamAugmentations, infoHash, op.Value)
 		}
 	}
 	me.mu.Unlock()

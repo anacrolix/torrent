@@ -219,10 +219,11 @@ func (cl *Client) request(
 	}()
 	select {
 	case dr := <-respChan:
-		if dr.Header.Action == action {
+		switch dr.Header.Action {
+		case action:
 			respBody = dr.Body
 			addr = dr.Addr
-		} else if dr.Header.Action == ActionError {
+		case ActionError:
 			// udp://tracker.torrent.eu.org:451/announce frequently returns "Connection ID
 			// missmatch.\x00"
 			stringBody := string(dr.Body)
@@ -233,7 +234,7 @@ func (cl *Client) request(
 			// Force a reconnection. Probably any error is worth doing this for, but the one we're
 			// specifically interested in is ConnectionIdMissmatchNul.
 			cl.connIdIssued = time.Time{}
-		} else {
+		default:
 			err = fmt.Errorf("unexpected response action %v", dr.Header.Action)
 		}
 	case err = <-writeErr:

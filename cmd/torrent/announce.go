@@ -8,13 +8,14 @@ import (
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/tracker/udp"
+	"github.com/anacrolix/torrent/types/infohash"
 )
 
 type AnnounceCmd struct {
 	Event    udp.AnnounceEvent
 	Port     *uint16
-	Tracker  string           `arg:"positional"`
-	InfoHash torrent.InfoHash `arg:"positional"`
+	Tracker  string     `arg:"positional"`
+	InfoHash infohash.T `arg:"positional"`
 }
 
 func announceErr(flags AnnounceCmd) error {

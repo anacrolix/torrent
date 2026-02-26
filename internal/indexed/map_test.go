@@ -9,19 +9,12 @@ import (
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/torrent/internal/extracmp"
 	"github.com/go-quicktest/qt"
-	"golang.org/x/exp/constraints"
 )
 
 type overdueRecord struct {
 	active  bool
 	overdue bool
 	when    time.Time
-}
-
-type overdueRecordPrimaryKey int
-
-func (me overdueRecordPrimaryKey) Compare(other overdueRecordPrimaryKey) int {
-	return cmp.Compare(me, other)
 }
 
 func overdueRecordIndexCompare(l, r overdueRecord) int {
@@ -81,14 +74,6 @@ func TestOverdue(t *testing.T) {
 		})
 	}
 	qt.Assert(t, qt.CmpEquals([]int{0, 5, 6, 1, 3, 2, 4, 7}, slices.Collect(MapPairIterRight(idx.Iter))))
-}
-
-type orderedPrimaryKey[T constraints.Ordered] struct {
-	inner T
-}
-
-func (me orderedPrimaryKey[T]) Compare(other orderedPrimaryKey[T]) int {
-	return cmp.Compare(me.inner, other.inner)
 }
 
 func TestEnsureAndUpdate(t *testing.T) {

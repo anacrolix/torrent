@@ -89,6 +89,10 @@ func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceO
 	_url := httptoo.CopyURL(cl.url_)
 	setAnnounceParams(_url, &ar, opt)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, _url.String(), nil)
+	if err != nil {
+		err = fmt.Errorf("creating HTTP request: %w", err)
+		return
+	}
 	userAgent := opt.UserAgent
 	if userAgent == "" {
 		userAgent = version.DefaultHttpUserAgent

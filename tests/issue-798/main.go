@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	app "github.com/anacrolix/gostdapp"
@@ -9,10 +10,10 @@ import (
 )
 
 func main() {
-	app.Run(mainErr)
+	app.RunContext(mainErr)
 }
 
-func mainErr() error {
+func mainErr(ctx context.Context) error {
 	config := torrent.NewDefaultClientConfig()
 	config.DataDir = "./output"
 	config.ListenPort = 0

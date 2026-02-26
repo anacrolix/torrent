@@ -134,6 +134,7 @@ func (tc *TrackerClient) newOffer(
 	if err != nil {
 		err = fmt.Errorf("creating data channel: %w", err)
 		peerConnection.Close()
+		return
 	}
 	initDataChannel(dataChannel, peerConnection, func(dc DataChannelConn, dcCtx context.Context, dcSpan trace.Span) {
 		metrics.Add("outbound offers answered with datachannel", 1)

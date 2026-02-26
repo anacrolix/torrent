@@ -53,19 +53,10 @@ func (me *PeerUploadOrder) Install(cbs *torrent.Callbacks) {
 	cbs.DeletedRequest = append(cbs.DeletedRequest, me.deletedRequest)
 }
 
-func (me *PeerUploadOrder) report(desc string, req torrent.Request, peer *torrent.Peer) {
-	peerConn, ok := peer.TryAsPeerConn()
-	var peerId *torrent.PeerID
-	if ok {
-		peerId = &peerConn.PeerID
-	}
-	log.Printf("%s: %v, %v", desc, req, peerId)
-}
-
 func (me *PeerUploadOrder) onReceivedRequested(event torrent.PeerMessageEvent) {
 	req := torrent.Request{
-		event.Message.Index,
-		torrent.ChunkSpec{
+		Index: event.Message.Index,
+		ChunkSpec: torrent.ChunkSpec{
 			Begin:  event.Message.Begin,
 			Length: pp.Integer(len(event.Message.Piece)),
 		},

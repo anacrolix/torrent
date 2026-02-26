@@ -83,7 +83,8 @@ func fileBytesLeft(
 	noCompletedMiddlePieces.Iterate(func(pieceIndex uint32) bool {
 		i := int(pieceIndex)
 		pieceSizeCompleted := pieceSizeCompletedFn(i)
-		if i == fileFirstPieceIndex {
+		switch i {
+		case fileFirstPieceIndex:
 			beginOffset := fileTorrentOffset % torrentUsualPieceSize
 			beginSize := torrentUsualPieceSize - beginOffset
 			beginDownLoaded := pieceSizeCompleted - beginOffset
@@ -91,7 +92,7 @@ func fileBytesLeft(
 				beginDownLoaded = 0
 			}
 			left += beginSize - beginDownLoaded
-		} else if i == fileEndPieceIndex-1 {
+		case fileEndPieceIndex - 1:
 			endSize := (fileTorrentOffset + fileLength) % torrentUsualPieceSize
 			if endSize == 0 {
 				endSize = torrentUsualPieceSize
@@ -101,7 +102,7 @@ func fileBytesLeft(
 				endDownloaded = endSize
 			}
 			left += endSize - endDownloaded
-		} else {
+		default:
 			left += torrentUsualPieceSize - pieceSizeCompleted
 		}
 		return true

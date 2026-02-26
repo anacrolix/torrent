@@ -133,7 +133,8 @@ func TestAnnounceRandomInfoHashThirdParty(t *testing.T) {
 			if resp.Leechers != 0 || resp.Seeders != 0 || len(resp.Peers) != 0 {
 				// The info hash we generated was random in 2^160 space. If we
 				// get a hit, something is weird.
-				t.Fatal(resp)
+				t.Error(resp)
+				return
 			}
 			t.Logf("announced to %s", url)
 			cancel()
@@ -173,7 +174,7 @@ func TestURLPathOption(t *testing.T) {
 		Action:        udp.ActionConnect,
 		TransactionId: h.TransactionId,
 	})
-	udp.Write(w, udp.ConnectionResponse{42})
+	udp.Write(w, udp.ConnectionResponse{ConnectionId: 42})
 	conn.WriteTo(w.Bytes(), addr)
 	n, _, _ := conn.ReadFrom(b[:])
 	r = bytes.NewReader(b[:n])

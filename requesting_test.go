@@ -20,7 +20,7 @@ func makeTypicalRequests() map[Request]struct{} {
 	m := make(map[Request]struct{})
 	for p := pp.Integer(0); p < 4; p++ {
 		for c := pp.Integer(0); c < 16; c++ {
-			m[Request{p, ChunkSpec{c * defaultChunkSize, defaultChunkSize}}] = struct{}{}
+			m[Request{Index: p, ChunkSpec: ChunkSpec{Begin: c * defaultChunkSize, Length: defaultChunkSize}}] = struct{}{}
 		}
 	}
 	return m
@@ -68,7 +68,7 @@ func TestForLoopRepeatItem(t *testing.T) {
 			if !once && i == 2 {
 				once = true
 				// Can we actually modify the next value of i produced by the range?
-				i--
+				i-- //nolint:ineffassign // intentional: testing that range ignores mutation
 				continue
 			}
 		}

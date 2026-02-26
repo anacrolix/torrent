@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"io"
 	"os"
 	"sync"
@@ -152,7 +153,7 @@ func testSeedAfterDownloading(t *testing.T, disableUtp bool) {
 	seederTorrent, ok, err := seeder.AddTorrentSpec(torrent.TorrentSpecFromMetaInfo(mi))
 	require.NoError(t, err)
 	assert.True(t, ok)
-	seederTorrent.VerifyData()
+	seederTorrent.VerifyDataContext(context.TODO())
 
 	cfg = torrent.TestingConfig(t)
 	cfg.Seed = true
@@ -202,7 +203,7 @@ func testSeedAfterDownloading(t *testing.T, disableUtp bool) {
 	{
 		// Prioritize a region, and ensure it's been hashed, so we want connections.
 		r := llg.NewReader()
-		llg.VerifyData()
+		llg.VerifyDataContext(context.TODO())
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

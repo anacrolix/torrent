@@ -67,8 +67,12 @@ func main() {
 	// Wait for the torrent to be ready
 	<-tor.GotInfo()
 
-	hash := tor.InfoHash()
-	fmt.Printf("%v\n", tor.Metainfo().Magnet(&hash, tor.Info()))
+	mi2 := tor.Metainfo()
+	m, err := mi2.MagnetV2()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("%v\n", m)
 
 	// Announce the torrent to DHT
 	for _, _ds := range cl.DhtServers() {

@@ -458,7 +458,7 @@ func (d *Decoder) parseDict(v reflect.Value) error {
 		ok, err = d.parseValue(setValue)
 		if err != nil {
 			var target *UnmarshalTypeError
-			if !(errors.As(err, &target) && df.Tags.IgnoreUnmarshalTypeError()) {
+			if !errors.As(err, &target) || !df.Tags.IgnoreUnmarshalTypeError() {
 				return fmt.Errorf("parsing value for key %q: %w", keyValue, err)
 			}
 		}

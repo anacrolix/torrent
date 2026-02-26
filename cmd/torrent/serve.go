@@ -77,7 +77,12 @@ func serve() (cmd bargle.Command) {
 				"udp://tracker.opentrackr.org:1337/announce",
 				"udp://tracker.openbittorrent.com:6969/announce",
 			}})
-			fmt.Printf("%v: %v\n", to, to.Metainfo().Magnet(&ih, &info))
+			toMi := to.Metainfo()
+			m, err := toMi.MagnetV2()
+			if err != nil {
+				return fmt.Errorf("creating magnet for %v: %w", to, err)
+			}
+			fmt.Printf("%v: %v\n", to, m)
 		}
 		select {}
 	}

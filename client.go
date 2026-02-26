@@ -26,7 +26,6 @@ import (
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
-	. "github.com/anacrolix/generics"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/log"
@@ -46,7 +45,6 @@ import (
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/check"
-	"github.com/anacrolix/torrent/internal/limiter"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
@@ -110,7 +108,6 @@ type Client struct {
 
 	numWebSeedRequests map[webseedHostKeyHandle]int
 
-	activeAnnounceLimiter limiter.Instance
 	// TODO: Move this onto ClientConfig.
 	httpClient *http.Client
 
@@ -564,11 +561,6 @@ func (cl *Client) ipBlockRange(ip net.IP) (r iplist.Range, blocked bool) {
 	return cl.ipBlockList.Lookup(ip)
 }
 
-func (cl *Client) ipIsBlocked(ip net.IP) bool {
-	_, blocked := cl.ipBlockRange(ip)
-	return blocked
-}
-
 func (cl *Client) wantConns() bool {
 	if cl.config.AlwaysWantConns {
 		return true
@@ -868,7 +860,8 @@ func (cl *Client) dialAndCompleteHandshake(opts outgoingConnOpts) (c *PeerConn, 
 		if holepunchAddrErr == nil {
 			cl.lock()
 			if !opts.receivedHolepunchConnect {
-				g.MakeMapIfNilAndSet(&cl.undialableWithoutHolepunch, holepunchAddr, struct{}{})
+				g.MakeMapIfNil(&cl.undialableWithoutHolepunch)
+				g.MapInsert(cl.undialableWithoutHolepunch, holepunchAddr, struct{}{})
 			}
 			if !opts.skipHolepunchRendezvous {
 				opts.t.trySendHolepunchRendezvous(holepunchAddr)
@@ -881,7 +874,8 @@ func (cl *Client) dialAndCompleteHandshake(opts outgoingConnOpts) (c *PeerConn, 
 	if opts.receivedHolepunchConnect && holepunchAddrErr == nil {
 		cl.lock()
 		if g.MapContains(cl.undialableWithoutHolepunch, holepunchAddr) {
-			g.MakeMapIfNilAndSet(&cl.dialableOnlyAfterHolepunch, holepunchAddr, struct{}{})
+			g.MakeMapIfNil(&cl.dialableOnlyAfterHolepunch)
+			g.MapInsert(cl.dialableOnlyAfterHolepunch, holepunchAddr, struct{}{})
 		}
 		g.MakeMapIfNil(&cl.dialedSuccessfullyAfterHolepunchConnect)
 		g.MapInsert(cl.dialedSuccessfullyAfterHolepunchConnect, holepunchAddr, struct{}{})
@@ -1763,7 +1757,7 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 	if opts.remoteAddr != nil {
 		netipAddrPort, err := netip.ParseAddrPort(opts.remoteAddr.String())
 		if err == nil {
-			c.bannableAddr = Some(netipAddrPort.Addr())
+			c.bannableAddr = g.Some(netipAddrPort.Addr())
 		}
 	}
 	c.legacyPeerImpl = c

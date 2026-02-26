@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -207,7 +208,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	if !canComplete {
 		// Reading from a cache doesn't refresh older pieces until we fail to read those, so we need
 		// to force a refresh since we just read the contents from start to finish.
-		go leecherTorrent.VerifyData()
+		go leecherTorrent.VerifyDataContext(context.TODO())
 	}
 	if canComplete {
 		<-leecherTorrent.Complete().On()

@@ -7,7 +7,8 @@ import (
 )
 
 func setAdd[K comparable](m *map[K]struct{}, elem K) {
-	g.MakeMapIfNilAndSet(m, elem, struct{}{})
+	g.MakeMapIfNil(m)
+	g.MapInsert(*m, elem, struct{}{})
 }
 
 type clientHolepunchAddrSets struct {

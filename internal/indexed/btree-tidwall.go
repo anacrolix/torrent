@@ -1,8 +1,11 @@
+//go:build torrent_tidwall_btree
+
 package indexed
 
 import (
 	"iter"
 
+	g "github.com/anacrolix/generics"
 	"github.com/tidwall/btree"
 )
 
@@ -31,6 +34,14 @@ func (me tidwallBtreeSet[R]) IterFrom(start R) iter.Seq[R] {
 	}
 }
 
+func (me tidwallBtreeSet[R]) GetGte(start R) (ret g.Option[R]) {
+	me.inner.Ascend(start, func(item R) bool {
+		ret.Set(item)
+		return false
+	})
+	return
+}
+
 func (me tidwallBtreeSet[R]) Delete(r R) (actual R, removed bool) {
 	return me.inner.Delete(r)
 }
@@ -48,7 +59,7 @@ func (me tidwallBtreeSet[R]) Len() int {
 	return me.inner.Len()
 }
 
-func makeTidwallBtreeSet[R any](cmp func(R, R) int) tidwallBtreeSet[R] {
+func makeBtreeSet[R any](cmp func(R, R) int) btreeSet[R] {
 	inner := btree.NewBTreeGOptions(func(a, b R) bool {
 		return cmp(a, b) < 0
 	}, btree.Options{

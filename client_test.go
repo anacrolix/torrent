@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"math/rand"
+	rand "math/rand/v2"
 	"net"
 	"net/netip"
 	"os"
@@ -161,7 +161,7 @@ func TestMergingTrackersByAddingSpecs(t *testing.T) {
 	require.NoError(t, err)
 	defer cl.Close()
 	spec := TorrentSpec{}
-	rand.Read(spec.InfoHash[:])
+	rand.NewChaCha8([32]byte{}).Read(spec.InfoHash[:])
 	T, new, _ := cl.AddTorrentSpec(&spec)
 	if !new {
 		t.FailNow()
@@ -708,7 +708,9 @@ func makeMagnet(t *testing.T, cl *Client, dir, name string) string {
 	require.NoError(t, err)
 	mi.InfoBytes, err = bencode.Marshal(info)
 	require.NoError(t, err)
-	magnet := mi.Magnet(nil, &info).String()
+	m, err := mi.MagnetV2()
+	require.NoError(t, err)
+	magnet := m.String()
 	tr, err := cl.AddTorrent(&mi)
 	require.NoError(t, err)
 	require.True(t, tr.Seeding())
@@ -923,7 +925,7 @@ func TestDroppedTorrentsNotReturned(t *testing.T) {
 	qt.Check(t, qt.Equals(tt1, tt))
 	qt.Check(t, qt.SliceContains(cl.Torrents(), tt))
 	tt.Drop()
-	tt1, ok = cl.Torrent(tt.InfoHash())
+	_, ok = cl.Torrent(tt.InfoHash())
 	qt.Check(t, qt.IsFalse(ok))
 	qt.Check(t, qt.HasLen(cl.Torrents(), 0))
 }

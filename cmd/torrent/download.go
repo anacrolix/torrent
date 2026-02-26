@@ -82,55 +82,6 @@ func clientStatusWriter(ctx context.Context, cl *torrent.Client) {
 	}
 }
 
-// Keeping this for now for reference in case I do per-torrent deltas in client status updates.
-func torrentBar(t *torrent.Torrent, pieceStates bool) {
-	go func() {
-		start := time.Now()
-		if t.Info() == nil {
-			fmt.Printf("%v: getting torrent info for %q\n", time.Since(start), t.Name())
-			<-t.GotInfo()
-		}
-		lastStats := t.Stats()
-		var lastLine string
-		interval := 3 * time.Second
-		for range time.Tick(interval) {
-			var completedPieces, partialPieces int
-			psrs := t.PieceStateRuns()
-			for _, r := range psrs {
-				if r.Complete {
-					completedPieces += r.Length
-				}
-				if r.Partial {
-					partialPieces += r.Length
-				}
-			}
-			stats := t.Stats()
-			byteRate := int64(time.Second)
-			byteRate *= stats.BytesReadUsefulData.Int64() - lastStats.BytesReadUsefulData.Int64()
-			byteRate /= int64(interval)
-			line := fmt.Sprintf(
-				"%v: downloading %q: %s/%s, %d/%d pieces completed (%d partial): %v/s\n",
-				time.Since(start),
-				t.Name(),
-				humanize.Bytes(uint64(t.BytesCompleted())),
-				humanize.Bytes(uint64(t.Length())),
-				completedPieces,
-				t.NumPieces(),
-				partialPieces,
-				humanize.Bytes(uint64(byteRate)),
-			)
-			if line != lastLine {
-				lastLine = line
-				os.Stdout.WriteString(line)
-			}
-			if pieceStates {
-				fmt.Println(psrs)
-			}
-			lastStats = stats
-		}
-	}()
-}
-
 type stringAddr string
 
 func (stringAddr) Network() string   { return "" }
@@ -173,7 +124,7 @@ func addTorrents(
 				metaInfo, err := metainfo.Load(response.Body)
 				defer response.Body.Close()
 				if err != nil {
-					return nil, fmt.Errorf("error loading torrent file %q: %s\n", arg, err)
+					return nil, fmt.Errorf("error loading torrent file %q: %s", arg, err)
 				}
 				t, err := client.AddTorrent(metaInfo)
 				if err != nil {
@@ -186,7 +137,7 @@ func addTorrents(
 			} else {
 				metaInfo, err := metainfo.LoadFromFile(arg)
 				if err != nil {
-					return nil, fmt.Errorf("error loading torrent file %q: %s\n", arg, err)
+					return nil, fmt.Errorf("error loading torrent file %q: %s", arg, err)
 				}
 				t, err := client.AddTorrent(metaInfo)
 				if err != nil {

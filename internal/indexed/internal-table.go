@@ -1,7 +1,6 @@
 package indexed
 
 import (
-	"fmt"
 	"iter"
 
 	g "github.com/anacrolix/generics"
@@ -16,7 +15,6 @@ type table[R Record] struct {
 	version       int
 	cmp           CompareFunc[R]
 	insteadOf     []InsteadOf[R]
-	indexes       []genericRelation
 	indexTriggers []triggerFunc[R]
 	// I want to believe this isn't useful for indexes but I could be wrong.
 	triggers []triggerFunc[R]
@@ -37,7 +35,7 @@ func (me *table[R]) SetMinRecord(min R) {
 func (me *table[R]) Init(cmp CompareFunc[R]) {
 	panicif.True(me.inited)
 	me.inited = true
-	me.set = makeAjwernerSet(cmp)
+	me.set = makeBtreeSet(cmp)
 	me.cmp = cmp
 }
 
@@ -53,10 +51,6 @@ func (me *table[R]) OnChange(t triggerFunc[R]) {
 
 func (me *table[R]) incVersion() {
 	me.version++
-}
-
-func (me *table[R]) assertIteratorVersion(it btreeIterator[R]) {
-	panicif.NotEq(me.version, it.version)
 }
 
 func (me *table[R]) IterFrom(start R) iter.Seq[R] {
@@ -79,24 +73,6 @@ func (me *table[R]) SelectFirstIf(gte R, filter func(r R) bool) (ret g.Option[R]
 		break
 	}
 	return
-}
-
-func (me *table[R]) checkWhereGotFirst(first g.Option[R], where func(r R) bool) {
-	if !amortize.Try() {
-		return
-	}
-	var slowRet g.Option[R]
-	for r := range me.Iter {
-		if where(r) {
-			slowRet.Set(r)
-			break
-		}
-	}
-	if first.Ok != slowRet.Ok || first.Ok && me.cmp(first.Value, slowRet.Value) != 0 {
-		fmt.Printf("%#v\n", first.Value)
-		fmt.Printf("%#v\n", slowRet.Value)
-		panic("herp")
-	}
 }
 
 func (me *table[R]) SelectFirstWhere(gte R, where func(r R) bool) (ret g.Option[R]) {

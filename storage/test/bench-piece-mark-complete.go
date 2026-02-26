@@ -3,7 +3,7 @@ package test_storage
 import (
 	"bytes"
 	"context"
-	"math/rand"
+	rand "math/rand/v2"
 	"sync"
 	"testing"
 
@@ -36,16 +36,16 @@ func BenchmarkPieceMarkComplete(
 	}
 	ti, err := ci.OpenTorrent(context.Background(), info, metainfo.Hash{})
 	qt.Assert(b, qt.IsNil(err))
-	tw := storage.Torrent{ti}
+	tw := storage.Torrent{TorrentImpl: ti}
 	defer tw.Close()
-	rand.Read(info.Pieces)
+	rand.NewChaCha8([32]byte{}).Read(info.Pieces)
 	data := make([]byte, pieceSize)
 	readData := make([]byte, pieceSize)
 	b.SetBytes(int64(numPieces) * pieceSize)
 	oneIter := func() {
 		for pieceIndex := 0; pieceIndex < numPieces; pieceIndex += 1 {
 			pi := tw.Piece(info.Piece(pieceIndex))
-			rand.Read(data)
+			rand.NewChaCha8([32]byte{}).Read(data)
 			b.StartTimer()
 			var wg sync.WaitGroup
 			for off := int64(0); off < int64(len(data)); off += ChunkSize {

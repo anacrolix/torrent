@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/gob"
 	"fmt"
-	"reflect"
 	"runtime/pprof"
 	"time"
 	"unsafe"
@@ -50,11 +49,7 @@ func (p peerId) Uintptr() uintptr {
 }
 
 func (p peerId) GobEncode() (b []byte, _ error) {
-	*(*reflect.SliceHeader)(unsafe.Pointer(&b)) = reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&p.ptr)),
-		Len:  int(unsafe.Sizeof(p.ptr)),
-		Cap:  int(unsafe.Sizeof(p.ptr)),
-	}
+	b = unsafe.Slice((*byte)(unsafe.Pointer(&p.ptr)), unsafe.Sizeof(p.ptr))
 	return
 }
 
@@ -65,12 +60,8 @@ func (p *peerId) GobDecode(b []byte) error {
 	ptr := unsafe.Pointer(&b[0])
 	p.ptr = *(*uintptr)(ptr)
 	log.Printf("%p", ptr)
-	dst := reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&p.Peer)),
-		Len:  int(unsafe.Sizeof(p.Peer)),
-		Cap:  int(unsafe.Sizeof(p.Peer)),
-	}
-	copy(*(*[]byte)(unsafe.Pointer(&dst)), b)
+	dst := unsafe.Slice((*byte)(unsafe.Pointer(&p.Peer)), unsafe.Sizeof(p.Peer))
+	copy(dst, b)
 	return nil
 }
 
@@ -354,10 +345,7 @@ func (p *PeerConn) applyRequestState(next desiredRequestState) {
 
 	t := p.t
 	originalRequestCount := current.Requests.GetCardinality()
-	for {
-		if requestHeap.Len() == 0 {
-			break
-		}
+	for requestHeap.Len() > 0 {
 		numPending := maxRequests(current.Requests.GetCardinality() + current.Cancelled.GetCardinality())
 		if numPending >= p.nominalMaxRequests() {
 			break

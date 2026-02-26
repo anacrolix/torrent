@@ -356,13 +356,14 @@ func (me *mmapFileHandle) seekDataOrEof(offset int64) (ret int64, err error) {
 	if lockHandleOperations {
 		mu.RUnlock()
 	}
-	if err == nil {
+	switch err {
+	case nil:
 		me.pos = ret
-	} else if err == io.EOF {
+	case io.EOF:
 		err = nil
 		ret = int64(len(me.shared.f.m))
 		me.pos = ret
-	} else {
+	default:
 		ret = me.pos
 	}
 	return

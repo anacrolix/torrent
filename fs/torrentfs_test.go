@@ -5,7 +5,6 @@ package torrentfs
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	_ "net/http/pprof"
@@ -132,7 +131,7 @@ func TestUnmountWedged(t *testing.T) {
 	}()
 	go func() {
 		defer cancel()
-		_, err := ioutil.ReadFile(filepath.Join(layout.MountDir, tt.Info().BestName()))
+		_, err := os.ReadFile(filepath.Join(layout.MountDir, tt.Info().BestName()))
 		require.Error(t, err)
 	}()
 
@@ -181,7 +180,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	go func() {
 		// Wait until we get the metainfo, then check for the data.
 		<-seederTorrent.GotInfo()
-		seederTorrent.VerifyData()
+		seederTorrent.VerifyDataContext(context.TODO())
 	}()
 	cfg = torrent.NewDefaultClientConfig()
 	cfg.DisableTrackers = true

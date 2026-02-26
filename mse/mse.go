@@ -240,10 +240,7 @@ func (h *handshake) writer() {
 	}()
 	for {
 		h.writeMu.Lock()
-		for {
-			if len(h.writes) != 0 {
-				break
-			}
+		for len(h.writes) == 0 {
 			if h.writeClose {
 				h.writeMu.Unlock()
 				return

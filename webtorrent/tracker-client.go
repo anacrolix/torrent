@@ -159,11 +159,6 @@ func (tc *TrackerClient) run() error {
 	for !tc.closed {
 		tc.mu.Unlock()
 		err := tc.doWebsocket()
-		tc.mu.Lock()
-		if tc.closed {
-			//level = log.Debug
-		}
-		tc.mu.Unlock()
 		tc.Logger.WithDefaultLevel(log.Debug).Printf("websocket instance ended: %v", err)
 		time.Sleep(time.Minute)
 		tc.mu.Lock()

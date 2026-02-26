@@ -29,7 +29,6 @@ import (
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
-	. "github.com/anacrolix/generics"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
@@ -110,7 +109,7 @@ type Torrent struct {
 	chunkPool sync.Pool
 	// Total length of the torrent in bytes. Stored because it's not O(1) to
 	// get this from the info dict.
-	_length Option[int64]
+	_length g.Option[int64]
 
 	// The storage to open when the info dict becomes available.
 	storageOpener *storage.Client
@@ -547,7 +546,7 @@ func (t *Torrent) cacheLength() {
 	for _, f := range t.info.UpvertedFiles() {
 		l += f.Length
 	}
-	t._length = Some(l)
+	t._length = g.Some(l)
 }
 
 // TODO: This shouldn't fail for storage reasons. Instead we should handle storage failure
@@ -589,7 +588,7 @@ func (t *Torrent) pieceRequestOrderKey(i int) request_strategy.PieceRequestOrder
 func (t *Torrent) onSetInfo() {
 	t.pieceRequestOrder = rand.Perm(t.numPieces())
 	t.initPieceRequestOrder()
-	MakeSliceWithLength(&t.requestPieceStates, t.numPieces())
+	g.MakeSliceWithLength(&t.requestPieceStates, t.numPieces())
 	for i := range t.pieces {
 		p := &t.pieces[i]
 		// Need to add relativeAvailability before updating piece completion, as that may result in
@@ -949,7 +948,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 			func(l, r torrentTrackerAnnouncer) int {
 				lu := l.URL()
 				ru := r.URL()
-				var luns, runs url.URL = *lu, *ru
+				var luns, runs = *lu, *ru
 				luns.Scheme = ""
 				runs.Scheme = ""
 				var ml multiless.Computation
@@ -1146,7 +1145,6 @@ func (t *Torrent) close(wg *sync.WaitGroup) {
 			panicif.NotZero(len(t.cl.activeWebseedRequests))
 		}
 	}
-	return
 }
 
 func (t *Torrent) assertAllPiecesRelativeAvailabilityZero() {
@@ -1176,12 +1174,6 @@ func (t *Torrent) requestOffset(r Request) int64 {
 // there is no such request.
 func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
 	return torrentOffsetRequest(t.length(), t.info.PieceLength, int64(t.chunkSize), off)
-}
-
-func (t *Torrent) getRequestIndexContainingOffset(off int64) RequestIndex {
-	req, ok := t.offsetRequest(off)
-	panicif.False(ok)
-	return t.requestIndexFromRequest(req)
 }
 
 func (t *Torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
@@ -1389,7 +1381,7 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 	if !t.haveAllPieces() {
 		return
 	}
-	if all, known := p.peerHasAllPieces(); !(known && all) {
+	if all, known := p.peerHasAllPieces(); !known || !all {
 		return
 	}
 	if p.useful() {
@@ -1431,7 +1423,7 @@ func getPeerConnSlice(cap int) []*PeerConn {
 	if getInterface == nil {
 		return make([]*PeerConn, 0, cap)
 	} else {
-		return getInterface.([]*PeerConn)[:0]
+		return (*getInterface.(*[]*PeerConn))[:0]
 	}
 }
 
@@ -1440,7 +1432,7 @@ func getPeerConnSlice(cap int) []*PeerConn {
 func (t *Torrent) withUnclosedConns(f func([]*PeerConn)) {
 	sl := t.appendUnclosedConns(getPeerConnSlice(len(t.conns)))
 	f(sl)
-	peerConnSlices.Put(sl)
+	peerConnSlices.Put(&sl)
 }
 
 func (t *Torrent) worstBadConnFromSlice(opts worseConnLensOpts, sl []*PeerConn) *PeerConn {
@@ -2837,7 +2829,7 @@ func (t *Torrent) dropBannedPeers() {
 			return
 		}
 		netipAddr := netip.MustParseAddr(remoteIp.String())
-		if Some(netipAddr) != p.bannableAddr {
+		if g.Some(netipAddr) != p.bannableAddr {
 			t.logger.WithDefaultLevel(log.Debug).Printf(
 				"peer remote ip does not match its bannable addr [peer=%v, remote ip=%v, bannable addr=%v]",
 				p, remoteIp, p.bannableAddr)
@@ -3421,7 +3413,7 @@ func wrapUtHolepunchMsgForPeerConn(
 	}
 	return pp.Message{
 		Type:            pp.Extended,
-		ExtendedID:      MapMustGet(recipient.PeerExtensionIDs, utHolepunch.ExtensionName),
+		ExtendedID:      g.MapMustGet(recipient.PeerExtensionIDs, utHolepunch.ExtensionName),
 		ExtendedPayload: extendedPayload,
 	}
 }
@@ -3702,12 +3694,6 @@ func (t *Torrent) withSlogger(base *slog.Logger) *slog.Logger {
 		"ih", *t.canonicalShortInfohash()))
 }
 
-func (t *Torrent) endRequestIndexForFileIndex(fileIndex int) RequestIndex {
-	f := t.Files()[fileIndex]
-	end := intCeilDiv(uint64(f.offset)+uint64(f.length), t.chunkSize.Uint64())
-	return RequestIndex(end)
-}
-
 func (t *Torrent) wantReceiveChunk(reqIndex RequestIndex) bool {
 	if t.checkValidReceiveChunk(t.requestIndexToRequest(reqIndex)) != nil {
 		return false
@@ -3747,11 +3733,6 @@ func (t *Torrent) considerStartingHashers() bool {
 
 func (t *Torrent) getFile(fileIndex int) *File {
 	return (*t.files)[fileIndex]
-}
-
-func (t *Torrent) fileMightBePartial(fileIndex int) bool {
-	f := t.getFile(fileIndex)
-	return t.piecesMightBePartial(f.BeginPieceIndex(), f.EndPieceIndex())
 }
 
 // Expand the piece range to include all pieces of the files in the original range.

@@ -1,3 +1,5 @@
+//go:build !torrent_tidwall_btree
+
 package indexed
 
 import (
@@ -78,6 +80,6 @@ func (me *ajwernerBtreeSet[R]) GetGte(start R) (_ g.Option[R]) {
 	return g.Some(it.Cur())
 }
 
-func makeAjwernerSet[R any](cmp func(R, R) int) *ajwernerBtreeSet[R] {
+func makeBtreeSet[R any](cmp func(R, R) int) btreeSet[R] {
 	return &ajwernerBtreeSet[R]{inner: btree.MakeSet(cmp)}
 }

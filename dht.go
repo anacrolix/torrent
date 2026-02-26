@@ -51,12 +51,15 @@ func (me anacrolixDhtAnnounceWrapper) Peers() <-chan dht.PeersValues {
 }
 
 func (me AnacrolixDhtServerWrapper) Announce(hash [20]byte, port int, impliedPort bool) (DhtAnnounce, error) {
-	ann, err := me.Server.Announce(hash, port, impliedPort)
+	ann, err := me.AnnounceTraversal(hash, dht.AnnouncePeer(dht.AnnouncePeerOpts{
+		Port:        port,
+		ImpliedPort: impliedPort,
+	}))
 	return anacrolixDhtAnnounceWrapper{ann}, err
 }
 
 func (me AnacrolixDhtServerWrapper) Ping(addr *net.UDPAddr) {
-	me.Server.PingQueryInput(addr, dht.QueryInput{
+	me.PingQueryInput(addr, dht.QueryInput{
 		RateLimiting: dht.QueryRateLimiting{NoWaitFirst: true},
 	})
 }

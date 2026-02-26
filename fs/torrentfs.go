@@ -131,7 +131,7 @@ func (dn dirNode) Lookup(_ context.Context, name string) (fusefs.Node, error) {
 	if dir {
 		return dirNode{n}, nil
 	}
-	return nil, fuse.ENOENT
+	return nil, fuse.ENOENT //nolint:staticcheck // fuse error type
 }
 
 func (dn dirNode) Attr(ctx context.Context, attr *fuse.Attr) error {
@@ -158,7 +158,7 @@ func (rn rootNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, 
 		break
 	}
 	if _node == nil {
-		err = fuse.ENOENT
+		err = fuse.ENOENT //nolint:staticcheck // fuse error type
 	}
 	return
 }

@@ -10,7 +10,3 @@ func intCeilDiv[T constraints.Unsigned](a, b T) T {
 	// or that ceil division makes sense for negative numbers.
 	return (a + b - 1) / b
 }
-
-func roundToNextMultiple[T constraints.Unsigned](x, multiple T) T {
-	return intCeilDiv(x, multiple) * multiple
-}

@@ -293,19 +293,8 @@ func (me *filePieceImpl) onFileNotComplete(f file) (err error) {
 	return
 }
 
-func (me *filePieceImpl) pathForWrite(f *file) string {
-	return me.t.pathForWrite(f)
-}
-
 func (me *filePieceImpl) partFiles() bool {
 	return me.t.partFiles()
-}
-
-type zeroReader struct{}
-
-func (me zeroReader) Read(p []byte) (n int, err error) {
-	clear(p)
-	return len(p), nil
 }
 
 func (me *filePieceImpl) WriteTo(w io.Writer) (n int64, err error) {

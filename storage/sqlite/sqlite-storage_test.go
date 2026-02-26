@@ -21,8 +21,8 @@ import (
 
 func TestLeecherStorage(t *testing.T) {
 	test.TestLeecherStorage(t, test.LeecherStorageTestCase{
-		"SqliteDirect",
-		func(s string) storage.ClientImplCloser {
+		Name: "SqliteDirect",
+		Factory: func(s string) storage.ClientImplCloser {
 			path := filepath.Join(s, "sqlite3.db")
 			var opts NewDirectStorageOpts
 			opts.Path = path
@@ -32,7 +32,7 @@ func TestLeecherStorage(t *testing.T) {
 			}
 			return cl
 		},
-		0,
+		GoMaxProcs: 0,
 	})
 }
 

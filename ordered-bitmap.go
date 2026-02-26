@@ -35,7 +35,8 @@ func (o *orderedBitmap[T]) Contains(index T) bool {
 func (o *orderedBitmap[T]) Add(index T) {
 	o.bitmap.Add(index)
 	if _, ok := o.elements[index]; !ok {
-		g.MakeMapIfNilAndSet(&o.elements, index, o.order.PushBack(index))
+		g.MakeMapIfNil(&o.elements)
+		g.MapInsert(o.elements, index, o.order.PushBack(index))
 	}
 }
 

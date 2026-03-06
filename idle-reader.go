@@ -1,10 +1,13 @@
 package torrent
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"time"
 )
+
+var errIdleTimeout = errors.New("idle timeout")
 
 func newIdleTimeoutReader(r io.Reader, timeout time.Duration, interrupt func()) io.Reader {
 	tr := &idleTimeoutReader{
@@ -33,7 +36,7 @@ func (me *idleTimeoutReader) Read(p []byte) (n int, err error) {
 	me.timer.Stop()
 	if me.fired {
 		// Wrap the error, we don't know if the interrupt caused the inner reader to return early.
-		err = fmt.Errorf("idle timeout, original error: %w", err)
+		err = fmt.Errorf("%w, original error: %w", errIdleTimeout, err)
 	}
 	return
 }

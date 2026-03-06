@@ -11,6 +11,7 @@ import (
 	"runtime/pprof"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
@@ -213,6 +214,12 @@ func (ws *webseedPeer) readChunksErrorLevel(err error, req *webseedRequest) slog
 	if errors.Is(err, webseed.ErrStatusOkForRangeRequest{}) {
 		// This can happen for uncached results, and we get passed directly to origin. We should be
 		// coming back later and then only warning if it happens for a long time.
+		return slog.LevelDebug
+	}
+	if errors.Is(err, errIdleTimeout) {
+		return slog.LevelDebug
+	}
+	if errors.Is(err, syscall.ECONNRESET) {
 		return slog.LevelDebug
 	}
 	// Error if we aren't also using and/or have peers...?

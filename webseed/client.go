@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/RoaringBitmap/roaring"
+	"github.com/RoaringBitmap/roaring/v2"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/dustin/go-humanize"

@@ -4,6 +4,7 @@ go 1.24.0
 
 require (
 	github.com/RoaringBitmap/roaring v1.2.3
+	github.com/RoaringBitmap/roaring/v2 v2.15.0
 	github.com/alexflint/go-arg v1.4.3
 	github.com/anacrolix/bargle v1.0.0
 	github.com/anacrolix/bargle/v2 v2.0.0
@@ -69,7 +70,7 @@ require (
 	github.com/anacrolix/stm v0.5.0 // indirect
 	github.com/benbjohnson/immutable v0.4.1-0.20221220213129-8932b999621d // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/bits-and-blooms/bitset v1.2.2 // indirect
+	github.com/bits-and-blooms/bitset v1.24.2 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/ebitengine/purego v0.9.1 // indirect

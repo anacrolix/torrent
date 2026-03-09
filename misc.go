@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net"
 
-	"github.com/RoaringBitmap/roaring"
+	"github.com/RoaringBitmap/roaring/v2"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"golang.org/x/time/rate"

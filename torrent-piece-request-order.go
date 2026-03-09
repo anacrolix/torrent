@@ -3,7 +3,7 @@ package torrent
 import (
 	"fmt"
 
-	"github.com/RoaringBitmap/roaring"
+	"github.com/RoaringBitmap/roaring/v2"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/torrent/internal/amortize"
 	requestStrategy "github.com/anacrolix/torrent/internal/request-strategy"

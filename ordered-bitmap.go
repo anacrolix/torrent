@@ -72,3 +72,7 @@ func (o *orderedBitmap[T]) CheckedRemove(index T) bool {
 	delete(o.elements, index)
 	return true
 }
+
+func (o *orderedBitmap[T]) RangeCardinality(start, end T) uint64 {
+	return o.bitmap.RangeCardinality(start, end)
+}

@@ -1,12 +1,12 @@
 package typedRoaring
 
 import (
-	"github.com/RoaringBitmap/roaring"
+	roaringv2 "github.com/RoaringBitmap/roaring/v2"
 )
 
 // TODO: Update to roaring v2 or higher
 type Bitmap[T BitConstraint] struct {
-	roaring.Bitmap
+	roaringv2.Bitmap
 }
 
 func (me *Bitmap[T]) Contains(x T) bool {
@@ -46,6 +46,10 @@ func (me *Bitmap[T]) Remove(x T) {
 // Returns an uninitialized iterator for the type of the receiver.
 func (Bitmap[T]) IteratorType() Iterator[T] {
 	return Iterator[T]{}
+}
+
+func (me Bitmap[T]) RangeCardinality(start, end T) uint64 {
+	return me.Bitmap.CardinalityInRange(uint64(start), uint64(end))
 }
 
 // TODO: Override Bitmap.Iterator.

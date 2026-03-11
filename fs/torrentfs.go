@@ -1,27 +1,43 @@
 //go:build !windows
 
+// Package torrentfs exposes a torrent client as a read-only filesystem.
+//
+// It is FUSE-library-agnostic: the core types (TorrentFS, Backend, Unmounter)
+// and helpers live here; concrete FUSE backends are in separate modules:
+//
+//   - github.com/anacrolix/og-torrentfs  – uses github.com/anacrolix/fuse
+//   - github.com/anacrolix/hanwen-torrentfs – uses github.com/hanwen/go-fuse/v2
+//
+// # Filesystem traversal
+//
+// traverse.go provides the directory-listing and lookup helpers used by every
+// backend:
+//
+//   - RootEntries / RootLookup  – enumerate/find top-level torrent entries
+//   - DirEntries / DirLookup    – enumerate/find entries inside a torrent directory
+//
+// # File reading
+//
+// fileread.go provides ReadFile, which reads a range of bytes from a torrent
+// file.  It blocks until data is available, the context is cancelled, or
+// Destroy is called on the TorrentFS.
+//
+// # Testing
+//
+// The tfstest sub-package contains a shared integration test suite
+// (RunTestSuite) that any backend can run against its MountFunc.
 package torrentfs
 
 import (
 	"context"
-	"expvar"
-	"os"
 	"strings"
 	"sync"
 
-	"github.com/anacrolix/fuse"
-	fusefs "github.com/anacrolix/fuse/fs"
-
 	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/metainfo"
 )
 
-const (
-	defaultMode = 0o555
-)
-
-var torrentfsReadRequests = expvar.NewInt("torrentfsReadRequests")
-
+// TorrentFS is the shared state for a torrent-backed filesystem.
+// It holds no FUSE-library-specific code; mount it via a Backend.
 type TorrentFS struct {
 	Client       *torrent.Client
 	destroyed    chan struct{}
@@ -30,173 +46,28 @@ type TorrentFS struct {
 	event        sync.Cond
 }
 
-var (
-	_ fusefs.FSDestroyer = &TorrentFS{}
-
-	_ fusefs.NodeForgetter      = rootNode{}
-	_ fusefs.HandleReadDirAller = rootNode{}
-	_ fusefs.HandleReadDirAller = dirNode{}
-)
-
-// Is a directory node that lists all torrents and handles destruction of the
-// filesystem.
-type rootNode struct {
-	fs *TorrentFS
+// Backend is implemented by FUSE library integrations (e.g. hanwen-torrentfs,
+// og-torrentfs). It mounts a TorrentFS at a directory and returns an Unmounter.
+type Backend interface {
+	Mount(mountDir string, tfs *TorrentFS) (Unmounter, error)
 }
 
-type node struct {
-	path     string
-	metadata *metainfo.Info
-	FS       *TorrentFS
-	t        *torrent.Torrent
+// Unmounter is returned by Backend.Mount and used to tear down the mount.
+type Unmounter interface {
+	Unmount() error
 }
 
-type dirNode struct {
-	node
+// New creates a TorrentFS backed by the given client.
+func New(cl *torrent.Client) *TorrentFS {
+	tfs := &TorrentFS{
+		Client:    cl,
+		destroyed: make(chan struct{}),
+	}
+	tfs.event.L = &tfs.mu
+	return tfs
 }
 
-var _ fusefs.HandleReadDirAller = dirNode{}
-
-func isSubPath(parent, child string) bool {
-	if parent == "" {
-		return len(child) > 0
-	}
-	if !strings.HasPrefix(child, parent) {
-		return false
-	}
-	extra := child[len(parent):]
-	if extra == "" {
-		return false
-	}
-	// Not just a file with more stuff on the end.
-	return extra[0] == '/'
-}
-
-func (dn dirNode) ReadDirAll(ctx context.Context) (des []fuse.Dirent, err error) {
-	names := map[string]bool{}
-	for _, fi := range dn.metadata.UpvertedFiles() {
-		filePathname := strings.Join(fi.BestPath(), "/")
-		if !isSubPath(dn.path, filePathname) {
-			continue
-		}
-		var name string
-		if dn.path == "" {
-			name = fi.BestPath()[0]
-		} else {
-			dirPathname := strings.Split(dn.path, "/")
-			name = fi.BestPath()[len(dirPathname)]
-		}
-		if names[name] {
-			continue
-		}
-		names[name] = true
-		de := fuse.Dirent{
-			Name: name,
-		}
-		if len(fi.BestPath()) == len(dn.path)+1 {
-			de.Type = fuse.DT_File
-		} else {
-			de.Type = fuse.DT_Dir
-		}
-		des = append(des, de)
-	}
-	return
-}
-
-func (dn dirNode) Lookup(_ context.Context, name string) (fusefs.Node, error) {
-	dir := false
-	var file *torrent.File
-	var fullPath string
-	if dn.path != "" {
-		fullPath = dn.path + "/" + name
-	} else {
-		fullPath = name
-	}
-	for _, f := range dn.t.Files() {
-		if f.DisplayPath() == fullPath {
-			file = f
-		}
-		if isSubPath(fullPath, f.DisplayPath()) {
-			dir = true
-		}
-	}
-	n := dn.node
-	n.path = fullPath
-	if dir && file != nil {
-		panic("both dir and file")
-	}
-	if file != nil {
-		return fileNode{n, file}, nil
-	}
-	if dir {
-		return dirNode{n}, nil
-	}
-	return nil, fuse.ENOENT //nolint:staticcheck // fuse error type
-}
-
-func (dn dirNode) Attr(ctx context.Context, attr *fuse.Attr) error {
-	attr.Mode = os.ModeDir | defaultMode
-	return nil
-}
-
-func (rn rootNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, err error) {
-	for _, t := range rn.fs.Client.Torrents() {
-		info := t.Info()
-		if t.Name() != name || info == nil {
-			continue
-		}
-		__node := node{
-			metadata: info,
-			FS:       rn.fs,
-			t:        t,
-		}
-		if !info.IsDir() {
-			_node = fileNode{__node, t.Files()[0]}
-		} else {
-			_node = dirNode{__node}
-		}
-		break
-	}
-	if _node == nil {
-		err = fuse.ENOENT //nolint:staticcheck // fuse error type
-	}
-	return
-}
-
-func (rn rootNode) ReadDirAll(ctx context.Context) (dirents []fuse.Dirent, err error) {
-	for _, t := range rn.fs.Client.Torrents() {
-		info := t.Info()
-		if info == nil {
-			continue
-		}
-		dirents = append(dirents, fuse.Dirent{
-			Name: info.BestName(),
-			Type: func() fuse.DirentType {
-				if !info.IsDir() {
-					return fuse.DT_File
-				} else {
-					return fuse.DT_Dir
-				}
-			}(),
-		})
-	}
-	return
-}
-
-func (rn rootNode) Attr(ctx context.Context, attr *fuse.Attr) error {
-	attr.Mode = os.ModeDir | defaultMode
-	return nil
-}
-
-// TODO(anacrolix): Why should rootNode implement this?
-func (rn rootNode) Forget() {
-	rn.fs.Destroy()
-}
-
-func (tfs *TorrentFS) Root() (fusefs.Node, error) {
-	return rootNode{tfs}, nil
-}
-
+// Destroy signals all blocked reads to abort and marks the FS as destroyed.
 func (tfs *TorrentFS) Destroy() {
 	tfs.mu.Lock()
 	select {
@@ -207,11 +78,60 @@ func (tfs *TorrentFS) Destroy() {
 	tfs.mu.Unlock()
 }
 
-func New(cl *torrent.Client) *TorrentFS {
-	fs := &TorrentFS{
-		Client:    cl,
-		destroyed: make(chan struct{}),
+// Destroyed returns a channel that is closed when Destroy is called.
+func (tfs *TorrentFS) Destroyed() <-chan struct{} {
+	return tfs.destroyed
+}
+
+// TrackBlockedRead is called by backend read implementations when they block
+// waiting for torrent data. The returned func must be called when the read
+// completes or is cancelled.
+func (tfs *TorrentFS) TrackBlockedRead() (done func()) {
+	tfs.mu.Lock()
+	tfs.blockedReads++
+	tfs.event.Broadcast()
+	tfs.mu.Unlock()
+	return func() {
+		tfs.mu.Lock()
+		tfs.blockedReads--
+		tfs.event.Broadcast()
+		tfs.mu.Unlock()
 	}
-	fs.event.L = &fs.mu
-	return fs
+}
+
+// WaitBlockedReads blocks until at least n read operations are blocked inside
+// the filesystem, or until ctx is done. Used by tests.
+func (tfs *TorrentFS) WaitBlockedReads(ctx context.Context, n int) {
+	// Broadcast on ctx cancellation so the wait loop can exit.
+	go func() {
+		<-ctx.Done()
+		tfs.mu.Lock()
+		tfs.event.Broadcast()
+		tfs.mu.Unlock()
+	}()
+	tfs.mu.Lock()
+	defer tfs.mu.Unlock()
+	for tfs.blockedReads < n && ctx.Err() == nil {
+		tfs.event.Wait()
+	}
+}
+
+// Mount mounts tfs at mountDir using the given backend.
+func (tfs *TorrentFS) Mount(mountDir string, b Backend) (Unmounter, error) {
+	return b.Mount(mountDir, tfs)
+}
+
+// IsSubPath reports whether child is a direct sub-path of parent.
+func IsSubPath(parent, child string) bool {
+	if parent == "" {
+		return len(child) > 0
+	}
+	if !strings.HasPrefix(child, parent) {
+		return false
+	}
+	extra := child[len(parent):]
+	if extra == "" {
+		return false
+	}
+	return extra[0] == '/'
 }

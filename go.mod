@@ -12,7 +12,6 @@ require (
 	github.com/anacrolix/chansync v0.7.0
 	github.com/anacrolix/dht/v2 v2.23.0
 	github.com/anacrolix/envpprof v1.4.0
-	github.com/anacrolix/fuse v0.3.2
 	github.com/anacrolix/generics v0.2.0
 	github.com/anacrolix/go-libutp v1.3.2
 	github.com/anacrolix/gostdapp v0.2.1-0.20251125125325-fbac3f25c013
@@ -147,7 +146,8 @@ require (
 	golang.org/x/crypto v0.44.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f // indirect
-	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20251124214823-79d6a2a48846 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251124214823-79d6a2a48846 // indirect
 	google.golang.org/grpc v1.77.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

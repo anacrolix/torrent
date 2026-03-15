@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/gob"
 	"fmt"
+	"log/slog"
 	"runtime/pprof"
 	"time"
 	"unsafe"
@@ -12,7 +13,6 @@ import (
 	"github.com/RoaringBitmap/roaring"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/generics/heap"
-	"github.com/anacrolix/log"
 	"github.com/anacrolix/multiless"
 
 	requestStrategy "github.com/anacrolix/torrent/internal/request-strategy"
@@ -59,7 +59,7 @@ func (p *peerId) GobDecode(b []byte) error {
 	}
 	ptr := unsafe.Pointer(&b[0])
 	p.ptr = *(*uintptr)(ptr)
-	log.Printf("%p", ptr)
+	slog.Debug("decoded peerId", "ptr", fmt.Sprintf("%p", ptr))
 	dst := unsafe.Slice((*byte)(unsafe.Pointer(&p.Peer)), unsafe.Sizeof(p.Peer))
 	copy(dst, b)
 	return nil

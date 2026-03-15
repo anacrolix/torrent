@@ -4,6 +4,7 @@ package dirwatch
 
 import (
 	"bufio"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,7 +41,19 @@ type Instance struct {
 	dirName  string
 	Events   chan Event
 	dirState map[metainfo.Hash]entity
-	Logger   log.Logger
+	// Deprecated: Use Slogger.
+	Logger  log.Logger
+	Slogger *slog.Logger
+}
+
+func (i *Instance) slogger() *slog.Logger {
+	if i.Slogger != nil {
+		return i.Slogger
+	}
+	if !i.Logger.IsZero() {
+		return i.Logger.Slogger()
+	}
+	return slog.Default()
 }
 
 func (i *Instance) Close() {
@@ -50,7 +63,7 @@ func (i *Instance) Close() {
 func (i *Instance) handleEvents() {
 	defer close(i.Events)
 	for e := range i.w.Events {
-		i.Logger.WithDefaultLevel(log.Debug).Printf("event: %v", e)
+		i.slogger().Debug("event", "event", e)
 		if e.Op == fsnotify.Write {
 			// TODO: Special treatment as an existing torrent may have changed.
 		} else {
@@ -61,7 +74,7 @@ func (i *Instance) handleEvents() {
 
 func (i *Instance) handleErrors() {
 	for err := range i.w.Errors {
-		log.Printf("error in torrent directory watcher: %s", err)
+		slog.Default().Error("error in torrent directory watcher", "err", err)
 	}
 }
 
@@ -78,13 +91,13 @@ func torrentFileInfoHash(fileName string) (ih metainfo.Hash, ok bool) {
 func scanDir(dirName string) (ee map[metainfo.Hash]entity) {
 	d, err := os.Open(dirName)
 	if err != nil {
-		log.Print(err)
+		slog.Default().Error("error opening directory", "err", err)
 		return
 	}
 	defer d.Close()
 	names, err := d.Readdirnames(-1)
 	if err != nil {
-		log.Print(err)
+		slog.Default().Error("error reading directory names", "err", err)
 		return
 	}
 	ee = make(map[metainfo.Hash]entity, len(names))
@@ -113,13 +126,13 @@ func scanDir(dirName string) (ee map[metainfo.Hash]entity) {
 		case ".magnet":
 			uris, err := magnetFileURIs(fullName)
 			if err != nil {
-				log.Print(err)
+				slog.Default().Error("error reading magnet file", "err", err)
 				break
 			}
 			for _, uri := range uris {
 				m, err := metainfo.ParseMagnetUri(uri)
 				if err != nil {
-					log.Printf("error parsing %q in file %q: %s", uri, fullName, err)
+					slog.Default().Error("error parsing magnet URI", "uri", uri, "file", fullName, "err", err)
 					continue
 				}
 				addEntity(entity{
@@ -204,7 +217,6 @@ func New(dirName string) (i *Instance, err error) {
 		dirName:  dirName,
 		Events:   make(chan Event),
 		dirState: make(map[metainfo.Hash]entity),
-		Logger:   log.Default,
 	}
 	go func() {
 		i.refresh()

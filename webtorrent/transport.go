@@ -4,13 +4,13 @@ import (
 	"context"
 	"expvar"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"sync"
 	"time"
 
 	g "github.com/anacrolix/generics"
-	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/pion/datachannel"
@@ -70,7 +70,7 @@ func (me *wrappedPeerConnection) onClose() {
 	}
 }
 
-func newPeerConnection(logger log.Logger, iceServers []webrtc.ICEServer) (*wrappedPeerConnection, error) {
+func newPeerConnection(logger *slog.Logger, iceServers []webrtc.ICEServer) (*wrappedPeerConnection, error) {
 	newPeerConnectionMu.Lock()
 	defer newPeerConnectionMu.Unlock()
 	ctx, span := otel.Tracer(tracerName).Start(context.Background(), "PeerConnection")
@@ -92,7 +92,7 @@ func newPeerConnection(logger log.Logger, iceServers []webrtc.ICEServer) (*wrapp
 	}
 	// If the state change handler intends to call Close, it should call it on the wrapper.
 	wpc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
-		logger.Levelf(log.Debug, "webrtc PeerConnection state changed to %v", state)
+		logger.Debug("webrtc PeerConnection state changed", "state", state)
 		span.AddEvent("connection state changed", trace.WithAttributes(attribute.String("state", state.String())))
 	})
 	return wpc, nil
@@ -114,7 +114,7 @@ func setAndGatherLocalDescription(peerConnection *wrappedPeerConnection, sdp web
 // newOffer creates a transport and returns a WebRTC offer to be announced. See
 // https://github.com/pion/webrtc/blob/master/examples/data-channels/jsfiddle/main.go for what this is modelled on.
 func (tc *TrackerClient) newOffer(
-	logger log.Logger,
+	logger *slog.Logger,
 	offerId string,
 	infoHash [20]byte,
 ) (
@@ -216,7 +216,7 @@ func (tc *TrackerClient) newAnsweringPeerConnection(
 ) (
 	peerConn *wrappedPeerConnection, answer webrtc.SessionDescription, err error,
 ) {
-	peerConn, err = newPeerConnection(tc.Logger, tc.ICEServers)
+	peerConn, err = newPeerConnection(tc.slogger(), tc.ICEServers)
 	if err != nil {
 		err = fmt.Errorf("failed to create new connection: %w", err)
 		return

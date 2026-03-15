@@ -3,9 +3,8 @@ package storage
 import (
 	"cmp"
 	"iter"
+	"log/slog"
 	"os"
-
-	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/types/infohash"
@@ -70,7 +69,7 @@ func pieceCompletionForDir(dir string) (ret PieceCompletion) {
 	ret, err := NewDefaultPieceCompletionForDir(dir)
 	if err != nil {
 		// This kinda sux using the global logger. This code is ancient.
-		log.Levelf(log.Warning, "couldn't open piece completion db in %q: %s", dir, err)
+		slog.Warn("couldn't open piece completion db", "dir", dir, "err", err)
 		ret = NewMapPieceCompletion()
 	}
 	return

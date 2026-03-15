@@ -862,14 +862,14 @@ type announceState struct {
 }
 
 func (cl *Client) startTrackerAnnouncer(u *url.URL, urlStr trackerAnnouncerKey) {
-	cl.regularTrackerAnnounceDispatcher.initTrackerClient(u, urlStr, cl.config, cl.logger)
+	cl.regularTrackerAnnounceDispatcher.initTrackerClient(u, urlStr, cl.config, cl.slogger)
 }
 
 func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 	u *url.URL,
 	urlStr trackerAnnouncerKey,
 	config *ClientConfig,
-	logger analog.Logger,
+	logger *slog.Logger,
 ) {
 	panicif.NotEq(u.String(), string(urlStr))
 	if g.MapContains(me.trackerClients, urlStr) {
@@ -932,7 +932,7 @@ func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 			ServerName:  u.Hostname(),
 		},
 		UdpNetwork:   u.Scheme,
-		Logger:       logger.WithContextValue(fmt.Sprintf("tracker client for %q", urlStr)),
+		Slogger:      logger.With("trackerUrl", string(urlStr)),
 		ListenPacket: config.TrackerListenPacket,
 	})
 	panicif.Err(err)

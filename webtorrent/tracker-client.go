@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -31,7 +32,9 @@ type TrackerClient struct {
 	GetAnnounceRequest func(_ tracker.AnnounceEvent, infoHash [20]byte) (tracker.AnnounceRequest, error)
 	PeerId             [20]byte
 	OnConn             onDataChannelOpen
-	Logger             log.Logger
+	// Deprecated: Use Slogger.
+	Logger  log.Logger
+	Slogger *slog.Logger
 	Dialer             *websocket.Dialer
 
 	mu             sync.Mutex
@@ -53,6 +56,16 @@ type TrackerClient struct {
 	OnDisconnected       func(error)
 	OnAnnounceSuccessful func(ih string)
 	OnAnnounceError      func(ih string, err error)
+}
+
+func (tc *TrackerClient) slogger() *slog.Logger {
+	if tc.Slogger != nil {
+		return tc.Slogger
+	}
+	if !tc.Logger.IsZero() {
+		return tc.Logger.Slogger()
+	}
+	return slog.Default()
 }
 
 func (me *TrackerClient) Stats() TrackerClientStats {
@@ -111,7 +124,7 @@ func (tc *TrackerClient) doWebsocket() error {
 		return fmt.Errorf("dialing tracker: %w", err)
 	}
 	defer c.Close()
-	tc.Logger.Levelf(log.Debug, "connected")
+	tc.slogger().Debug("connected")
 	tc.mu.Lock()
 	tc.wsConn = c
 	tc.cond.Broadcast()
@@ -159,7 +172,7 @@ func (tc *TrackerClient) run() error {
 	for !tc.closed {
 		tc.mu.Unlock()
 		err := tc.doWebsocket()
-		tc.Logger.WithDefaultLevel(log.Debug).Printf("websocket instance ended: %v", err)
+		tc.slogger().Debug("websocket instance ended", "err", err)
 		time.Sleep(time.Minute)
 		tc.mu.Lock()
 	}
@@ -194,7 +207,7 @@ func (tc *TrackerClient) announceOffers() {
 
 	// Iterate over our locally-owned offers, close any existing "invalid" ones from before the
 	// socket reconnected, reannounce the infohash, adding it back into the tc.outboundOffers.
-	tc.Logger.WithDefaultLevel(log.Info).Printf("reannouncing %d infohashes after restart", len(offers))
+	tc.slogger().Info("reannouncing infohashes after restart", "count", len(offers))
 	for _, offer := range offers {
 		// TODO: Capture the errors? Are we even in a position to do anything with them?
 		offer.peerConnection.Close()
@@ -234,7 +247,7 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 	}
 	offerIDBinary := binaryToJsonString(randOfferId[:])
 
-	pc, dc, offer, err := tc.newOffer(tc.Logger, offerIDBinary, infoHash)
+	pc, dc, offer, err := tc.newOffer(tc.slogger(), offerIDBinary, infoHash)
 	if err != nil {
 		return fmt.Errorf("creating offer: %w", err)
 	}
@@ -249,7 +262,7 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 		go tc.removePeerConn(offerIDBinary)
 	})
 
-	tc.Logger.Levelf(log.Debug, "announcing offer")
+	tc.slogger().Debug("announcing offer")
 	err = tc.announce(event, infoHash, []outboundOffer{{
 		offerId: offerIDBinary,
 		outboundOfferValue: outboundOfferValue{
@@ -347,18 +360,18 @@ func (tc *TrackerClient) trackerReadLoop(tracker *websocket.Conn) error {
 		if err != nil {
 			return fmt.Errorf("read message error: %w", err)
 		}
-		tc.Logger.Levelf(log.Debug, "received message: %q", message)
+		tc.slogger().Debug("received message", "message", string(message))
 
 		var ar AnnounceResponse
 		if err := json.Unmarshal(message, &ar); err != nil {
-			tc.Logger.WithDefaultLevel(log.Warning).Printf("error unmarshalling announce response: %v", err)
+			tc.slogger().Warn("error unmarshalling announce response", "err", err)
 			continue
 		}
 		switch {
 		case ar.Offer != nil:
 			ih, err := jsonStringToInfoHash(ar.InfoHash)
 			if err != nil {
-				tc.Logger.WithDefaultLevel(log.Warning).Printf("error decoding info_hash in offer: %v", err)
+				tc.slogger().Warn("error decoding info_hash in offer", "err", err)
 				break
 			}
 			err = tc.handleOffer(offerContext{
@@ -367,7 +380,7 @@ func (tc *TrackerClient) trackerReadLoop(tracker *websocket.Conn) error {
 				InfoHash: ih,
 			}, ar.PeerID)
 			if err != nil {
-				tc.Logger.Levelf(log.Error, "handling offer for infohash %x: %v", ih, err)
+				tc.slogger().Error("handling offer for infohash", "infoHash", ih, "err", err)
 			}
 		case ar.Answer != nil:
 			tc.handleAnswer(ar.OfferID, *ar.Answer)
@@ -377,7 +390,7 @@ func (tc *TrackerClient) trackerReadLoop(tracker *websocket.Conn) error {
 			// infohash.
 			_, err := jsonStringToInfoHash(ar.InfoHash)
 			if err != nil {
-				tc.Logger.Levelf(log.Warning, "unexpected announce response %q", message)
+				tc.slogger().Warn("unexpected announce response", "message", string(message))
 			}
 		}
 	}
@@ -428,16 +441,16 @@ func (tc *TrackerClient) handleAnswer(offerId string, answer webrtc.SessionDescr
 	defer tc.mu.Unlock()
 	offer, ok := tc.outboundOffers[offerId]
 	if !ok {
-		tc.Logger.WithDefaultLevel(log.Warning).Printf("could not find offer for id %+q", offerId)
+		tc.slogger().Warn("could not find offer for id", "offerId", offerId)
 		return
 	}
-	// tc.Logger.WithDefaultLevel(log.Debug).Printf("offer %q got answer %v", offerId, answer)
+	// tc.slogger().WithDefaultLevel(log.Debug).Printf("offer %q got answer %v", offerId, answer)
 	metrics.Add("outbound offers answered", 1)
 	err := offer.peerConnection.SetRemoteDescription(answer)
 	if err != nil {
 		err = fmt.Errorf("using outbound offer answer: %w", err)
 		offer.peerConnection.span.RecordError(err)
-		tc.Logger.LevelPrint(log.Error, err)
+		tc.slogger().Error("error setting remote description", "err", err)
 		return
 	}
 	delete(tc.outboundOffers, offerId)

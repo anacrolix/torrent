@@ -5,6 +5,7 @@ package possumTorrentStorage
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"sort"
 	"strconv"
 
@@ -19,7 +20,19 @@ import (
 // storage.ConsecutiveChunkReader. TODO: This doesn't expose Capacity.
 type Provider struct {
 	possumResource.Provider
-	Logger log.Logger
+	// Deprecated: Use Slogger.
+	Logger  log.Logger
+	Slogger *slog.Logger
+}
+
+func (p Provider) slogger() *slog.Logger {
+	if p.Slogger != nil {
+		return p.Slogger
+	}
+	if !p.Logger.IsZero() {
+		return p.Logger.Slogger()
+	}
+	return slog.Default()
 }
 
 var _ interface {
@@ -57,7 +70,7 @@ type ChunkReader interface {
 // trying to read discontinuous or incomplete sequences of chunks?
 func (p Provider) ChunksReader(dir string) (ret storage.PieceReader, err error) {
 	prefix := dir + "/"
-	p.Logger.Levelf(log.Critical, "ChunkReader(%q)", prefix)
+	p.slogger().Error("ChunkReader", "prefix", prefix)
 	//debug.PrintStack()
 	pr, err := p.Handle.NewReader()
 	if err != nil {
@@ -118,7 +131,7 @@ func (p Provider) ChunksReader(dir string) (ret storage.PieceReader, err error) 
 // TODO: Should the parent ReadConsecutiveChunks method take the expected number of bytes to avoid
 // trying to read discontinuous or incomplete sequences of chunks?
 func (p Provider) ReadConsecutiveChunks(prefix string) (rc io.ReadCloser, err error) {
-	p.Logger.Levelf(log.Debug, "ReadConsecutiveChunks(%q)", prefix)
+	p.slogger().Debug("ReadConsecutiveChunks", "prefix", prefix)
 	//debug.PrintStack()
 	pr, err := p.Handle.NewReader()
 	if err != nil {

@@ -94,7 +94,7 @@ func main() {
 		storageDir := filepath.Join(tmpDir, fmt.Sprintf("client%v", clientIndex))
 		clientConfig := newClientConfig()
 		clientConfig.DefaultStorage = storage.NewMMap(storageDir)
-		clientConfig.Logger = log.Default.WithValues(slog.Int("clientIndex", clientIndex))
+		clientConfig.Logger = log.Default.WithValues(slog.Int("clientIndex", clientIndex)) //nolint:staticcheck
 		//clientConfig.Logger.Levelf(log.Critical, "test")
 		client, err := torrent.NewClient(clientConfig)
 		assertNil(err)

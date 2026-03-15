@@ -2,12 +2,12 @@ package torrent
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"os"
 	"syscall"
 	"testing"
 
-	"github.com/anacrolix/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +30,7 @@ func (m mockSocket) DialerNetwork() string { panic("not implemented") }
 // causing the UDP bind to fail with WSAEACCES (mapped to EACCES) after TCP succeeds.
 func TestListenAllRetryPermissionError(t *testing.T) {
 	callCount := 0
-	mockListen := func(n network, addr string, f firewallCallback, logger log.Logger) (socket, error) {
+	mockListen := func(n network, addr string, f firewallCallback, logger *slog.Logger) (socket, error) {
 		callCount++
 		if callCount == 1 {
 			return mockSocket{addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345}}, nil
@@ -46,7 +46,7 @@ func TestListenAllRetryPermissionError(t *testing.T) {
 		{Network: network{Udp: true, Ipv4: true}, Host: "127.0.0.1"},
 	}
 
-	ss, retry, err := listenAllRetry(nahs, 0, nil, log.Default, mockListen)
+	ss, retry, err := listenAllRetry(nahs, 0, nil, slog.Default(), mockListen)
 	require.Error(t, err)
 	assert.Nil(t, ss, "sockets should be cleaned up on retry")
 	assert.True(t, retry, "should retry when subsequent listen fails with EACCES on dynamic port")
@@ -55,7 +55,7 @@ func TestListenAllRetryPermissionError(t *testing.T) {
 // TestListenAllRetryFirstListenFails verifies that listenAllRetry does NOT retry when the first
 // listen fails, regardless of error type, since no port has been established yet.
 func TestListenAllRetryFirstListenFails(t *testing.T) {
-	mockListen := func(n network, addr string, f firewallCallback, logger log.Logger) (socket, error) {
+	mockListen := func(n network, addr string, f firewallCallback, logger *slog.Logger) (socket, error) {
 		return nil, &os.SyscallError{
 			Syscall: "bind",
 			Err:     syscall.EACCES,
@@ -66,7 +66,7 @@ func TestListenAllRetryFirstListenFails(t *testing.T) {
 		{Network: network{Tcp: true, Ipv4: true}, Host: "127.0.0.1"},
 	}
 
-	ss, retry, err := listenAllRetry(nahs, 0, nil, log.Default, mockListen)
+	ss, retry, err := listenAllRetry(nahs, 0, nil, slog.Default(), mockListen)
 	require.Error(t, err)
 	assert.Nil(t, ss)
 	assert.False(t, retry, "should not retry when first listen fails")
@@ -76,7 +76,7 @@ func TestListenAllRetryFirstListenFails(t *testing.T) {
 // subsequent listen always fails. Without a limit this would loop infinitely.
 func TestListenAllRetryLimit(t *testing.T) {
 	callCount := 0
-	mockListen := func(n network, addr string, f firewallCallback, logger log.Logger) (socket, error) {
+	mockListen := func(n network, addr string, f firewallCallback, logger *slog.Logger) (socket, error) {
 		callCount++
 		if callCount%2 == 1 {
 			// First listen in each attempt succeeds.
@@ -97,7 +97,7 @@ func TestListenAllRetryLimit(t *testing.T) {
 	ss, err := listenAllWithListenFunc(
 		networks,
 		func(string) string { return "127.0.0.1" },
-		0, nil, log.Default, mockListen,
+		0, nil, slog.Default(), mockListen,
 	)
 	require.Error(t, err)
 	assert.Nil(t, ss)

@@ -323,7 +323,7 @@ func (cl *Client) init(cfg *ClientConfig) {
 
 	cl.websocketTrackers = websocketTrackers{
 		PeerId: cl.peerID,
-		Logger: cl.logger.WithNames("websocketTrackers"),
+		Slogger: cl.slogger.With("name", "websocketTrackers"),
 		GetAnnounceRequest: func(
 			event tracker.AnnounceEvent, infoHash [20]byte,
 		) (
@@ -383,7 +383,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		cl.config.ListenHost,
 		cl.config.ListenPort,
 		cl.firewallCallback,
-		cl.logger,
+		cl.slogger,
 	)
 	if err != nil {
 		return

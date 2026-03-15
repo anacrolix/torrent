@@ -165,7 +165,7 @@ func testSeedAfterDownloading(t *testing.T, disableUtp bool) {
 	// to the chunk size it expects.
 	cfg.DisablePEX = true
 	//cfg.Debug = true
-	cfg.Logger = log.Default.WithContextText("leecher")
+	cfg.Logger = log.Default.WithContextText("leecher") //nolint:staticcheck
 	leecher, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	defer leecher.Close()
@@ -176,7 +176,7 @@ func testSeedAfterDownloading(t *testing.T, disableUtp bool) {
 	cfg.Seed = false
 	cfg.DataDir = t.TempDir()
 	cfg.MaxAllocPeerRequestDataPerConn = 4
-	cfg.Logger = log.Default.WithContextText("leecher-leecher")
+	cfg.Logger = log.Default.WithContextText("leecher-leecher") //nolint:staticcheck
 	cfg.Debug = true
 	leecherLeecher, _ := torrent.NewClient(cfg)
 	require.NoError(t, err)

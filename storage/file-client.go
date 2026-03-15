@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	g "github.com/anacrolix/generics"
-	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -76,8 +75,7 @@ func (fs *fileClientImpl) OpenTorrent(
 	infoHash metainfo.Hash,
 ) (_ TorrentImpl, err error) {
 	dir := fs.opts.TorrentDirMaker(fs.opts.ClientBaseDir, info, infoHash)
-	logger := log.ContextLogger(ctx).Slogger()
-	logger.DebugContext(ctx, "opened file torrent storage", slog.String("dir", dir))
+	fs.opts.Logger.DebugContext(ctx, "opened file torrent storage", slog.String("dir", dir))
 	metainfoFileInfos := info.UpvertedFiles()
 	files := make([]fileExtra, len(metainfoFileInfos))
 	for i, fileInfo := range metainfoFileInfos {

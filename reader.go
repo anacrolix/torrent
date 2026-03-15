@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/panicif"
 )
@@ -367,7 +366,7 @@ func (r *reader) updatePieceCompletion(pos int64) {
 	// TODO: Just reset pieces in the readahead window. This might help
 	// prevent thrashing with small caches and file and piece priorities.
 	if !r.t.updatePieceCompletion(firstPieceIndex) {
-		r.logger().Levelf(log.Debug, "piece %d completion unchanged", firstPieceIndex)
+		r.slogger().Debug("piece completion unchanged", "piece", firstPieceIndex)
 	}
 	// Update the rest of the piece completions in the readahead window, without alerting to
 	// changes (since only the first piece, the one above, could have generated the read error
@@ -421,10 +420,6 @@ func (r *reader) Seek(off int64, whence int) (newPos int64, err error) {
 	}
 	r.mu.Unlock()
 	return
-}
-
-func (r *reader) logger() log.Logger {
-	return r.t.logger
 }
 
 // Implementation inspired by https://news.ycombinator.com/item?id=27019613.

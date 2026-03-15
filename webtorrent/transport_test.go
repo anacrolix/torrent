@@ -13,7 +13,8 @@ import (
 
 func TestClosingPeerConnectionDoesNotCloseUnopenedDataChannel(t *testing.T) {
 	var tc TrackerClient
-	pc, dc, _, err := tc.newOffer(log.Default, "", [20]byte{})
+	tc.Logger = log.Default
+	pc, dc, _, err := tc.newOffer(tc.slogger(), "", [20]byte{})
 	qt.Assert(t, qt.IsNil(err))
 	defer pc.Close()
 	defer dc.Close()

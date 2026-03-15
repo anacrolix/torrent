@@ -2,6 +2,7 @@ package tracker
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"net/url"
 
@@ -24,8 +25,20 @@ type NewClientOpts struct {
 	Http trHttp.NewClientOpts
 	// Overrides the network in the scheme. Probably a legacy thing.
 	UdpNetwork   string
-	Logger       log.Logger
+	// Deprecated: Use Slogger.
+	Logger  log.Logger
+	Slogger *slog.Logger
 	ListenPacket func(network, addr string) (net.PacketConn, error)
+}
+
+func (opts NewClientOpts) slogger() *slog.Logger {
+	if opts.Slogger != nil {
+		return opts.Slogger
+	}
+	if !opts.Logger.IsZero() {
+		return opts.Logger.Slogger()
+	}
+	return slog.Default()
 }
 
 func NewClient(urlStr string, opts NewClientOpts) (Client, error) {
@@ -44,7 +57,7 @@ func NewClient(urlStr string, opts NewClientOpts) (Client, error) {
 		cc, err := udp.NewConnClient(udp.NewConnClientOpts{
 			Network:      network,
 			Host:         _url.Host,
-			Logger:       opts.Logger.Slogger(),
+			Logger:       opts.slogger(),
 			ListenPacket: opts.ListenPacket,
 		})
 		if err != nil {

@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"sync"
 	"time"
 
 	"github.com/anacrolix/generics"
-	"github.com/anacrolix/log"
 	"github.com/anacrolix/torrent/types/infohash"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -220,13 +220,13 @@ func (me *AnnounceHandler) augmentPeersFromUpstream(infoHash [20]byte) augmentat
 		go func() {
 			started, err := me.UpstreamAnnounceGate.Start(announceCtx, url, infoHash, announceTimeout)
 			if err != nil {
-				log.Printf("error reserving announce for %x to %v: %v", infoHash, url, err)
+				slog.Error("error reserving announce", "infoHash", hex.EncodeToString(infoHash[:]), "url", url, "err", err)
 			}
 			if err != nil || !started {
 				peersChan <- nil
 				return
 			}
-			log.Printf("announcing %x upstream to %v", infoHash, url)
+			slog.Info("announcing upstream", "infoHash", hex.EncodeToString(infoHash[:]), "url", url)
 			resp, err := client.Announce(announceCtx, subReq, tracker.AnnounceOpt{
 				UserAgent: "aragorn",
 			})
@@ -239,12 +239,12 @@ func (me *AnnounceHandler) augmentPeersFromUpstream(infoHash [20]byte) augmentat
 				}
 				err := me.UpstreamAnnounceGate.Completed(context.Background(), url, infoHash, interval)
 				if err != nil {
-					log.Printf("error recording completed announce for %x to %v: %v", infoHash, url, err)
+					slog.Error("error recording completed announce", "infoHash", hex.EncodeToString(infoHash[:]), "url", url, "err", err)
 				}
 			}()
 			peersChan <- resp.Peers
 			if err != nil {
-				log.Levelf(log.Warning, "error announcing to upstream %q: %v", url, err)
+				slog.Warn("error announcing to upstream", "url", url, "err", err)
 			}
 		}()
 	}
@@ -253,7 +253,7 @@ func (me *AnnounceHandler) augmentPeersFromUpstream(infoHash [20]byte) augmentat
 		pendingUpstreams.Wait()
 		cancel()
 		close(peersChan)
-		log.Levelf(log.Debug, "adding %v distinct peers from upstream trackers", len(peersToTrack))
+		slog.Debug("adding distinct peers from upstream trackers", "count", len(peersToTrack))
 		for _, peer := range peersToTrack {
 			addrPort, ok := peer.ToNetipAddrPort()
 			if !ok {
@@ -270,7 +270,7 @@ func (me *AnnounceHandler) augmentPeersFromUpstream(infoHash [20]byte) augmentat
 			// TODO: How do we know if these peers are leechers or seeders?
 			err := me.AnnounceTracker.TrackAnnounce(context.TODO(), trackReq, addrPort)
 			if err != nil {
-				log.Levelf(log.Error, "error tracking upstream peer: %v", err)
+				slog.Error("error tracking upstream peer", "err", err)
 			}
 		}
 		me.mu.Lock()

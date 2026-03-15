@@ -116,7 +116,7 @@ type ClientConfig struct {
 	DisableIPv4Peers bool
 	// Perform logging and any other behaviour that will help debug.
 	Debug bool `help:"enable debugging"`
-	// If Slogger is set, will be forwarded automatically to Slogger. This is recommended.
+	// Deprecated: Use Slogger. If Slogger is set, Logger will be bridged from it automatically.
 	Logger log.Logger
 	// If unset, falls back to deferring to the old analog Logger.
 	Slogger *slog.Logger

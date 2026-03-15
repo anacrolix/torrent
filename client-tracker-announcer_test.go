@@ -9,7 +9,6 @@ import (
 	"testing/synctest"
 	"time"
 
-	analog "github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/go-quicktest/qt"
 )
@@ -25,7 +24,7 @@ func TestUpdateOverdueRecursion(t *testing.T) {
 		d.initTimerNoop()
 		d.logger = slog.Default()
 		u, _ := url.Parse("http://derp")
-		d.initTrackerClient(u, trackerAnnouncerKey(u.String()), cl.config, analog.Logger{})
+		d.initTrackerClient(u, trackerAnnouncerKey(u.String()), cl.config, slog.Default())
 		// Two values. One that needs to be marked not overdue on the first call to updateOverdue,
 		// and the other that is by a recursive call, and subsequently reversed when we bounce back
 		// out to the original call.

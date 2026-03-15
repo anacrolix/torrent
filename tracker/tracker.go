@@ -3,7 +3,7 @@ package tracker
 import (
 	"context"
 	"errors"
-	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -51,7 +51,19 @@ type Announce struct {
 	// If the port is zero, it's assumed to be the same as the Request.Port.
 	ClientIp6 krpc.NodeAddr
 	Context   context.Context
-	Logger    log.Logger
+	// Deprecated: Use Slogger.
+	Logger  log.Logger
+	Slogger *slog.Logger
+}
+
+func (me Announce) slogger() *slog.Logger {
+	if me.Slogger != nil {
+		return me.Slogger
+	}
+	if !me.Logger.IsZero() {
+		return me.Logger.Slogger()
+	}
+	return slog.Default()
 }
 
 // The code *is* the documentation.
@@ -65,7 +77,7 @@ func (me Announce) Do() (res AnnounceResponse, err error) {
 			ServerName:  me.ServerName,
 		},
 		UdpNetwork:   me.UdpNetwork,
-		Logger:       me.Logger.WithContextValue(fmt.Sprintf("tracker client for %q", me.TrackerUrl)),
+		Slogger:      me.slogger().With("trackerUrl", me.TrackerUrl),
 		ListenPacket: me.ListenPacket,
 	})
 	if err != nil {

@@ -7,12 +7,12 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/netip"
 
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/generics"
-	"github.com/anacrolix/log"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -224,7 +224,7 @@ func RunSimple(ctx context.Context, s *Server, pc net.PacketConn, family udp.Add
 		default:
 			span.SetStatus(codes.Error, "concurrency limit reached")
 			span.End()
-			log.Levelf(log.Debug, "dropping request from %v: concurrency limit reached", addr)
+			slog.Debug("dropping request: concurrency limit reached", "addr", addr)
 			continue
 		case sem <- struct{}{}:
 		}
@@ -234,7 +234,7 @@ func RunSimple(ctx context.Context, s *Server, pc net.PacketConn, family udp.Add
 			defer func() { <-sem }()
 			err := s.HandleRequest(ctx, family, addr, b)
 			if err != nil {
-				log.Printf("error handling %v byte request from %v: %v", n, addr, err)
+				slog.Error("error handling request", "bytes", n, "addr", addr, "err", err)
 			}
 		}()
 	}

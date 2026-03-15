@@ -3,6 +3,7 @@ package torrent
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	netHttp "net/http"
 	"net/url"
@@ -41,6 +42,7 @@ type refCountedWebtorrentTrackerClient struct {
 type websocketTrackers struct {
 	PeerId                     [20]byte
 	Logger                     log.Logger
+	Slogger                    *slog.Logger
 	GetAnnounceRequest         func(event tracker.AnnounceEvent, infoHash [20]byte) (tracker.AnnounceRequest, error)
 	OnConn                     func(webtorrent.DataChannelConn, webtorrent.DataChannelContext)
 	mu                         sync.Mutex
@@ -50,6 +52,16 @@ type websocketTrackers struct {
 	WebsocketTrackerHttpHeader func() netHttp.Header
 	ICEServers                 []webrtc.ICEServer
 	callbacks                  *Callbacks
+}
+
+func (me *websocketTrackers) slogger() *slog.Logger {
+	if me.Slogger != nil {
+		return me.Slogger
+	}
+	if !me.Logger.IsZero() {
+		return me.Logger.Slogger()
+	}
+	return slog.Default()
 }
 
 func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.TrackerClient, func()) {
@@ -69,11 +81,7 @@ func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.Tra
 				GetAnnounceRequest: me.GetAnnounceRequest,
 				PeerId:             me.PeerId,
 				OnConn:             me.OnConn,
-				Logger: me.Logger.WithText(
-					func(m log.Msg) string {
-						return fmt.Sprintf("tracker client for %q: %v", url, m)
-					},
-				),
+				Slogger: me.slogger().With("trackerClientUrl", url),
 				WebsocketTrackerHttpHeader: me.WebsocketTrackerHttpHeader,
 				ICEServers:                 me.ICEServers,
 				OnConnected: func(err error) {
@@ -117,7 +125,7 @@ func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.Tra
 		}
 		value.TrackerClient.Start(func(err error) {
 			if err != nil {
-				me.Logger.Printf("error running tracker client for %q: %v", url, err)
+				me.slogger().Error("error running tracker client", "url", url, "err", err)
 			}
 		})
 		if me.clients == nil {

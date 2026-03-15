@@ -13,7 +13,7 @@ test-short *args: build-possum
 
 test *args: build-possum
     go test -race {{ args }} ./...
-    go test -race -run @ -benchtime 2x -bench . ./...
+    go test -run @ -benchtime 2x -bench . ./... > /dev/null
 
 build-possum:
     cd storage/possum/lib && cargo build

@@ -112,6 +112,7 @@ type fileMmap struct {
 	f        *os.File
 	refs     atomic.Int32
 	writable bool
+	closed   bool
 }
 
 func (me *fileMmap) dec() error {
@@ -128,8 +129,10 @@ func (me *fileMmap) close() (err error) {
 	// file storage implementation (like with NewReader, which don't provide for it).
 	me.mu.Lock()
 	defer me.mu.Unlock()
-	// There's no double-close protection here. Not sure if that's an issue. Probably not since we
-	// don't evict the store's reference anywhere for now.
+	if me.closed {
+		return
+	}
+	me.closed = true
 	return errors.Join(me.m.Unmap(), me.f.Close())
 }
 

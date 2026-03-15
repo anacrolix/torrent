@@ -1,7 +1,7 @@
 package typedRoaring
 
 import (
-	"github.com/RoaringBitmap/roaring"
+	"github.com/RoaringBitmap/roaring/v2"
 )
 
 type Iterator[T BitConstraint] struct {

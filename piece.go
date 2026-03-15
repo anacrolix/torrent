@@ -7,7 +7,7 @@ import (
 	"iter"
 	"sync"
 
-	"github.com/RoaringBitmap/roaring"
+	"github.com/RoaringBitmap/roaring/v2"
 	"github.com/anacrolix/chansync"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/bitmap"
@@ -462,4 +462,3 @@ func (p *Piece) publishStateChange() {
 		})
 	}
 }
-

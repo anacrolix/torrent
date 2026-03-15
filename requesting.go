@@ -9,7 +9,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/RoaringBitmap/roaring"
+	"github.com/RoaringBitmap/roaring/v2"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/log"

@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/RoaringBitmap/roaring"
+	"github.com/RoaringBitmap/roaring/v2"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"golang.org/x/net/http2"
@@ -26,8 +26,8 @@ import (
 
 type webseedPeer struct {
 	// First field for stats alignment.
-	peer   Peer
-	client webseed.Client
+	peer           Peer
+	client         webseed.Client
 	activeRequests map[*webseedRequest]struct{}
 	locker         sync.Locker
 	hostKey        webseedHostKeyHandle

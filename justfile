@@ -1,4 +1,4 @@
-export CGO_LDFLAGS := '-Lstorage/possum/lib/target/debug'
+export CGO_LDFLAGS := env_var_or_default('CGO_LDFLAGS', '') + ' -Lstorage/possum/lib/target/debug'
 
 check:
     go test -run @ -failfast ./... > /dev/null

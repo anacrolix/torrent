@@ -101,6 +101,8 @@ func testStreamSintel(t *testing.T, mount MountFunc) {
 		<-cleanupCtx.Done()
 		tfs.Destroy()
 		unmount()
+		// Cancel ctx so the goroutine watching it closes f, unblocking f.WriteTo.
+		cancel()
 	}()
 
 	go func() {

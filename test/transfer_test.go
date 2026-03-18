@@ -204,6 +204,12 @@ func testSeedAfterDownloading(t *testing.T, disableUtp bool) {
 		// Prioritize a region, and ensure it's been hashed, so we want connections.
 		r := llg.NewReader()
 		llg.VerifyDataContext(context.TODO())
+		// After VerifyDataContext, _pendingPieces is empty: pieces are hashed and
+		// effectivePriority()==None (reader goroutine hasn't called Read yet), so they're
+		// removed from _pendingPieces. Without DownloadAll here, needData()=false and
+		// wantIncomingConns()=false when the leecher connects, causing rejection. The
+		// leecher doesn't retry (peer was popped from the queue), causing a deadlock.
+		llg.DownloadAll()
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

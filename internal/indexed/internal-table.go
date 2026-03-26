@@ -11,7 +11,8 @@ import (
 type table[R Record] struct {
 	minRecord g.Option[R]
 	set       btreeSet[R]
-	// Tracks changes to the btree
+	// Incremented on every Change call, even no-ops. Read by iterators after each yield so the
+	// race detector can catch concurrent modification, and to panic if modification is detected.
 	version       int
 	cmp           CompareFunc[R]
 	insteadOf     []InsteadOf[R]
@@ -28,7 +29,9 @@ func (me *table[R]) GetCmp() CompareFunc[R] {
 }
 
 func (me *table[R]) SetMinRecord(min R) {
-	panicif.GreaterThan(me.cmp(min, me.minRecord.Value), 0)
+	if me.minRecord.Ok {
+		panicif.GreaterThan(me.cmp(min, me.minRecord.Value), 0)
+	}
 	me.minRecord.Set(min)
 }
 
@@ -37,6 +40,10 @@ func (me *table[R]) Init(cmp CompareFunc[R]) {
 	me.inited = true
 	me.set = makeBtreeSet(cmp)
 	me.cmp = cmp
+}
+
+func (me *table[R]) incVersion() {
+	me.version++
 }
 
 func (me *table[R]) runTriggers(old, new g.Option[R]) {
@@ -49,12 +56,16 @@ func (me *table[R]) OnChange(t triggerFunc[R]) {
 	me.triggers = append(me.triggers, t)
 }
 
-func (me *table[R]) incVersion() {
-	me.version++
-}
-
 func (me *table[R]) IterFrom(start R) iter.Seq[R] {
-	return me.set.IterFrom(start)
+	return func(yield func(R) bool) {
+		v := me.version
+		for r := range me.set.IterFrom(start) {
+			if !yield(r) {
+				return
+			}
+			panicif.NotEq(me.version, v)
+		}
+	}
 }
 
 func (me *table[R]) IterFromWhile(gte R, while func(R) bool) iter.Seq[R] {
@@ -93,6 +104,7 @@ func (me *table[R]) CreateOrReplace(r R) {
 }
 
 func (me *table[R]) Iter(yield func(R) bool) {
+	v := me.version
 	for r := range me.set.Iter {
 		if me.minRecord.Ok && amortize.Try() {
 			panicif.LessThan(me.cmp(r, me.minRecord.Value), 0)
@@ -100,6 +112,7 @@ func (me *table[R]) Iter(yield func(R) bool) {
 		if !yield(r) {
 			return
 		}
+		panicif.NotEq(me.version, v)
 	}
 }
 

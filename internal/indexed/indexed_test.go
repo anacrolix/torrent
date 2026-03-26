@@ -8,6 +8,45 @@ import (
 	"github.com/go-quicktest/qt"
 )
 
+// Tests that modifying the table from another goroutine during iteration is detected. The goroutine
+// completes the modification before the next version check, so the check panics rather than the
+// race detector firing — but running with -race would also catch unsynchronized access.
+func TestConcurrentModificationDetected(t *testing.T) {
+	var a Table[int]
+	a.Init(cmp.Compare)
+	a.Create(1)
+	a.Create(2)
+	a.Create(3)
+
+	iterating := make(chan struct{})
+	modified := make(chan struct{})
+
+	go func() {
+		<-iterating
+		a.Create(100)
+		close(modified)
+	}()
+
+	panicked := func() (panicked bool) {
+		defer func() {
+			if recover() != nil {
+				panicked = true
+			}
+		}()
+		first := true
+		for range a.Iter {
+			if first {
+				first = false
+				close(iterating)
+				<-modified
+			}
+		}
+		return
+	}()
+
+	qt.Assert(t, qt.IsTrue(panicked))
+}
+
 func TestUpdateOrCreate(t *testing.T) {
 	var a Map[string, int]
 	a.Init(cmp.Compare)

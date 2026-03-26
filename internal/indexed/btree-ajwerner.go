@@ -7,17 +7,10 @@ import (
 
 	"github.com/anacrolix/btree"
 	g "github.com/anacrolix/generics"
-	"github.com/anacrolix/missinggo/v2/panicif"
 )
 
-type btreeIterator[R any] struct {
-	btree.MapIterator[R, struct{}]
-	version int
-}
-
 type ajwernerBtreeSet[R any] struct {
-	inner   btree.Set[R]
-	version int
+	inner btree.Set[R]
 }
 
 func (me *ajwernerBtreeSet[R]) Delete(r R) (actual R, removed bool) {
@@ -38,19 +31,8 @@ func (me *ajwernerBtreeSet[R]) Len() int {
 	return me.inner.Len()
 }
 
-func (me *ajwernerBtreeSet[R]) getBtreeIterator() btreeIterator[R] {
-	return btreeIterator[R]{
-		MapIterator: me.inner.Iterator(),
-		version:     me.version,
-	}
-}
-
-func (me *ajwernerBtreeSet[R]) assertIteratorVersion(it btreeIterator[R]) {
-	panicif.NotEq(me.version, it.version)
-}
-
 func (me *ajwernerBtreeSet[R]) Iter(yield func(R) bool) {
-	it := me.getBtreeIterator()
+	it := me.inner.Iterator()
 	for it.First(); it.Valid(); it.Next() {
 		if !yield(it.Cur()) {
 			return
@@ -60,19 +42,18 @@ func (me *ajwernerBtreeSet[R]) Iter(yield func(R) bool) {
 
 func (me *ajwernerBtreeSet[R]) IterFrom(start R) iter.Seq[R] {
 	return func(yield func(R) bool) {
-		it := me.getBtreeIterator()
+		it := me.inner.Iterator()
 		it.SeekGE(start)
 		for ; it.Valid(); it.Next() {
 			if !yield(it.Cur()) {
 				return
 			}
-			me.assertIteratorVersion(it)
 		}
 	}
 }
 
 func (me *ajwernerBtreeSet[R]) GetGte(start R) (_ g.Option[R]) {
-	it := me.getBtreeIterator()
+	it := me.inner.Iterator()
 	it.SeekGE(start)
 	if !it.Valid() {
 		return

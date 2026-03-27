@@ -11,7 +11,6 @@ import (
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -101,7 +100,7 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 	}
 	assert.Len(b, t.readers, 7)
 	for i := 0; i < t.numPieces(); i += 3 {
-		t._completedPieces.Add(bitmap.BitIndex(i))
+		t._completedPieces.Add(i)
 	}
 	t.DownloadPieces(0, t.numPieces())
 	for b.Loop() {

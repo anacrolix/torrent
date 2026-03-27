@@ -318,7 +318,7 @@ func (p *Peer) allowSendNotInterested() bool {
 		return false
 	}
 	// Allow losing interest if we have all the pieces the peer has.
-	return roaring.AndNot(p.peerPieces(), &p.t._completedPieces).IsEmpty()
+	return roaring.AndNot(p.peerPieces(), &p.t._completedPieces.Bitmap).IsEmpty()
 }
 
 // Transmit/action the request state to the peer. This includes work-stealing from other peers and

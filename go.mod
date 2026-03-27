@@ -3,8 +3,7 @@ module github.com/anacrolix/torrent
 go 1.24.0
 
 require (
-	github.com/RoaringBitmap/roaring v1.2.3
-	github.com/RoaringBitmap/roaring/v2 v2.15.0
+	github.com/RoaringBitmap/roaring/v2 v2.16.0
 	github.com/alexflint/go-arg v1.4.3
 	github.com/anacrolix/bargle v1.0.0
 	github.com/anacrolix/bargle/v2 v2.0.0

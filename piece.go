@@ -10,7 +10,6 @@ import (
 	"github.com/RoaringBitmap/roaring/v2"
 	"github.com/anacrolix/chansync"
 	g "github.com/anacrolix/generics"
-	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/panicif"
 
 	"github.com/anacrolix/torrent/merkle"
@@ -277,13 +276,13 @@ func (p *Piece) purePriority() (ret PiecePriority) {
 	for _, f := range p.files() {
 		ret.Raise(f.prio)
 	}
-	if p.t.readerNowPieces().Contains(bitmap.BitIndex(p.index)) {
+	if p.t.readerNowPieces().Contains(p.index) {
 		ret.Raise(PiecePriorityNow)
 	}
 	// if t._readerNowPieces.Contains(piece - 1) {
 	// 	return PiecePriorityNext
 	// }
-	if p.t.readerReadaheadPieces().Contains(bitmap.BitIndex(p.index)) {
+	if p.t.readerReadaheadPieces().Contains(p.index) {
 		ret.Raise(PiecePriorityReadahead)
 	}
 	ret.Raise(p.priority)

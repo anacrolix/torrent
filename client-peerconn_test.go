@@ -9,7 +9,6 @@ import (
 
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -164,7 +163,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	for _, pc := range leecherPeerConns {
 		completed := pc.PeerPieces().GetCardinality()
 		t.Logf("peer conn %v has %v completed pieces", pc, completed)
-		if completed == bitmap.BitRange(leecherTorrent.Info().NumPieces()) {
+		if completed == uint64(leecherTorrent.Info().NumPieces()) {
 			foundSeeder = true
 		}
 	}

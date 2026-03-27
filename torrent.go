@@ -32,7 +32,6 @@ import (
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/missinggo/v2/pubsub"
 	"github.com/anacrolix/multiless"
@@ -171,15 +170,15 @@ type Torrent struct {
 	gotMetainfoC chan struct{}
 
 	readers                map[*reader]struct{}
-	_readerNowPieces       bitmap.Bitmap
-	_readerReadaheadPieces bitmap.Bitmap
+	_readerNowPieces       typedRoaring.Bitmap[pieceIndex]
+	_readerReadaheadPieces typedRoaring.Bitmap[pieceIndex]
 
 	// A cache of pieces we need to get. Calculated from various piece and file priorities and
 	// completion states elsewhere. Includes piece data and piece v2 hashes. Used for efficient set
 	// logic with peer pieces.
-	_pendingPieces roaring.Bitmap
+	_pendingPieces typedRoaring.Bitmap[pieceIndex]
 	// A cache of completed piece indices.
-	_completedPieces roaring.Bitmap
+	_completedPieces typedRoaring.Bitmap[pieceIndex]
 	// Pieces that need to be hashed.
 	piecesQueuedForHash typedRoaring.Bitmap[pieceIndex]
 	activePieceHashes   int
@@ -275,12 +274,12 @@ func (t *Torrent) incPieceAvailability(i pieceIndex) {
 	}
 }
 
-func (t *Torrent) readerNowPieces() bitmap.Bitmap {
-	return t._readerNowPieces
+func (t *Torrent) readerNowPieces() *typedRoaring.Bitmap[pieceIndex] {
+	return &t._readerNowPieces
 }
 
-func (t *Torrent) readerReadaheadPieces() bitmap.Bitmap {
-	return t._readerReadaheadPieces
+func (t *Torrent) readerReadaheadPieces() *typedRoaring.Bitmap[pieceIndex] {
+	return &t._readerReadaheadPieces
 }
 
 func (t *Torrent) ignorePieceForRequests(i pieceIndex) bool {
@@ -339,7 +338,7 @@ func (t *Torrent) setChunkSize(size pp.Integer) {
 }
 
 func (t *Torrent) pieceComplete(piece pieceIndex) bool {
-	return t._completedPieces.Contains(bitmap.BitIndex(piece))
+	return t._completedPieces.Contains(piece)
 }
 
 func (t *Torrent) pieceCompleteUncached(piece pieceIndex) (ret storage.Completion) {
@@ -1061,7 +1060,7 @@ func iterFlipped(b *roaring.Bitmap, end uint64, cb func(uint32) bool) {
 }
 
 func (t *Torrent) bytesLeft() (left int64) {
-	iterFlipped(&t._completedPieces, uint64(t.numPieces()), func(x uint32) bool {
+	iterFlipped(&t._completedPieces.Bitmap, uint64(t.numPieces()), func(x uint32) bool {
 		p := t.piece(pieceIndex(x))
 		left += int64(p.length() - p.numDirtyBytes())
 		return true
@@ -1186,7 +1185,7 @@ func (t *Torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
 
 func (t *Torrent) bitfield() (bf []bool) {
 	bf = make([]bool, t.numPieces())
-	t._completedPieces.Iterate(func(piece uint32) (again bool) {
+	t._completedPieces.Iterate(func(piece pieceIndex) (again bool) {
 		bf[piece] = true
 		return true
 	})
@@ -1363,7 +1362,7 @@ func (t *Torrent) haveAllPieces() bool {
 	if !t.haveInfo() {
 		return false
 	}
-	return t._completedPieces.GetCardinality() == bitmap.BitRange(t.numPieces())
+	return t._completedPieces.GetCardinality() == uint64(t.numPieces())
 }
 
 func (t *Torrent) havePiece(index pieceIndex) bool {
@@ -1411,7 +1410,7 @@ func chunkIndexFromChunkSpec(cs ChunkSpec, chunkSize pp.Integer) chunkIndexType 
 }
 
 func (t *Torrent) wantPieceIndex(index pieceIndex) bool {
-	return !t._pendingPieces.IsEmpty() && t._pendingPieces.Contains(uint32(index))
+	return !t._pendingPieces.IsEmpty() && t._pendingPieces.Contains(index)
 }
 
 // A pool of []*PeerConn, to reduce allocations in functions that need to index or sort Torrent
@@ -1530,7 +1529,7 @@ func (t *Torrent) maybeNewConns() {
 }
 
 func (t *Torrent) updatePeerRequestsForPiece(piece pieceIndex, reason updateRequestReason) {
-	if !t._pendingPieces.Contains(uint32(piece)) {
+	if !t._pendingPieces.Contains(piece) {
 		// Non-pending pieces are usually cancelled more synchronously.
 		return
 	}
@@ -1564,9 +1563,9 @@ func (t *Torrent) updatePendingPieces(piece pieceIndex) bool {
 	p := t.piece(piece)
 	newPrio := p.effectivePriority()
 	if newPrio == PiecePriorityNone && p.haveHash() {
-		return t._pendingPieces.CheckedRemove(uint32(piece))
+		return t._pendingPieces.CheckedRemove(piece)
 	} else {
-		return t._pendingPieces.CheckedAdd(uint32(piece))
+		return t._pendingPieces.CheckedAdd(piece)
 	}
 }
 
@@ -1797,9 +1796,8 @@ func (t *Torrent) setCachedPieceCompletion(piece int, uncached g.Option[bool]) b
 	if !p.storageCompletionHasBeenOk {
 		p.storageCompletionHasBeenOk = p.storageCompletionOk
 	}
-	x := uint32(piece)
 	if uncached.Ok && uncached.Value {
-		if t._completedPieces.CheckedAdd(x) {
+		if t._completedPieces.CheckedAdd(piece) {
 			// This is missing conditions... do we care?
 			if t.haveAllPieces() {
 				// We may be able to send Completed event.
@@ -1807,7 +1805,7 @@ func (t *Torrent) setCachedPieceCompletion(piece int, uncached g.Option[bool]) b
 			}
 		}
 	} else {
-		t._completedPieces.Remove(x)
+		t._completedPieces.Remove(piece)
 	}
 	return changed
 
@@ -1867,11 +1865,11 @@ func (t *Torrent) maybeCompleteMetadata() error {
 	return nil
 }
 
-func (t *Torrent) readerPiecePriorities() (now, readahead bitmap.Bitmap) {
+func (t *Torrent) readerPiecePriorities() (now, readahead typedRoaring.Bitmap[pieceIndex]) {
 	t.forReaderOffsetPieces(func(begin, end pieceIndex) bool {
 		if end > begin {
-			now.Add(bitmap.BitIndex(begin))
-			readahead.AddRange(bitmap.BitRange(begin)+1, bitmap.BitRange(end))
+			now.Add(begin)
+			readahead.AddRange(uint64(begin)+1, uint64(end))
 		}
 		return true
 	})
@@ -3780,7 +3778,7 @@ func (t *Torrent) piecesMightBePartial(beginPieceIndex, endPieceIndex int) bool 
 	// Check for mixed completion.
 	var r roaring.Bitmap
 	r.AddRange(uint64(beginPieceIndex), uint64(endPieceIndex))
-	switch t._completedPieces.AndCardinality(&r) {
+	switch t._completedPieces.Bitmap.AndCardinality(&r) {
 	case 0, uint64(endPieceIndex - beginPieceIndex):
 		// We have either no pieces or all pieces and no dirty chunks.
 		return false

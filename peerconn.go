@@ -20,11 +20,12 @@ import (
 	"github.com/anacrolix/chansync"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/multiless"
 
 	"golang.org/x/time/rate"
+
+	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 
 	"github.com/anacrolix/torrent/bencode"
 	requestStrategy "github.com/anacrolix/torrent/internal/request-strategy"
@@ -48,7 +49,7 @@ type PeerConn struct {
 
 	// Indexed by metadata piece, set to true if posted and pending a response.
 	metadataRequests []bool
-	sentHaves        bitmap.Bitmap
+	sentHaves        typedRoaring.Bitmap[pieceIndex]
 	// Chunks that we might reasonably expect to receive from the peer. Due to latency, buffering,
 	// and implementation differences, we may receive chunks that are no longer in the set of
 	// requests actually want. This could use a roaring.BSI if the memory use becomes noticeable.
@@ -93,7 +94,7 @@ type PeerConn struct {
 	pex              pexConnState
 
 	// The pieces the peer has claimed to have.
-	_peerPieces roaring.Bitmap
+	_peerPieces typedRoaring.Bitmap[pieceIndex]
 	// The peer has everything. This can occur due to a special message, when
 	// we may not even know the number of pieces in the torrent yet.
 	peerSentHaveAll bool
@@ -216,12 +217,12 @@ func (cn *PeerConn) onGotInfo(info *metainfo.Info) {
 // Correct the PeerPieces slice length. Return false if the existing slice is invalid, such as by
 // receiving badly sized BITFIELD, or invalid HAVE messages.
 func (cn *PeerConn) setNumPieces(num pieceIndex) {
-	cn._peerPieces.RemoveRange(bitmap.BitRange(num), bitmap.ToEnd)
+	cn._peerPieces.RemoveRange(uint64(num), roaring.MaxRange)
 	cn.peerPiecesChanged()
 }
 
 func (cn *PeerConn) peerPieces() *roaring.Bitmap {
-	return &cn._peerPieces
+	return &cn._peerPieces.Bitmap
 }
 
 func (cn *PeerConn) connectionFlags() string {
@@ -421,18 +422,18 @@ func (cn *PeerConn) fillWriteBuffer() {
 }
 
 func (cn *PeerConn) have(piece pieceIndex) {
-	if cn.sentHaves.Get(bitmap.BitIndex(piece)) {
+	if cn.sentHaves.Contains(piece) {
 		return
 	}
 	cn.write(pp.Message{
 		Type:  pp.Have,
 		Index: pp.Integer(piece),
 	})
-	cn.sentHaves.Add(bitmap.BitIndex(piece))
+	cn.sentHaves.Add(piece)
 }
 
 func (cn *PeerConn) postBitfield() {
-	if cn.sentHaves.Len() != 0 {
+	if !cn.sentHaves.IsEmpty() {
 		panic("bitfield must be first have-related message sent")
 	}
 	if !cn.t.haveAnyPieces() {
@@ -442,7 +443,7 @@ func (cn *PeerConn) postBitfield() {
 		Type:     pp.Bitfield,
 		Bitfield: cn.t.bitfield(),
 	})
-	cn.sentHaves = bitmap.Bitmap{cn.t._completedPieces.Clone()}
+	cn.sentHaves = cn.t._completedPieces.Clone()
 }
 
 func (cn *PeerConn) handleOnNeedUpdateRequests() {
@@ -467,7 +468,7 @@ func (cn *PeerConn) peerSentHave(piece pieceIndex) error {
 	if !cn.peerHasPiece(piece) {
 		cn.t.incPieceAvailability(piece)
 	}
-	cn._peerPieces.Add(uint32(piece))
+	cn._peerPieces.Add(piece)
 	if cn.t.wantPieceIndex(piece) {
 		cn.onNeedUpdateRequests("have")
 	}
@@ -503,13 +504,13 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 			panic("if peer has all, we expect no individual peer pieces to be set")
 		}
 	} else {
-		bm.Xor(&cn._peerPieces)
+		bm.Xor(&cn._peerPieces.Bitmap)
 	}
 	cn.peerSentHaveAll = false
 	// bm is now 'on' for pieces that are changing
 	bm.Iterate(func(x uint32) bool {
 		pi := pieceIndex(x)
-		if cn._peerPieces.Contains(x) {
+		if cn._peerPieces.Contains(pi) {
 			// Then we must be losing this piece
 			cn.t.decPieceAvailability(pi)
 		} else {
@@ -535,8 +536,8 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 func (cn *PeerConn) onPeerHasAllPiecesNoTriggers() {
 	t := cn.t
 	if t.haveInfo() {
-		cn._peerPieces.Iterate(func(x uint32) bool {
-			t.decPieceAvailability(pieceIndex(x))
+		cn._peerPieces.Iterate(func(x pieceIndex) bool {
+			t.decPieceAvailability(x)
 			return true
 		})
 	}

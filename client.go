@@ -30,7 +30,6 @@ import (
 	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
@@ -1282,7 +1281,7 @@ func (pc *PeerConn) sendInitialMessages() {
 		if pc.fastEnabled() {
 			if t.haveAllPieces() {
 				pc.write(pp.Message{Type: pp.HaveAll})
-				pc.sentHaves.AddRange(0, bitmap.BitRange(pc.t.NumPieces()))
+				pc.sentHaves.AddRange(0, uint64(pc.t.NumPieces()))
 				return
 			} else if !t.haveAnyPieces() {
 				pc.write(pp.Message{Type: pp.HaveNone})

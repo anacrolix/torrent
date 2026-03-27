@@ -5,7 +5,6 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 	g "github.com/anacrolix/generics"
-	"github.com/anacrolix/missinggo/v2/bitmap"
 
 	"github.com/anacrolix/torrent/metainfo"
 	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
@@ -78,7 +77,7 @@ func fileBytesLeft(
 	}
 
 	noCompletedMiddlePieces := roaring.New()
-	noCompletedMiddlePieces.AddRange(bitmap.BitRange(fileFirstPieceIndex), bitmap.BitRange(fileEndPieceIndex))
+	noCompletedMiddlePieces.AddRange(uint64(fileFirstPieceIndex), uint64(fileEndPieceIndex))
 	noCompletedMiddlePieces.AndNot(torrentCompletedPieces)
 	noCompletedMiddlePieces.Iterate(func(pieceIndex uint32) bool {
 		i := int(pieceIndex)
@@ -114,8 +113,8 @@ func fileBytesLeft(
 	//
 	//numPiecesSpanned := f.EndPieceIndex() - f.BeginPieceIndex()
 	//completedMiddlePieces := f.t._completedPieces.Clone()
-	//completedMiddlePieces.RemoveRange(0, bitmap.BitRange(f.BeginPieceIndex()+1))
-	//completedMiddlePieces.RemoveRange(bitmap.BitRange(f.EndPieceIndex()-1), bitmap.ToEnd)
+	//completedMiddlePieces.RemoveRange(0, uint64(f.BeginPieceIndex()+1))
+	//completedMiddlePieces.RemoveRange(uint64(f.EndPieceIndex()-1), roaring.MaxRange)
 	//left += int64(numPiecesSpanned-2-pieceIndex(completedMiddlePieces.GetCardinality())) * torrentUsualPieceSize
 	return
 }
@@ -127,7 +126,7 @@ func (f *File) bytesLeft() (left int64) {
 		f.EndPieceIndex(),
 		f.offset,
 		f.length,
-		&f.t._completedPieces,
+		&f.t._completedPieces.Bitmap,
 		func(pieceIndex int) int64 {
 			return int64(f.t.piece(pieceIndex).numDirtyBytes())
 		},

@@ -15,7 +15,6 @@ import (
 	"github.com/anacrolix/chansync"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/multiless"
 
@@ -474,7 +473,7 @@ func (c *Peer) peerHasWantedPieces() bool {
 	if !c.t.haveInfo() {
 		return !c.peerPieces().IsEmpty()
 	}
-	return c.peerPieces().Intersects(&c.t._pendingPieces)
+	return c.peerPieces().Intersects(&c.t._pendingPieces.Bitmap)
 }
 
 func (c *Peer) peerPriority() (peerPriority, error) {
@@ -510,9 +509,9 @@ func (cn *Peer) newPeerPieces() *roaring.Bitmap {
 	ret := cn.peerPieces().Clone()
 	if all, _ := cn.peerHasAllPieces(); all {
 		if cn.t.haveInfo() {
-			ret.AddRange(0, bitmap.BitRange(cn.t.numPieces()))
+			ret.AddRange(0, uint64(cn.t.numPieces()))
 		} else {
-			ret.AddRange(0, bitmap.ToEnd)
+			ret.AddRange(0, roaring.MaxRange)
 		}
 	}
 	return ret

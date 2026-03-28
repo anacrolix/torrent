@@ -123,7 +123,7 @@ type tcpSocket struct {
 
 type listenFunc func(n network, addr string, f firewallCallback, logger *slog.Logger) (socket, error)
 
-const listenAllRetryLimit = 10
+const listenAllRetryLimit = 150
 
 func listenAll(
 	networks []network,

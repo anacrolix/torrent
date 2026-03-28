@@ -17,6 +17,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
+      - name: Fix Windows dynamic port range
+        shell: pwsh
+        run: |
+          netsh int ipv4 set dynamicport tcp start=20000 num=16384
+          netsh int ipv4 set dynamicport udp start=20000 num=16384
       - run: go mod download
       - name: Test packages
         run: go test -count=1 ./...

@@ -51,6 +51,32 @@ func (me *webseedPeer) convict(err error, term time.Duration) {
 	me.penanceComplete = time.Now().Add(term)
 }
 
+// webseedFileUnavailable reports whether an HTTP status code means this webseed
+// does not (and will not) serve the requested file. Pieces for such files should
+// be removed from the webseed's bitmap rather than convicting the whole peer.
+func webseedFileUnavailable(statusCode int) bool {
+	switch statusCode {
+	case 403, // Forbidden
+		404, // Not Found
+		410, // Gone
+		451: // Unavailable For Legal Reasons
+		return true
+	}
+	return false
+}
+
+// removeFilePieces removes pieces for the given file index from this webseed's bitmap.
+// Must be called with the client lock held.
+// TODO: Re-add pieces after an interval in case the file becomes available later.
+func (ws *webseedPeer) removeFilePieces(fi int) {
+	for pi := range ws.peer.t.Files()[fi].PieceIndices() {
+		if ws.client.Pieces.CheckedRemove(uint32(pi)) {
+			ws.peer.t.decPieceAvailability(pieceIndex(pi))
+		}
+	}
+	ws.peer.cl.updateWebseedRequestsWithReason("file unavailable on webseed")
+}
+
 func (*webseedPeer) allConnStatsImplField(stats *AllConnStats) *ConnStats {
 	return &stats.WebSeeds
 }
@@ -70,11 +96,11 @@ func (me *webseedPeer) isLowOnRequests() bool {
 	return false
 }
 
-// Webseed requests are issued globally so per-connection reasons or handling make no sense.
+// Trigger the webseed request scheduler if this webseed's URL is under-utilized.
 func (me *webseedPeer) onNeedUpdateRequests(reason updateRequestReason) {
-	// Too many reasons here: Can't predictably determine when we need to rerun updates.
-	// TODO: Can trigger this when we have Client-level active-requests map.
-	//me.peer.cl.scheduleImmediateWebseedRequestUpdate(reason)
+	if me.peer.cl.webseedHostLowOnRequests(me.hostKey) {
+		me.peer.cl.updateWebseedRequestsWithReason(reason)
+	}
 }
 
 func (me *webseedPeer) expectingChunks() bool {
@@ -257,10 +283,8 @@ func (ws *webseedPeer) sliceProcessor(webseedRequest *webseedRequest) {
 	// Delete this entry after waiting above on an error, to prevent more requests.
 	ws.deleteActiveRequest(webseedRequest)
 	cl := ws.peer.cl
-	if err == nil && cl.numWebSeedRequests[ws.hostKey] == webseedHostRequestConcurrency/2 {
-		cl.updateWebseedRequestsWithReason("webseedPeer.runRequest low water")
-	} else if cl.numWebSeedRequests[ws.hostKey] == 0 {
-		cl.updateWebseedRequestsWithReason("webseedPeer.runRequest zero requests")
+	if cl.webseedHostLowOnRequests(ws.hostKey) {
+		cl.updateWebseedRequestsWithReason("webseedPeer.runRequest low on requests")
 	}
 	locker.Unlock()
 }
@@ -341,10 +365,25 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 		// We need this early for the convict call.
 		ws.peer.locker().Lock()
 		if err != nil {
-			// TODO: Pick out missing files or associate error with file. See also
-			// webseed.ReadRequestPartError.
 			if !wr.cancelled.Load() {
-				ws.convict(err, time.Minute)
+				var rpe webseed.ReadRequestPartError
+				if errors.As(err, &rpe) {
+					var badResp webseed.ErrBadResponse
+					if errors.As(rpe.Err, &badResp) && webseedFileUnavailable(badResp.Response.StatusCode) {
+						ws.slogger().Info(
+							"file not available on webseed, removing pieces",
+							"fileIndex", rpe.FileIndex,
+							"status", badResp.Response.StatusCode,
+						)
+						ws.removeFilePieces(rpe.FileIndex)
+						ws.peer.locker().Unlock()
+						err = nil
+						return
+					}
+				}
+				if err != nil {
+					ws.convict(err, time.Minute)
+				}
 			}
 			ws.peer.locker().Unlock()
 			err = fmt.Errorf("reading chunk: %w", err)

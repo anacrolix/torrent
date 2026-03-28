@@ -1965,6 +1965,13 @@ func (cl *Client) underWebSeedHttpRequestLimit(key webseedHostKeyHandle) bool {
 	return cl.numWebSeedRequests[key] < webseedHostRequestConcurrency
 }
 
+// webseedHostLowOnRequests reports whether a webseed host's active request count is low enough
+// to warrant scheduling more requests (at zero or at/below the low-water mark).
+func (cl *Client) webseedHostLowOnRequests(key webseedHostKeyHandle) bool {
+	n := cl.numWebSeedRequests[key]
+	return n == 0 || n <= webseedHostRequestConcurrency/2
+}
+
 // Check for bad arrangements. This is a candidate for an error state check method.
 func (cl *Client) checkConfig() error {
 	if EffectiveDownloadRateLimit(cl.config.DownloadRateLimiter) == 0 {

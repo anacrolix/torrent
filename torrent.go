@@ -1548,6 +1548,11 @@ func (t *Torrent) updatePeerRequestsForPiece(piece pieceIndex, reason updateRequ
 			c.onNeedUpdateRequests(reason)
 		}()
 	}
+	for _, ws := range t.webSeeds {
+		if ws.peer.peerHasPiece(piece) {
+			ws.peer.onNeedUpdateRequests(reason)
+		}
+	}
 }
 
 // Stuff to do when pending pieces changes. We avoid running this in some benchmarks.

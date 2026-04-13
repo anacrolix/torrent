@@ -49,7 +49,7 @@ func TestWorseConnPriorityError(t *testing.T) {
 	rightCalls := 0
 	left := worseConnInput{
 		GetPeerPriority: func() (peerPriority, error) {
-			return 0, assertAnError
+			return 0, errPriorityLookup
 		},
 		Pointer: 1,
 	}
@@ -77,4 +77,4 @@ func TestWorseConnSameInputPanic(t *testing.T) {
 	}, "cannot differentiate.*"))
 }
 
-var assertAnError = errors.New("priority lookup failed")
+var errPriorityLookup = errors.New("priority lookup failed")

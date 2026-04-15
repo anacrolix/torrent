@@ -83,7 +83,9 @@ type reader struct {
 }
 
 func (r *reader) SetContext(ctx context.Context) {
+	r.mu.Lock()
 	r.ctx = ctx
+	r.mu.Unlock()
 }
 
 var _ io.ReadSeekCloser = (*reader)(nil)
@@ -169,14 +171,19 @@ func (r *reader) Read(b []byte) (n int, err error) {
 }
 
 func (r *reader) read(b []byte) (n int, err error) {
-	return r.readContext(r.ctx, b)
+	r.mu.Lock()
+	ctx := r.ctx
+	r.mu.Unlock()
+	return r.readContext(ctx, b)
 }
 
 // Deprecated: Use SetContext and Read. TODO: I've realised this breaks the ability to pass through
 // optional interfaces like io.WriterTo and io.ReaderFrom. Go sux. Context should be provided
 // somewhere else.
 func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
+	r.mu.Lock()
 	r.ctx = ctx
+	r.mu.Unlock()
 	return r.Read(b)
 }
 

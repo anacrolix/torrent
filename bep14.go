@@ -18,8 +18,12 @@ import (
 	"golang.org/x/net/ipv6"
 )
 
+// Local Service Discovery per BEP-14.
 // http://bittorrent.org/beps/bep_0014.html
 // TODO http://bittorrent.org/beps/bep_0026.html
+//
+// Initial implementation adapted from
+// https://gitlab.com/axet/libtorrent/-/blob/master/lpd.go (LGPL-3).
 
 const (
 	bep14Host4    = "239.192.152.143:6771"
@@ -33,7 +37,9 @@ const (
 	bep14AnnounceInfohash = "Infohash: %s\r\n"
 	bep14LongTimeout      = 10 * time.Second
 	bep14ShortTimeout     = 1 * time.Second
-	bep14MaxPacketSize    = 1400
+	// Stay under a typical Ethernet MTU so each announce fits in one UDP
+	// datagram without IP-level fragmentation.
+	bep14MaxPacketSize = 1400
 )
 
 // lpdClient is implemented by *Client and provides the hooks LPD goroutines
@@ -55,7 +61,7 @@ type lpdConn struct {
 	cancel context.CancelFunc
 	force  chan struct{} // buffered(1): signal an immediate re-announce
 
-	lpd         *LPDServer
+	lpd         *lpdServer
 	network     string // "udp4" or "udp6"
 	addr        *net.UDPAddr
 	mcListener  *net.UDPConn
@@ -118,7 +124,7 @@ func sourceUdpAddress(iface *net.Interface, network string) (*net.UDPAddr, error
 	return nil, errors.New("no suitable IP address found")
 }
 
-func lpdConnNew(network string, host string, lpd *LPDServer, config LocalServiceDiscoveryConfig) *lpdConn {
+func lpdConnNew(network string, host string, lpd *lpdServer, config LocalServiceDiscoveryConfig) *lpdConn {
 	ctx, cancel := context.WithCancel(context.Background())
 	m := &lpdConn{
 		ctx:     ctx,
@@ -335,7 +341,7 @@ func (m *lpdConn) announcer(client lpdClient) {
 	}
 }
 
-type LPDServer struct {
+type lpdServer struct {
 	mu    sync.RWMutex
 	conn4 *lpdConn
 	conn6 *lpdConn
@@ -343,7 +349,7 @@ type LPDServer struct {
 	peers map[string]time.Time // addr -> last-seen time
 }
 
-func (lpd *LPDServer) lpdStart(client lpdClient, config LocalServiceDiscoveryConfig) {
+func (lpd *lpdServer) lpdStart(client lpdClient, config LocalServiceDiscoveryConfig) {
 	lpd.peers = make(map[string]time.Time)
 
 	lpd.conn4 = lpdConnNew("udp4", bep14Host4, lpd, config)
@@ -361,7 +367,7 @@ func (lpd *LPDServer) lpdStart(client lpdClient, config LocalServiceDiscoveryCon
 	}
 }
 
-func (m *LPDServer) refresh() {
+func (m *lpdServer) refresh() {
 	now := time.Now()
 	for addr, lastSeen := range m.peers {
 		if now.Sub(lastSeen) > 2*bep14LongTimeout {
@@ -370,11 +376,11 @@ func (m *LPDServer) refresh() {
 	}
 }
 
-func (m *LPDServer) peer(addr string) {
+func (m *lpdServer) peer(addr string) {
 	m.peers[addr] = time.Now()
 }
 
-func (lpd *LPDServer) lpdForce() {
+func (lpd *lpdServer) lpdForce() {
 	if lpd.conn4 != nil {
 		select {
 		case lpd.conn4.force <- struct{}{}:
@@ -395,7 +401,7 @@ func (m *lpdConn) Close() {
 	m.mcPublisher.Close()
 }
 
-func (lpd *LPDServer) lpdStop() {
+func (lpd *lpdServer) lpdStop() {
 	if lpd != nil {
 		if lpd.conn4 != nil {
 			lpd.conn4.Close()
@@ -406,7 +412,7 @@ func (lpd *LPDServer) lpdStop() {
 	}
 }
 
-func (lpd *LPDServer) lpdPeers(t *Torrent) {
+func (lpd *lpdServer) lpdPeers(t *Torrent) {
 	lpd.mu.RLock()
 	peers := make([]string, 0, len(lpd.peers))
 	for addr := range lpd.peers {

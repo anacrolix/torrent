@@ -120,7 +120,7 @@ type Client struct {
 
 	activePieceHashers int
 
-	lpd *LPDServer
+	lpd *lpdServer
 }
 
 type clientWebseedState struct {
@@ -187,7 +187,7 @@ func (cl *Client) OnLPDAnnouncement(addr string, infohashes []string) {
 		}
 	}
 	cl.rUnlock()
-	
+
 	for _, t := range rest {
 		lpdPeer(t, addr)
 	}
@@ -466,7 +466,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 	}
 
 	if cfg.EnableLocalServiceDiscovery {
-		cl.lpd = &LPDServer{}
+		cl.lpd = &lpdServer{}
 		cl.lpd.lpdStart(cl, cfg.LocalServiceDiscoveryConfig)
 		cl.onClose = append(cl.onClose, cl.lpd.lpdStop)
 	}

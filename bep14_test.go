@@ -39,8 +39,7 @@ cookie: name=value
 
 func TestDiscovery(t *testing.T) {
 	config := TestingConfig(t)
-	config.EnableLocalServiceDiscovery = true
-	config.LocalServiceDiscoveryConfig = LocalServiceDiscoveryConfig{Ip6: false}
+	config.LocalServiceDiscovery = &LocalServiceDiscoveryConfig{Ip6: false}
 
 	client1, err := NewClient(config)
 	require.NoError(t, err)
@@ -101,8 +100,7 @@ func TestLPDPeerExpiry(t *testing.T) {
 // This covers the "LPD is the only source of local IPs" broadcast in receiver().
 func TestPeerAddedToAllTorrents(t *testing.T) {
 	config := TestingConfig(t)
-	config.EnableLocalServiceDiscovery = true
-	config.LocalServiceDiscoveryConfig = LocalServiceDiscoveryConfig{Ip6: false}
+	config.LocalServiceDiscovery = &LocalServiceDiscoveryConfig{Ip6: false}
 
 	client1, err := NewClient(config)
 	require.NoError(t, err)
@@ -141,8 +139,7 @@ func TestPeerAddedToAllTorrents(t *testing.T) {
 // the lpdPeers() call inside AddTorrentSpec.
 func TestNewTorrentGetsExistingPeers(t *testing.T) {
 	config := TestingConfig(t)
-	config.EnableLocalServiceDiscovery = true
-	config.LocalServiceDiscoveryConfig = LocalServiceDiscoveryConfig{Ip6: false}
+	config.LocalServiceDiscovery = &LocalServiceDiscoveryConfig{Ip6: false}
 
 	client1, err := NewClient(config)
 	require.NoError(t, err)
@@ -181,8 +178,7 @@ func TestNewTorrentGetsExistingPeers(t *testing.T) {
 // Port header, without adding any peers.
 func TestReceiverMalformedMessages(t *testing.T) {
 	config := TestingConfig(t)
-	config.EnableLocalServiceDiscovery = true
-	config.LocalServiceDiscoveryConfig = LocalServiceDiscoveryConfig{Ip6: false}
+	config.LocalServiceDiscovery = &LocalServiceDiscoveryConfig{Ip6: false}
 
 	cl, err := NewClient(config)
 	require.NoError(t, err)

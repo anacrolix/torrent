@@ -187,6 +187,7 @@ func (cl *Client) OnLPDAnnouncement(addr string, infohashes []string) {
 		}
 	}
 	cl.rUnlock()
+	
 	for _, t := range rest {
 		lpdPeer(t, addr)
 	}

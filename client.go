@@ -177,6 +177,8 @@ func (cl *Client) OnLPDAnnouncement(addr string, infohashes []string) {
 			announced[t] = struct{}{}
 		}
 	}
+
+	// Add discovered peers to all other torrents
 	cl.rLock()
 	var rest []*Torrent
 	for t := range cl.torrents {

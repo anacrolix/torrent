@@ -16,7 +16,6 @@ import (
 	"github.com/anacrolix/log"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
-
 )
 
 // http://bittorrent.org/beps/bep_0014.html
@@ -34,7 +33,7 @@ const (
 	bep14AnnounceInfohash = "Infohash: %s\r\n"
 	bep14LongTimeout      = 10 * time.Second
 	bep14ShortTimeout     = 1 * time.Second
-	bep14Max              = 0 // maximum hashes per request, 0 - only limited by udp packet size
+	bep14MaxPacketSize    = 1400
 )
 
 // lpdClient is implemented by *Client and provides the hooks LPD goroutines
@@ -245,6 +244,30 @@ func (m *lpdConn) receiver(client lpdClient) {
 	}
 }
 
+// buildAnnouncePacket builds a single BT-SEARCH announce packet starting at
+// startIdx in queue. It returns the packet bytes, the index to resume from on
+// the next tick, and whether the full queue has been covered (caller should
+// use the long refresh interval when rotated is true).
+func buildAnnouncePacket(host string, port int, queue []string, startIdx, maxSize int) (packet []byte, nextIdx int, rotated bool) {
+	var ihs string
+	nextIdx = startIdx
+	for nextIdx < len(queue) {
+		ihs += fmt.Sprintf(bep14AnnounceInfohash, strings.ToUpper(queue[nextIdx]))
+		req := fmt.Sprintf(bep14Announce, host, strconv.Itoa(port), ihs)
+		buf := []byte(req)
+		if len(buf) >= maxSize {
+			break
+		}
+		packet = buf
+		nextIdx++
+	}
+	if nextIdx >= len(queue) {
+		nextIdx = 0
+		rotated = true
+	}
+	return
+}
+
 func (m *lpdConn) announcer(client lpdClient) {
 	var (
 		refresh = bep14LongTimeout
@@ -293,27 +316,9 @@ func (m *lpdConn) announcer(client lpdClient) {
 			nextIdx = len(queue)
 		}
 
-		// Build the next announce packet starting from nextIdx.
-		var ihs string
-		var packet []byte
-		count := 0
-		for nextIdx < len(queue) {
-			ihs += fmt.Sprintf(bep14AnnounceInfohash, strings.ToUpper(queue[nextIdx]))
-			req := fmt.Sprintf(bep14Announce, m.host, strconv.Itoa(port), ihs)
-			buf := []byte(req)
-			if len(buf) >= 1400 {
-				break
-			}
-			packet = buf
-			nextIdx++
-			count++
-			if bep14Max > 0 && count >= bep14Max {
-				break
-			}
-		}
-
-		if nextIdx >= len(queue) {
-			nextIdx = 0
+		packet, newNextIdx, rotated := buildAnnouncePacket(m.host, port, queue, nextIdx, bep14MaxPacketSize)
+		nextIdx = newNextIdx
+		if rotated {
 			refresh = bep14LongTimeout // completed a full rotation
 		} else {
 			refresh = bep14ShortTimeout // more torrents to announce next tick
@@ -321,6 +326,9 @@ func (m *lpdConn) announcer(client lpdClient) {
 
 		if len(packet) > 0 {
 			if _, err := m.mcPublisher.Write(packet); err != nil {
+				if m.ctx.Err() != nil {
+					return // closed
+				}
 				m.logger.Println("announcer", err)
 			}
 		}

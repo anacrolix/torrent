@@ -3,10 +3,12 @@ package torrent
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,17 +33,11 @@ cookie: name=value
 		return
 	}
 	ihs := req.Header[http.CanonicalHeaderKey("Infohash")]
-	if ihs == nil {
-		t.Error("receiver", "No Infohash")
-		return
-	}
-	for _, ih := range ihs {
-		t.Log(ih)
-	}
+	require.Equal(t, []string{"123123", "2222"}, ihs)
+	require.Equal(t, "3333", req.Header.Get("Port"))
 }
 
 func TestDiscovery(t *testing.T) {
-	//hiiiii
 	config := TestingConfig(t)
 	config.EnableLocalServiceDiscovery = true
 	config.LocalServiceDiscoveryConfig = LocalServiceDiscoveryConfig{Ip6: false}
@@ -218,6 +214,73 @@ func TestReceiverMalformedMessages(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	require.Equal(t, 0, tor.numTotalPeers(), "malformed messages should not add peers")
+}
+
+// TestBuildAnnouncePacketSingle verifies that a small queue produces one packet
+// containing every infohash and reports a completed rotation.
+func TestBuildAnnouncePacketSingle(t *testing.T) {
+	queue := []string{
+		"aabbccddeeff00112233445566778899aabbccdd",
+		"1122334455667788990011223344556677889900",
+	}
+	packet, nextIdx, rotated := buildAnnouncePacket(bep14Host4, 6881, queue, 0, bep14MaxPacketSize)
+	require.NotEmpty(t, packet)
+	require.Zero(t, nextIdx)
+	require.True(t, rotated)
+	body := string(packet)
+	for _, ih := range queue {
+		require.Contains(t, body, strings.ToUpper(ih))
+	}
+}
+
+// TestBuildAnnouncePacketFragments verifies that a queue too large for a
+// single packet is split across successive calls: each packet stays under the
+// size cap, every infohash is covered exactly once across the series, and
+// rotation is only reported when the queue has been fully drained.
+func TestBuildAnnouncePacketFragments(t *testing.T) {
+	const n = 40 // 40 x ~51B infohash lines overflow the 1400B cap
+	queue := make([]string, n)
+	for i := range queue {
+		queue[i] = fmt.Sprintf("%040x", i)
+	}
+
+	seen := make(map[string]int, n)
+	packets := 0
+	idx := 0
+	for {
+		packet, nextIdx, rotated := buildAnnouncePacket(bep14Host4, 6881, queue, idx, bep14MaxPacketSize)
+		require.NotEmpty(t, packet)
+		require.Less(t, len(packet), bep14MaxPacketSize)
+		packets++
+		end := nextIdx
+		if rotated {
+			end = n
+		}
+		for i := idx; i < end; i++ {
+			seen[strings.ToUpper(queue[i])]++
+		}
+		if rotated {
+			require.Zero(t, nextIdx)
+			break
+		}
+		require.Greater(t, nextIdx, idx, "must make progress")
+		idx = nextIdx
+	}
+
+	require.Greater(t, packets, 1, "queue should require more than one packet")
+	require.Len(t, seen, n, "every infohash must appear")
+	for ih, count := range seen {
+		require.Equal(t, 1, count, "%s announced %d times, want 1", ih, count)
+	}
+}
+
+// TestBuildAnnouncePacketEmptyQueue verifies that an empty queue yields no
+// packet and is treated as a (trivially) completed rotation.
+func TestBuildAnnouncePacketEmptyQueue(t *testing.T) {
+	packet, nextIdx, rotated := buildAnnouncePacket(bep14Host4, 6881, nil, 0, bep14MaxPacketSize)
+	require.Nil(t, packet)
+	require.Zero(t, nextIdx)
+	require.True(t, rotated)
 }
 
 func waitForPeers(t *Torrent, num int) {

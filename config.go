@@ -262,7 +262,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		CryptoProvides:              mse.AllSupportedCrypto,
 		ListenPort:                  42069,
 		Extensions:                  defaultPeerExtensionBytes(),
-		DialForPeerConns:       	true,
+		DialForPeerConns:            true,
 		AcceptPeerConnections:       true,
 		MaxUnverifiedBytes:          64 << 20,
 		DialRateLimiter:             rate.NewLimiter(10, 10),

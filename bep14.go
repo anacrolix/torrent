@@ -206,55 +206,66 @@ func (m *lpdConn) receiver(client lpdClient) {
 			m.logger.Println("receiver", err)
 			continue
 		}
+		m.handleAnnouncePacket(client, buf, from)
+	}
+}
 
-		req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(buf)))
-		if err != nil {
-			m.logger.Println("receiver", err)
-			continue
-		}
+// handleAnnouncePacket parses a single BT-SEARCH datagram received from `from`
+// and, if valid, registers the announced peer with the lpdServer and notifies
+// the client. Split out of receiver so tests can drive the receive path
+// without depending on multicast loopback being delivered by the host network
+// stack (which GitHub's macOS runners, for example, do not).
+func (m *lpdConn) handleAnnouncePacket(client lpdClient, buf []byte, from *net.UDPAddr) {
+	req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(buf)))
+	if err != nil {
+		m.logger.Println("receiver", err)
+		return
+	}
 
-		m.logger.LevelPrint(log.Debug, "received, req: ", req)
-		if req.Method != "BT-SEARCH" {
-			m.logger.Println("receiver", "Wrong request: ", req.Method)
-			continue
-		}
+	m.logger.LevelPrint(log.Debug, "received, req: ", req)
+	if req.Method != "BT-SEARCH" {
+		m.logger.Println("receiver", "Wrong request: ", req.Method)
+		return
+	}
 
-		// BEP14 says here can be multiple response headers
-		ihs := req.Header[http.CanonicalHeaderKey("Infohash")]
-		if ihs == nil {
-			m.logger.Println("receiver", "No Infohash")
-			continue
-		}
+	// BEP14 says here can be multiple response headers
+	ihs := req.Header[http.CanonicalHeaderKey("Infohash")]
+	if ihs == nil {
+		m.logger.Println("receiver", "No Infohash")
+		return
+	}
 
-		port := req.Header.Get("Port")
-		m.logger.LevelPrint(log.Debug, "received, port: ", port)
-		if port == "" {
-			m.logger.Println("receiver", "No port")
-			continue
-		}
+	port := req.Header.Get("Port")
+	m.logger.LevelPrint(log.Debug, "received, port: ", port)
+	if port == "" {
+		m.logger.Println("receiver", "No port")
+		return
+	}
 
-		addr, err := net.ResolveUDPAddr(m.network, net.JoinHostPort(from.IP.String(), port))
-		m.logger.LevelPrint(log.Debug, "received, addr: ", addr)
-		if err != nil {
-			m.logger.Println("receiver", err)
-			continue
-		}
+	addr, err := net.ResolveUDPAddr(m.network, net.JoinHostPort(from.IP.String(), port))
+	m.logger.LevelPrint(log.Debug, "received, addr: ", addr)
+	if err != nil {
+		m.logger.Println("receiver", err)
+		return
+	}
 
-		// Possible to receive own UDP multicast message, ignore it.
+	// Possible to receive own UDP multicast message, ignore it. Skipped when
+	// mcPublisher is nil (test setups without a real socket).
+	if m.mcPublisher != nil {
 		publisherAddr := m.mcPublisher.LocalAddr().(*net.UDPAddr)
 		if client.LocalPort() == addr.Port && from.IP.Equal(publisherAddr.IP) {
 			m.logger.Println("receiver", "Ignoring own message")
-			continue
+			return
 		}
-
-		m.lpd.mu.Lock()
-		m.logger.Println("receiver", "Adding peer", addr.String())
-		m.lpd.peer(addr.String())
-		m.lpd.refresh()
-		m.lpd.mu.Unlock()
-
-		client.OnLPDAnnouncement(addr.String(), ihs)
 	}
+
+	m.lpd.mu.Lock()
+	m.logger.Println("receiver", "Adding peer", addr.String())
+	m.lpd.peer(addr.String())
+	m.lpd.refresh()
+	m.lpd.mu.Unlock()
+
+	client.OnLPDAnnouncement(addr.String(), ihs)
 }
 
 // buildAnnouncePacket builds a single BT-SEARCH announce packet starting at
@@ -403,9 +414,15 @@ func (lpd *lpdServer) lpdForce() {
 }
 
 func (m *lpdConn) Close() {
-	m.cancel()
-	m.mcListener.Close()
-	m.mcPublisher.Close()
+	if m.cancel != nil {
+		m.cancel()
+	}
+	if m.mcListener != nil {
+		m.mcListener.Close()
+	}
+	if m.mcPublisher != nil {
+		m.mcPublisher.Close()
+	}
 }
 
 func (lpd *lpdServer) lpdStop() {

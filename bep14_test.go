@@ -4,14 +4,15 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/anacrolix/log"
 	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/internal/testutil"
@@ -37,18 +38,49 @@ cookie: name=value
 	require.Equal(t, "3333", req.Header.Get("Port"))
 }
 
+// setupTestLPD installs a mock lpdServer on cl. The conn4 has no real
+// multicast sockets — tests drive the receive path synchronously via
+// injectAnnounce, so behavior doesn't depend on the host OS delivering
+// multicast loopback. Replaces turning on real LPD in the client config.
+func setupTestLPD(cl *Client) {
+	lpd := &lpdServer{peers: make(map[string]time.Time)}
+	lpd.conn4 = &lpdConn{
+		force:   make(chan struct{}, 1),
+		lpd:     lpd,
+		network: "udp4",
+		host:    bep14Host4,
+		logger:  log.Default,
+	}
+	cl.lpd = lpd
+}
+
+// injectAnnounce crafts a BT-SEARCH announce for infohashes as if it arrived
+// from peerAddr and feeds it to cl's LPD receive path. The resulting peer
+// entry is (peerAddr.IP : peerAddr.Port).
+func injectAnnounce(t *testing.T, cl *Client, peerAddr *net.UDPAddr, infohashes []string) {
+	t.Helper()
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "BT-SEARCH * HTTP/1.1\r\nHost: %s\r\nPort: %d\r\n", bep14Host4, peerAddr.Port)
+	for _, ih := range infohashes {
+		fmt.Fprintf(&buf, "Infohash: %s\r\n", strings.ToUpper(ih))
+	}
+	buf.WriteString("\r\n\r\n")
+	cl.lpd.conn4.handleAnnouncePacket(cl, buf.Bytes(), peerAddr)
+}
+
 func TestDiscovery(t *testing.T) {
 	config := TestingConfig(t)
-	config.LocalServiceDiscovery = &LocalServiceDiscoveryConfig{Ip6: false}
 
 	client1, err := NewClient(config)
 	require.NoError(t, err)
-	defer t.Cleanup(func() { client1.Close() })
+	t.Cleanup(func() { client1.Close() })
+	setupTestLPD(client1)
 	testutil.ExportStatusWriter(client1, "1", t)
 
 	client2, err := NewClient(config)
 	require.NoError(t, err)
-	defer t.Cleanup(func() { client2.Close() })
+	t.Cleanup(func() { client2.Close() })
+	setupTestLPD(client2)
 	testutil.ExportStatusWriter(client2, "2", t)
 
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
@@ -61,13 +93,18 @@ func TestDiscovery(t *testing.T) {
 		return
 	}())
 
-	numPeers := 1
-	waitForPeers(seederTorrent, numPeers)
-	require.Equal(t, numPeers, seederTorrent.numTotalPeers())
-	require.Equal(t, numPeers, len(client1.lpd.peers))
-	waitForPeers(leecherGreeting, numPeers)
-	require.Equal(t, numPeers, leecherGreeting.numTotalPeers())
-	require.Equal(t, numPeers, len(client2.lpd.peers))
+	ih := mi.HashInfoBytes().HexString()
+	peer2 := &net.UDPAddr{IP: net.IPv4(10, 0, 0, 2), Port: client2.LocalPort()}
+	peer1 := &net.UDPAddr{IP: net.IPv4(10, 0, 0, 1), Port: client1.LocalPort()}
+	injectAnnounce(t, client1, peer2, []string{ih})
+	injectAnnounce(t, client2, peer1, []string{ih})
+
+	waitForPeers(t, seederTorrent, 1)
+	require.Equal(t, 1, seederTorrent.numTotalPeers())
+	require.Equal(t, 1, len(client1.lpd.peers))
+	waitForPeers(t, leecherGreeting, 1)
+	require.Equal(t, 1, leecherGreeting.numTotalPeers())
+	require.Equal(t, 1, len(client2.lpd.peers))
 }
 
 // TestLPDPeerDeduplication verifies that adding the same peer address twice
@@ -97,39 +134,31 @@ func TestLPDPeerExpiry(t *testing.T) {
 
 // TestPeerAddedToAllTorrents verifies that a peer discovered via LPD is added
 // to all active torrents, not only the one matching the announced infohash.
-// This covers the "LPD is the only source of local IPs" broadcast in receiver().
+// This covers the "LPD is the only source of local IPs" broadcast in
+// OnLPDAnnouncement.
 func TestPeerAddedToAllTorrents(t *testing.T) {
 	config := TestingConfig(t)
-	config.LocalServiceDiscovery = &LocalServiceDiscoveryConfig{Ip6: false}
 
-	client1, err := NewClient(config)
+	cl, err := NewClient(config)
 	require.NoError(t, err)
-	defer t.Cleanup(func() { client1.Close() })
-
-	client2, err := NewClient(config)
-	require.NoError(t, err)
-	defer t.Cleanup(func() { client2.Close() })
+	t.Cleanup(func() { cl.Close() })
+	setupTestLPD(cl)
 
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
 
-	// client1 has two torrents; client2 only announces the greeting torrent.
-	greetingTorrent, _, _ := client1.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	greetingTorrent, _, _ := cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	otherSpec := &TorrentSpec{}
 	copy(otherSpec.InfoHash[:], "other-torrent-lpd-test-00000")
-	otherTorrent, _, _ := client1.AddTorrentSpec(otherSpec)
+	otherTorrent, _, _ := cl.AddTorrentSpec(otherSpec)
 
-	_, _, _ = client2.AddTorrentSpec(func() *TorrentSpec {
-		ret := TorrentSpecFromMetaInfo(mi)
-		ret.ChunkSize = 2
-		return ret
-	}())
+	// Announce only greetingTorrent's infohash. The "broadcast to all"
+	// behavior should still cause otherTorrent to receive the peer.
+	peer := &net.UDPAddr{IP: net.IPv4(10, 20, 30, 40), Port: 7777}
+	injectAnnounce(t, cl, peer, []string{greetingTorrent.InfoHash().HexString()})
 
-	// Both should receive client2: greetingTorrent via infohash match,
-	// otherTorrent via the broadcast-to-all path.
-	waitForPeers(greetingTorrent, 1)
-	waitForPeers(otherTorrent, 1)
-
+	waitForPeers(t, greetingTorrent, 1)
+	waitForPeers(t, otherTorrent, 1)
 	require.Equal(t, 1, greetingTorrent.numTotalPeers())
 	require.Equal(t, 1, otherTorrent.numTotalPeers())
 }
@@ -139,37 +168,30 @@ func TestPeerAddedToAllTorrents(t *testing.T) {
 // the lpdPeers() call inside AddTorrentSpec.
 func TestNewTorrentGetsExistingPeers(t *testing.T) {
 	config := TestingConfig(t)
-	config.LocalServiceDiscovery = &LocalServiceDiscoveryConfig{Ip6: false}
 
-	client1, err := NewClient(config)
+	cl, err := NewClient(config)
 	require.NoError(t, err)
-	defer t.Cleanup(func() { client1.Close() })
-
-	client2, err := NewClient(config)
-	require.NoError(t, err)
-	defer t.Cleanup(func() { client2.Close() })
+	t.Cleanup(func() { cl.Close() })
+	setupTestLPD(cl)
 
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
 
-	greetingTorrent, _, _ := client1.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
-	_, _, _ = client2.AddTorrentSpec(func() *TorrentSpec {
-		ret := TorrentSpecFromMetaInfo(mi)
-		ret.ChunkSize = 2
-		return ret
-	}())
+	greetingTorrent, _, _ := cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 
-	// Wait until LPD discovery has happened and client2 is in client1's peer cache.
-	waitForPeers(greetingTorrent, 1)
-	require.Len(t, client1.lpd.peers, 1)
+	// Record an LPD peer before adding the second torrent.
+	peer := &net.UDPAddr{IP: net.IPv4(10, 11, 12, 13), Port: 6881}
+	injectAnnounce(t, cl, peer, []string{greetingTorrent.InfoHash().HexString()})
+	waitForPeers(t, greetingTorrent, 1)
+	require.Len(t, cl.lpd.peers, 1)
 
-	// Add a new torrent after discovery. lpdPeers() is called synchronously
-	// inside AddTorrentSpec, so client2 should already be a peer on return.
+	// A torrent added now should synchronously receive the known LPD peer
+	// through AddTorrentSpec's cl.lpd.lpdPeers(t) call.
 	newSpec := &TorrentSpec{}
 	copy(newSpec.InfoHash[:], "new-torrent-after-discovery00")
-	newTorrent, _, _ := client1.AddTorrentSpec(newSpec)
+	newTorrent, _, _ := cl.AddTorrentSpec(newSpec)
 
-	waitForPeers(newTorrent, 1)
+	waitForPeers(t, newTorrent, 1)
 	require.Equal(t, 1, newTorrent.numTotalPeers())
 }
 
@@ -178,22 +200,17 @@ func TestNewTorrentGetsExistingPeers(t *testing.T) {
 // Port header, without adding any peers.
 func TestReceiverMalformedMessages(t *testing.T) {
 	config := TestingConfig(t)
-	config.LocalServiceDiscovery = &LocalServiceDiscoveryConfig{Ip6: false}
 
 	cl, err := NewClient(config)
 	require.NoError(t, err)
-	defer cl.Close()
+	t.Cleanup(func() { cl.Close() })
+	setupTestLPD(cl)
 
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
 	tor, _, _ := cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 
-	addr, err := net.ResolveUDPAddr("udp4", bep14Host4)
-	require.NoError(t, err)
-	conn, err := net.DialUDP("udp4", nil, addr)
-	require.NoError(t, err)
-	defer conn.Close()
-
+	from := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 6881}
 	msgs := []string{
 		// Wrong HTTP method — should be BT-SEARCH.
 		"GET * HTTP/1.1\r\nHost: 239.192.152.143:6771\r\nPort: 9999\r\nInfohash: AABBCCDD1122334455667788AABBCCDD11223344\r\n\r\n\r\n",
@@ -203,13 +220,11 @@ func TestReceiverMalformedMessages(t *testing.T) {
 		"BT-SEARCH * HTTP/1.1\r\nHost: 239.192.152.143:6771\r\nInfohash: AABBCCDD1122334455667788AABBCCDD11223344\r\n\r\n\r\n",
 	}
 	for _, msg := range msgs {
-		_, err = conn.Write([]byte(msg))
-		require.NoError(t, err)
+		cl.lpd.conn4.handleAnnouncePacket(cl, []byte(msg), from)
 	}
 
-	time.Sleep(200 * time.Millisecond)
-
 	require.Equal(t, 0, tor.numTotalPeers(), "malformed messages should not add peers")
+	require.Empty(t, cl.lpd.peers, "malformed messages should not record LPD peers")
 }
 
 // TestBuildAnnouncePacketSingle verifies that a small queue produces one packet
@@ -279,14 +294,31 @@ func TestBuildAnnouncePacketEmptyQueue(t *testing.T) {
 	require.True(t, rotated)
 }
 
-func waitForPeers(t *Torrent, num int) {
-	t.cl.lock()
-	defer t.cl.unlock()
-	for {
-		log.Println("waitForPeers", "numTotalPeers", t.numTotalPeers(), "num", num)
-		if t.numTotalPeers() == num {
-			return
+// waitForPeers blocks until tor has exactly num peers, or fails the test if
+// that doesn't happen within the deadline. Without this bound, a missing
+// wakeup would hang the entire `go test` run until its 10-minute kill switch.
+func waitForPeers(t *testing.T, tor *Torrent, num int) {
+	t.Helper()
+	const deadline = 30 * time.Second
+	// A timer-driven Broadcast wakes the Wait below so the loop can re-check
+	// the deadline even if no peer-state change broadcasts happen.
+	var wakeOnce sync.Once
+	timer := time.AfterFunc(deadline, func() {
+		wakeOnce.Do(func() {
+			tor.cl.lock()
+			tor.cl.event.Broadcast()
+			tor.cl.unlock()
+		})
+	})
+	defer timer.Stop()
+
+	tor.cl.lock()
+	defer tor.cl.unlock()
+	start := time.Now()
+	for tor.numTotalPeers() != num {
+		if time.Since(start) >= deadline {
+			t.Fatalf("timed out after %s waiting for %d peers, have %d", deadline, num, tor.numTotalPeers())
 		}
-		t.cl.event.Wait()
+		tor.cl.event.Wait()
 	}
 }

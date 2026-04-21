@@ -61,31 +61,32 @@ type lpdConn struct {
 	cancel context.CancelFunc
 	force  chan struct{} // buffered(1): signal an immediate re-announce
 
-	lpd         *lpdServer
-	network     string // "udp4" or "udp6"
-	addr        *net.UDPAddr
-	mcListener  *net.UDPConn
-	mcPublisher *net.UDPConn
-	host        string // bep14Host4 or bep14Host6
-	logger      log.Logger
+	lpd          *lpdServer
+	network      string // "udp4" or "udp6"
+	addr         *net.UDPAddr
+	mcListener   *net.UDPConn
+	mcPublisher  *net.UDPConn
+	mcPacketConn mcPacketConn // non-nil when an explicit interface is bound
+	host         string       // bep14Host4 or bep14Host6
+	logger       log.Logger
 }
 
-func setMulticastInterface(m *lpdConn, iface *net.Interface) error {
-	if m.network == "udp4" {
-		p := ipv4.NewPacketConn(m.mcPublisher)
-		if err := p.SetMulticastInterface(iface); err != nil {
-			m.logger.Printf("Set multicast interface error: %v\n", err)
-			return err
-		}
+// mcPacketConn is the subset of *ipv4.PacketConn / *ipv6.PacketConn used to
+// bind multicast publishing to a specific network interface. Keeping it as a
+// field makes ownership of the wrapper explicit rather than relying on GC.
+type mcPacketConn interface {
+	SetMulticastInterface(*net.Interface) error
+}
+
+func newMcPacketConn(network string, c net.PacketConn) (mcPacketConn, error) {
+	switch network {
+	case "udp4":
+		return ipv4.NewPacketConn(c), nil
+	case "udp6":
+		return ipv6.NewPacketConn(c), nil
+	default:
+		return nil, fmt.Errorf("unsupported network %q", network)
 	}
-	if m.network == "udp6" {
-		p := ipv6.NewPacketConn(m.mcPublisher)
-		if err := p.SetMulticastInterface(iface); err != nil {
-			m.logger.Printf("Set multicast interface error: %v\n", err)
-			return err
-		}
-	}
-	return nil
 }
 
 func sourceUdpAddress(iface *net.Interface, network string) (*net.UDPAddr, error) {
@@ -170,8 +171,14 @@ func lpdConnNew(network string, host string, lpd *lpdServer, config LocalService
 			cancel()
 			return nil
 		}
-		if err = setMulticastInterface(m, iface); err != nil {
-			m.logger.Println("Error setting multicast interface:", err)
+		m.mcPacketConn, err = newMcPacketConn(network, m.mcPublisher)
+		if err != nil {
+			m.logger.Println(err)
+			cancel()
+			return nil
+		}
+		if err := m.mcPacketConn.SetMulticastInterface(iface); err != nil {
+			m.logger.Printf("Set multicast interface error: %v\n", err)
 			cancel()
 			return nil
 		}

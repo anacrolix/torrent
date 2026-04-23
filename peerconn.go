@@ -803,6 +803,7 @@ func (c *PeerConn) peerRequestDataReadFailed(err error, r Request) {
 	}
 	c.logger.Levelf(logLevel, "error reading chunk for peer Request %v: %v", r, err)
 	if c.t.closed.IsSet() {
+		c.deletePeerRequest(r)
 		return
 	}
 	i := pieceIndex(r.Index)

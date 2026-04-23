@@ -407,3 +407,44 @@ func TestChunkOverflowsPiece(t *testing.T) {
 	check(2, pp.IntegerMax, pp.IntegerMax, true)
 	check(2, pp.IntegerMax-2, pp.IntegerMax, false)
 }
+
+// TestServePeerRequestTorrentClosedStorageReadFails verifies that servePeerRequest does not panic
+// when a storage read fails after the torrent has been closed. Previously, peerRequestDataReadFailed
+// returned early on a closed torrent without removing the request from unreadPeerRequests,
+// violating the invariant checked by the deferred assertion in servePeerRequest.
+func TestServePeerRequestTorrentClosedStorageReadFails(t *testing.T) {
+	var cl Client
+	cfg := TestingConfig(t)
+	ts := &torrentStorage{}
+	cfg.DefaultStorage = &torrentStorageClient{ts}
+	cl.init(cfg)
+	t.Cleanup(func() { cl.Close() })
+
+	tor, _ := cl.AddTorrentOpt(AddTorrentOpts{
+		InfoHash:                 testingTorrentInfoHash,
+		Storage:                  &torrentStorageClient{ts},
+		DisableInitialPieceCheck: true,
+	})
+	require.NoError(t, tor.setInfoUnlocked(&metainfo.Info{
+		Pieces:      make([]byte, metainfo.HashSize),
+		PieceLength: 1,
+		Length:      1,
+		Name:        "test",
+	}))
+
+	pc := cl.newConnection(nil, newConnectionOpts{network: "test"})
+	pc.setTorrent(tor)
+
+	req := Request{Index: 0, ChunkSpec: ChunkSpec{Begin: 0, Length: 1}}
+	g.MakeMapIfNil(&pc.unreadPeerRequests)
+	pc.unreadPeerRequests[req] = struct{}{}
+
+	// Simulate the torrent being dropped while the connection is still active.
+	tor.Drop()
+
+	cl.lock()
+	defer cl.unlock()
+	pc.servePeerRequest(req)
+
+	qt.Check(t, qt.IsFalse(g.MapContains(pc.unreadPeerRequests, req)))
+}

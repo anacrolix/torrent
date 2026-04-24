@@ -1,3 +1,11 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// Portions derived from https://gitlab.com/axet/libtorrent/-/blob/master/lpd.go
+// by Alexey Kuznetsov <axet@me.com>, relicensed under MPL-2.0 with the
+// author's permission.
+
 package main
 
 import (

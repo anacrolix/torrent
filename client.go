@@ -119,6 +119,8 @@ type Client struct {
 	clientWebseedState
 
 	activePieceHashers int
+
+	lpd *lpdServer
 }
 
 type clientWebseedState struct {
@@ -160,6 +162,45 @@ func (cl *Client) LocalPort() (port int) {
 		if port = addrPortOrZero(cl.listeners[i].Addr()); port != 0 {
 			return
 		}
+	}
+	return
+}
+
+// OnLPDAnnouncement implements lpdClient. It adds addr to any torrent matching
+// an announced infohash, and also to all other active torrents (LPD is the
+// only source of local IPs).
+func (cl *Client) OnLPDAnnouncement(addr string, infohashes []string) {
+	announced := make(map[*Torrent]struct{}, len(infohashes))
+	for _, ih := range infohashes {
+		if t, ok := cl.Torrent(metainfo.NewHashFromHex(ih)); ok {
+			lpdPeer(t, addr)
+			announced[t] = struct{}{}
+		}
+	}
+
+	// Add discovered peers to all other torrents
+	cl.rLock()
+	var rest []*Torrent
+	for t := range cl.torrents {
+		if _, ok := announced[t]; !ok {
+			rest = append(rest, t)
+		}
+	}
+	cl.rUnlock()
+
+	for _, t := range rest {
+		lpdPeer(t, addr)
+	}
+}
+
+// TorrentInfohashesAndPort implements lpdClient. It returns a snapshot of
+// active torrent infohash hex strings and the listen port.
+func (cl *Client) TorrentInfohashesAndPort() (port int, infohashes []string) {
+	cl.rLock()
+	defer cl.rUnlock()
+	port = cl.LocalPort()
+	for t := range cl.torrents {
+		infohashes = append(infohashes, t.InfoHash().HexString())
 	}
 	return
 }
@@ -422,6 +463,12 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 				cl.onClose = append(cl.onClose, func() { ds.Close() })
 			}
 		}
+	}
+
+	if cfg.LocalServiceDiscovery != nil {
+		cl.lpd = &lpdServer{}
+		cl.lpd.lpdStart(cl, *cfg.LocalServiceDiscovery)
+		cl.onClose = append(cl.onClose, cl.lpd.lpdStop)
 	}
 
 	err = cl.checkConfig()
@@ -1507,14 +1554,15 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	infoHash := opts.InfoHash
 	panicif.Zero(infoHash)
 	cl.lock()
-	defer cl.unlock()
 	t, ok := cl.torrentsByShortHash[infoHash]
 	if ok {
+		cl.unlock()
 		return
 	}
 	if opts.InfoHashV2.Ok {
 		t, ok = cl.torrentsByShortHash[*opts.InfoHashV2.Value.ToShort()]
 		if ok {
+			cl.unlock()
 			return
 		}
 	}
@@ -1532,6 +1580,14 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	t.updateWantPeersEvent()
 	// Tickle Client.waitAccept, new torrent may want conns.
 	cl.event.Broadcast()
+
+	cl.unlock()
+
+	if cl.lpd != nil {
+		cl.lpd.lpdPeers(t)
+		cl.lpd.lpdForce()
+	}
+
 	return
 }
 

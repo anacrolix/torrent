@@ -108,6 +108,7 @@ const (
 	PeerSourceDhtGetPeers     = "Hg" // Peers we found by searching a DHT.
 	PeerSourceDhtAnnouncePeer = "Ha" // Peers that were announced to us by a DHT.
 	PeerSourcePex             = "X"
+	PeerSourceLPD             = "L" // Peer discovered through local peer discovery
 	// The peer was given directly, such as through a magnet link.
 	PeerSourceDirect = "M"
 )

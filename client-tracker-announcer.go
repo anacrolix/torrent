@@ -440,12 +440,8 @@ func (me *regularTrackerAnnounceDispatcher) step() mytimer.TimeValue {
 }
 
 func (me *regularTrackerAnnounceDispatcher) addKey(key torrentTrackerAnnouncerKey) {
-	if me.announceData.ContainsKey(key) {
-		return
-	}
-	t := me.torrentFromShortInfohash(key.ShortInfohash)
+t := me.torrentFromShortInfohash(key.ShortInfohash)
 	if t == nil {
-		// Crude, but the torrent was already dropped. We probably called AddTrackers late.
 		return
 	}
 	g.MakeMapIfNil(&me.torrentForAnnounceRequests)
@@ -456,6 +452,11 @@ func (me *regularTrackerAnnounceDispatcher) addKey(key torrentTrackerAnnouncerKe
 		g.MapMustAssignNew(me.announceStates, key, g.PtrTo(announceState{}))
 	}
 	t.regularTrackerAnnounceState[key] = g.MapMustGet(me.announceStates, key)
+	if me.announceData.ContainsKey(key) {
+		me.pendTorrentInputUpdate(t)
+		me.updateTimer()
+		return
+	}
 	me.announceData.Create(key, nextAnnounceInput{
 		torrent:                me.makeTorrentInput(t),
 		nextAnnounceStateInput: me.makeAnnounceStateInput(key),
@@ -559,6 +560,13 @@ func (me *regularTrackerAnnounceDispatcher) finishedAnnounce(key torrentTrackerA
 
 func (me *regularTrackerAnnounceDispatcher) syncAnnounceState(key torrentTrackerAnnouncerKey) {
 	input := me.makeAnnounceStateInput(key)
+
+	if input.When.IsZero() {
+		me.announceData.Delete(key)
+		delete(me.announceStates, key)
+		return
+	}
+
 	me.announceData.UpdateOrCreate(key, func(old nextAnnounceInput) nextAnnounceInput {
 		old.nextAnnounceStateInput = input
 		return old
@@ -838,7 +846,7 @@ func (me *regularTrackerAnnounceDispatcher) nextAnnounceEvent(key torrentTracker
 	if !state.sentCompleted && t.sawInitiallyIncompleteData && t.haveAllPieces() {
 		return tracker.Completed, time.Now()
 	}
-	if lastOk.Completed.IsZero() {
+	if lastOk.Completed.IsZero() || lastOk.AnnouncedEvent == tracker.Stopped {
 		// Returning now should be fine as sorting should occur on "overdue" derived value.
 		return tracker.Started, time.Now()
 	}

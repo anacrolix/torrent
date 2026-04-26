@@ -1,7 +1,9 @@
 package torrent
 
 import (
+	"hash/maphash"
 	"net"
+	"net/netip"
 	"testing"
 
 	"github.com/google/btree"
@@ -52,4 +54,25 @@ func TestPrioritizedPeers(t *testing.T) {
 	pop(&ps[0])
 	min(nil)
 	pop(nil)
+}
+
+// TestPrioritizedPeersAddrHash verifies that the hashing path preserves the exact
+// address-string hash used to order peers in the tree.
+func TestPrioritizedPeersAddrHash(t *testing.T) {
+	testCases := []PeerRemoteAddr{
+		StringAddr("192.0.2.1:1234"),
+		ipPortAddr{IP: net.ParseIP("192.0.2.1"), Port: 1234},
+		ipPortAddr{IP: net.ParseIP("2001:db8::1"), Port: 5678},
+		netip.MustParseAddrPort("198.51.100.7:4321"),
+		netip.MustParseAddrPort("[2001:db8::2]:8765"),
+	}
+	for _, addr := range testCases {
+		t.Run(addr.String(), func(t *testing.T) {
+			item := newPrioritizedPeersItem(7, PeerInfo{Addr: addr})
+			var expected maphash.Hash
+			expected.SetSeed(hashSeed)
+			expected.WriteString(addr.String())
+			assert.Equal(t, int64(expected.Sum64()), item.addrHash)
+		})
+	}
 }

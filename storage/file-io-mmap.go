@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"runtime"
 	"sync/atomic"
 
 	"github.com/anacrolix/sync"
@@ -25,6 +26,9 @@ func init() {
 	s, ok := os.LookupEnv("TORRENT_STORAGE_DEFAULT_FILE_IO")
 	if !ok {
 		defaultFileIo = func() fileIo {
+			if runtime.GOOS == "windows" {
+				return newClassicFileIo()
+			}
 			return &mmapFileIo{}
 		}
 		return
@@ -36,7 +40,7 @@ func init() {
 		}
 	case "classic":
 		defaultFileIo = func() fileIo {
-			return classicFileIo{}
+			return newClassicFileIo()
 		}
 	default:
 		panic(s)

@@ -82,6 +82,51 @@ func (me *fileTorrentImpl) setCompletionFromPartFiles() error {
 	return nil
 }
 
+func (me *fileTorrentImpl) initFileCompletionTracking() error {
+	for fileIndex := range me.files {
+		f := me.file(fileIndex)
+		remaining := 0
+		for pieceIndex := f.beginPieceIndex(); pieceIndex < f.endPieceIndex(); pieceIndex++ {
+			c := me.getCompletion(pieceIndex)
+			if c.Err != nil {
+				return fmt.Errorf("getting completion for piece %d: %w", pieceIndex, c.Err)
+			}
+			if !c.Ok || !c.Complete {
+				remaining++
+			}
+		}
+		me.files[fileIndex].mu.Lock()
+		me.files[fileIndex].remainingPieces = remaining
+		me.files[fileIndex].remainingKnown = true
+		me.files[fileIndex].mu.Unlock()
+	}
+	return nil
+}
+
+func (me *fileTorrentImpl) markFilePieceComplete(fileIndex int) (allComplete, tracked bool) {
+	file := &me.files[fileIndex]
+	file.mu.Lock()
+	defer file.mu.Unlock()
+	if !file.remainingKnown {
+		return false, false
+	}
+	if file.remainingPieces > 0 {
+		file.remainingPieces--
+	}
+	return file.remainingPieces == 0, true
+}
+
+func (me *fileTorrentImpl) markFilePieceIncomplete(fileIndex int) (tracked bool) {
+	file := &me.files[fileIndex]
+	file.mu.Lock()
+	defer file.mu.Unlock()
+	if !file.remainingKnown {
+		return false
+	}
+	file.remainingPieces++
+	return true
+}
+
 func (me *fileTorrentImpl) partFiles() bool {
 	return me.client.opts.partFiles()
 }

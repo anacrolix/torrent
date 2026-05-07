@@ -22,22 +22,21 @@ import (
 const lockHandleOperations = false
 
 func init() {
+	// Resolve the environment variable when storage is instantiated rather than during package init,
+	// so applications can still configure it from their own init or main functions.
+	defaultFileIo = newDefaultFileIo
+}
+
+func newDefaultFileIo() fileIo {
 	s, ok := os.LookupEnv("TORRENT_STORAGE_DEFAULT_FILE_IO")
 	if !ok {
-		defaultFileIo = func() fileIo {
-			return &mmapFileIo{}
-		}
-		return
+		return &mmapFileIo{}
 	}
 	switch s {
 	case "mmap":
-		defaultFileIo = func() fileIo {
-			return &mmapFileIo{}
-		}
+		return &mmapFileIo{}
 	case "classic":
-		defaultFileIo = func() fileIo {
-			return newClassicFileIo()
-		}
+		return newClassicFileIo()
 	default:
 		panic(s)
 	}

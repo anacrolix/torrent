@@ -4,19 +4,31 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/go-quicktest/qt"
 )
 
-func TestDefaultFileIoIsClassicOnWindows(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("windows specific default")
-	}
+func TestDefaultFileIoDefaultsToMmapWithoutEnv(t *testing.T) {
+	t.Setenv("TORRENT_STORAGE_DEFAULT_FILE_IO", "")
+	qt.Assert(t, qt.IsNil(os.Unsetenv("TORRENT_STORAGE_DEFAULT_FILE_IO")))
+	ioImpl := defaultFileIo()
+	t.Cleanup(func() { _ = ioImpl.Close() })
+	_, ok := ioImpl.(*mmapFileIo)
+	qt.Assert(t, qt.IsTrue(ok))
+}
+
+func TestDefaultFileIoReadsEnvironmentLazily(t *testing.T) {
+	t.Setenv("TORRENT_STORAGE_DEFAULT_FILE_IO", "classic")
 	ioImpl := defaultFileIo()
 	t.Cleanup(func() { _ = ioImpl.Close() })
 	_, ok := ioImpl.(*classicFileIo)
+	qt.Assert(t, qt.IsTrue(ok))
+
+	t.Setenv("TORRENT_STORAGE_DEFAULT_FILE_IO", "mmap")
+	ioImpl = defaultFileIo()
+	t.Cleanup(func() { _ = ioImpl.Close() })
+	_, ok = ioImpl.(*mmapFileIo)
 	qt.Assert(t, qt.IsTrue(ok))
 }
 

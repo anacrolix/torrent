@@ -41,7 +41,7 @@ func NewBoltPieceCompletion(dir string) (ret PieceCompletion, err error) {
 		return
 	}
 	db.NoSync = true
-	ret = &boltPieceCompletion{db}
+	ret = newBufferedPieceCompletion(&boltPieceCompletion{db})
 	return
 }
 
@@ -75,24 +75,36 @@ func (me boltPieceCompletion) Set(pk metainfo.PieceKey, b bool) error {
 	if c, err := me.Get(pk); err == nil && c.Ok && c.Complete == b {
 		return nil
 	}
+	return me.SetBatch([]PieceCompletionChange{{
+		Key:      pk,
+		Complete: b,
+	}})
+}
+
+func (me boltPieceCompletion) SetBatch(changes []PieceCompletionChange) error {
 	return me.db.Update(func(tx *bbolt.Tx) error {
 		c, err := tx.CreateBucketIfNotExists(completionBucketKey)
 		if err != nil {
 			return err
 		}
-		ih, err := c.CreateBucketIfNotExists(pk.InfoHash[:])
-		if err != nil {
-			return err
-		}
-		var key [4]byte
-		binary.BigEndian.PutUint32(key[:], uint32(pk.Index))
-		return ih.Put(key[:], []byte(func() string {
-			if b {
-				return boltDbCompleteValue
-			} else {
-				return boltDbIncompleteValue
+		for _, change := range changes {
+			ih, err := c.CreateBucketIfNotExists(change.Key.InfoHash[:])
+			if err != nil {
+				return err
 			}
-		}()))
+			var key [4]byte
+			binary.BigEndian.PutUint32(key[:], uint32(change.Key.Index))
+			err = ih.Put(key[:], []byte(func() string {
+				if change.Complete {
+					return boltDbCompleteValue
+				}
+				return boltDbIncompleteValue
+			}()))
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 

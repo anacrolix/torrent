@@ -172,7 +172,12 @@ func (me *filePieceImpl) MarkComplete() (err error) {
 	if err != nil {
 		return
 	}
-	if pieceCompletionIsPersistent(me.pieceCompletion()) {
+	if me.t.checkpoint != nil {
+		err = me.t.checkpoint.queuePiece(me.pieceKey(), me.p.Length(), me.checkpointTargets())
+		if err != nil {
+			me.logger().Warn("error checkpointing completed piece", "piece", me.p.Index(), "err", err)
+		}
+	} else if pieceCompletionIsPersistent(me.pieceCompletion()) {
 		err := me.Flush()
 		if err != nil {
 			me.logger().Warn("error flushing completed piece", "piece", me.p.Index(), "err", err)
@@ -311,6 +316,28 @@ func (me *filePieceImpl) onFileNotComplete(f file) (err error) {
 
 func (me *filePieceImpl) partFiles() bool {
 	return me.t.partFiles()
+}
+
+func (me *filePieceImpl) checkpointTargets() []fileCheckpointTarget {
+	targets := make([]fileCheckpointTarget, 0, len(me.t.files))
+	seen := make(map[string]struct{})
+	for fileIndex := range me.fileExtents() {
+		f := me.t.file(fileIndex)
+		primary := me.t.pathForWrite(&f)
+		if _, ok := seen[primary]; ok {
+			continue
+		}
+		seen[primary] = struct{}{}
+		target := fileCheckpointTarget{
+			primary: primary,
+			length:  f.length(),
+		}
+		if primary != f.safeOsPath {
+			target.fallback = f.safeOsPath
+		}
+		targets = append(targets, target)
+	}
+	return targets
 }
 
 func (me *filePieceImpl) WriteTo(w io.Writer) (n int64, err error) {

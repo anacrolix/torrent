@@ -3,6 +3,7 @@
 package torrent
 
 import (
+	"errors"
 	"log/slog"
 	"net/url"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo/v2/panicif"
+	"github.com/anacrolix/torrent/tracker"
 	"github.com/go-quicktest/qt"
 )
 
@@ -51,4 +53,47 @@ func TestUpdateOverdueRecursion(t *testing.T) {
 		// updateOverdue we can test for thrashing, but it's non-trivial.
 		d.updateOverdue()
 	})
+}
+
+func TestReAddForcesFreshStartedAnnounce(t *testing.T) {
+	cl := &Client{
+		config:              &ClientConfig{TorrentPeersLowWater: 50},
+		torrents:            make(map[*Torrent]struct{}),
+		torrentsByShortHash: make(map[shortInfohash]*Torrent),
+	}
+	tor := &Torrent{cl: cl}
+	cl.torrents[tor] = struct{}{}
+
+	var key torrentTrackerAnnouncerKey
+	key.ShortInfohash[0] = 1
+	key.url = trackerAnnouncerKey("http://tracker.example/announce")
+	cl.torrentsByShortHash[key.ShortInfohash] = tor
+
+	d := regularTrackerAnnounceDispatcher{torrentClient: cl, logger: slog.Default()}
+	d.initTables()
+	d.initTimerNoop()
+	u, err := url.Parse(string(key.url))
+	qt.Assert(t, qt.IsNil(err))
+	d.initTrackerClient(u, key.url, cl.config, slog.Default())
+	d.announceStates = map[torrentTrackerAnnouncerKey]*announceState{
+		key: {
+			lastOk: lastAnnounceOk{
+				AnnouncedEvent: tracker.None,
+				Completed:      time.Now(),
+				Interval:       time.Hour,
+			},
+			Err:                  errors.New("stale announce error"),
+			lastAttemptCompleted: time.Now(),
+			sentCompleted:        true,
+		},
+	}
+	d.resetAnnounceStateForReadd(key)
+
+	event, when := d.nextAnnounceEvent(key)
+	qt.Assert(t, qt.Equals(event, tracker.Started))
+	qt.Assert(t, qt.IsFalse(when.IsZero()))
+	state := d.announceStates[key]
+	qt.Assert(t, qt.IsTrue(state.forceStarted))
+	qt.Assert(t, qt.IsFalse(state.sentCompleted))
+	qt.Assert(t, qt.IsNil(state.Err))
 }

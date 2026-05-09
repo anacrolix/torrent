@@ -166,6 +166,26 @@ func (me *fileTorrentImpl) Close() error {
 	return err
 }
 
+func (me *fileTorrentImpl) CloseWriters() error {
+	closedPaths, remaining, err := me.io.closeWriters()
+	me.logger().Debug("closing writer cache after torrent completion", "count", len(closedPaths))
+	for _, path := range closedPaths {
+		me.logger().Debug("closed cached writer after torrent completion", "path", path)
+	}
+	me.logger().Debug(
+		"writer cache close result after torrent completion",
+		"closedCount",
+		len(closedPaths),
+		"remainingCount",
+		remaining,
+		"cleared",
+		remaining == 0,
+		"err",
+		err,
+	)
+	return err
+}
+
 func (me *fileTorrentImpl) file(index int) file {
 	return file{
 		Info:      me.info,

@@ -43,6 +43,10 @@ func (me *checkpointCountingFileIo) Close() error {
 	return nil
 }
 
+func (me *checkpointCountingFileIo) closeWriters() (closedPaths []string, remaining int, err error) {
+	return nil, 0, nil
+}
+
 func TestBufferedCheckpointDefersFileFlushUntilTorrentClose(t *testing.T) {
 	info := &metainfo.Info{
 		Files:       []metainfo.FileInfo{{Path: []string{"a.bin"}, Length: 1}},

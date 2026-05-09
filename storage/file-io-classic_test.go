@@ -78,6 +78,26 @@ func TestClassicFileIoOpenForReadBorrowsWriterHandle(t *testing.T) {
 	qt.Assert(t, qt.DeepEquals(buf, []byte("hello")))
 }
 
+func TestClassicFileIoCloseWritersClearsCachedHandles(t *testing.T) {
+	tempDir := t.TempDir()
+	filePath := filepath.Join(tempDir, "data.bin")
+
+	ioImpl, ok := newClassicFileIo().(*classicFileIo)
+	qt.Assert(t, qt.IsTrue(ok))
+	t.Cleanup(func() { _ = ioImpl.Close() })
+
+	writer, err := ioImpl.openForWrite(filePath, 0)
+	qt.Assert(t, qt.IsNil(err))
+	_, err = writer.WriteAt([]byte("hello"), 0)
+	qt.Assert(t, qt.IsNil(err))
+
+	closedPaths, remaining, err := ioImpl.closeWriters()
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.DeepEquals(closedPaths, []string{filePath}))
+	qt.Assert(t, qt.Equals(remaining, 0))
+	qt.Assert(t, qt.HasLen(ioImpl.writers, 0))
+}
+
 func TestClassicFileReaderWriteToNDoesNotReportShortWrite(t *testing.T) {
 	tempDir := t.TempDir()
 	filePath := filepath.Join(tempDir, "data.bin")

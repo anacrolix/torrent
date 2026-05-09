@@ -61,6 +61,10 @@ func (me *mmapFileIo) Close() error {
 	return nil
 }
 
+func (me *mmapFileIo) closeWriters() (closedPaths []string, remaining int, err error) {
+	return nil, 0, nil
+}
+
 func (me *mmapFileIo) closedErr() error {
 	if me.closed {
 		return fs.ErrClosed

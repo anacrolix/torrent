@@ -20,6 +20,7 @@ var _ interface {
 	PieceCompletion
 	PieceCompletionCheckpointer
 	PieceCompletionPersistenter
+	PieceCompletionTorrentDeleter
 } = (*bufferedPieceCompletion)(nil)
 
 func newBufferedPieceCompletion(underlying PieceCompletion) PieceCompletion {
@@ -126,6 +127,26 @@ func (me *bufferedPieceCompletion) Close() error {
 		return err
 	}
 	return me.underlying.Close()
+}
+
+func (me *bufferedPieceCompletion) DeleteTorrent(infoHash metainfo.Hash) error {
+	me.mu.Lock()
+	for key := range me.overlay {
+		if key.InfoHash == infoHash {
+			delete(me.overlay, key)
+		}
+	}
+	for key := range me.dirty {
+		if key.InfoHash == infoHash {
+			delete(me.dirty, key)
+		}
+	}
+	me.mu.Unlock()
+
+	if deleter, ok := me.underlying.(PieceCompletionTorrentDeleter); ok {
+		return deleter.DeleteTorrent(infoHash)
+	}
+	return nil
 }
 
 func (me *bufferedPieceCompletion) persistChanges(changes []PieceCompletionChange) error {

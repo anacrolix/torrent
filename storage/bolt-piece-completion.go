@@ -111,3 +111,13 @@ func (me boltPieceCompletion) SetBatch(changes []PieceCompletionChange) error {
 func (me *boltPieceCompletion) Close() error {
 	return me.db.Close()
 }
+
+func (me boltPieceCompletion) DeleteTorrent(infoHash metainfo.Hash) error {
+	return me.db.Update(func(tx *bbolt.Tx) error {
+		cb := tx.Bucket(completionBucketKey)
+		if cb == nil {
+			return nil
+		}
+		return cb.DeleteBucket(infoHash[:])
+	})
+}

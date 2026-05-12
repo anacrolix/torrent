@@ -46,6 +46,12 @@ type PieceCompletionCheckpointer interface {
 	Checkpoint([]metainfo.PieceKey) error
 }
 
+// Optional interface for piece completion implementations that can clear all persisted state for a
+// specific torrent infohash.
+type PieceCompletionTorrentDeleter interface {
+	DeleteTorrent(metainfo.Hash) error
+}
+
 func pieceCompletionIsPersistent(pc PieceCompletion) bool {
 	if p, ok := pc.(PieceCompletionPersistenter); ok {
 		return p.Persistent()

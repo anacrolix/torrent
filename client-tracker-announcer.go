@@ -440,12 +440,8 @@ func (me *regularTrackerAnnounceDispatcher) step() mytimer.TimeValue {
 }
 
 func (me *regularTrackerAnnounceDispatcher) addKey(key torrentTrackerAnnouncerKey) {
-	if me.announceData.ContainsKey(key) {
-		return
-	}
 	t := me.torrentFromShortInfohash(key.ShortInfohash)
 	if t == nil {
-		// Crude, but the torrent was already dropped. We probably called AddTrackers late.
 		return
 	}
 	g.MakeMapIfNil(&me.torrentForAnnounceRequests)
@@ -456,6 +452,17 @@ func (me *regularTrackerAnnounceDispatcher) addKey(key torrentTrackerAnnouncerKe
 		g.MapMustAssignNew(me.announceStates, key, g.PtrTo(announceState{}))
 	}
 	t.regularTrackerAnnounceState[key] = g.MapMustGet(me.announceStates, key)
+	if me.announceData.ContainsKey(key) {
+		me.resetAnnounceStateForReadd(key)
+		res := me.announceData.Update(key, func(av nextAnnounceInput) nextAnnounceInput {
+			av.torrent = me.makeTorrentInput(t)
+			av.nextAnnounceStateInput = me.makeAnnounceStateInput(key)
+			return av
+		})
+		panicif.False(res.Exists)
+		me.updateTimer()
+		return
+	}
 	me.announceData.Create(key, nextAnnounceInput{
 		torrent:                me.makeTorrentInput(t),
 		nextAnnounceStateInput: me.makeAnnounceStateInput(key),
@@ -559,6 +566,13 @@ func (me *regularTrackerAnnounceDispatcher) finishedAnnounce(key torrentTrackerA
 
 func (me *regularTrackerAnnounceDispatcher) syncAnnounceState(key torrentTrackerAnnouncerKey) {
 	input := me.makeAnnounceStateInput(key)
+
+	if input.When.IsZero() {
+		me.announceData.Delete(key)
+		delete(me.announceStates, key)
+		return
+	}
+
 	me.announceData.UpdateOrCreate(key, func(old nextAnnounceInput) nextAnnounceInput {
 		old.nextAnnounceStateInput = input
 		return old
@@ -654,6 +668,9 @@ func (me *regularTrackerAnnounceDispatcher) singleAnnounce(
 				NumPeers:       len(resp.Peers),
 				Completed:      now,
 			}
+				if req.Event == tracker.Started {
+					state.forceStarted = false
+				}
 			if req.Event == tracker.Completed {
 				state.sentCompleted = true
 			}
@@ -673,6 +690,16 @@ func (me *regularTrackerAnnounceDispatcher) updateAnnounceState(
 	as := me.announceStates[key]
 	update(as)
 	me.syncAnnounceState(key)
+}
+
+func (me *regularTrackerAnnounceDispatcher) resetAnnounceStateForReadd(key torrentTrackerAnnouncerKey) {
+	me.updateAnnounceState(key, func(state *announceState) {
+		state.lastOk = lastAnnounceOk{}
+		state.Err = nil
+		state.lastAttemptCompleted = time.Time{}
+		state.sentCompleted = false
+		state.forceStarted = true
+	})
 }
 
 func (me *regularTrackerAnnounceDispatcher) getAnnounceOpts() trHttp.AnnounceOpt {
@@ -838,7 +865,10 @@ func (me *regularTrackerAnnounceDispatcher) nextAnnounceEvent(key torrentTracker
 	if !state.sentCompleted && t.sawInitiallyIncompleteData && t.haveAllPieces() {
 		return tracker.Completed, time.Now()
 	}
-	if lastOk.Completed.IsZero() {
+	if state.forceStarted {
+		return tracker.Started, time.Now()
+	}
+	if lastOk.Completed.IsZero() || lastOk.AnnouncedEvent == tracker.Stopped {
 		// Returning now should be fine as sorting should occur on "overdue" derived value.
 		return tracker.Started, time.Now()
 	}
@@ -859,6 +889,9 @@ type announceState struct {
 	lastAttemptCompleted time.Time
 	// Has ever sent completed event. Should only be sent once.
 	sentCompleted bool
+	// Force the next eligible announce to be a fresh Started, used when a torrent is re-added while
+	// stale tracker lifecycle state for the same key still exists.
+	forceStarted bool
 }
 
 func (cl *Client) startTrackerAnnouncer(u *url.URL, urlStr trackerAnnouncerKey) {

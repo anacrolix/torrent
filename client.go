@@ -168,11 +168,15 @@ func (cl *Client) LocalPort() (port int) {
 
 // OnLPDAnnouncement implements lpdClient. It adds addr to any torrent matching
 // an announced infohash, and also to all other active torrents (LPD is the
-// only source of local IPs).
+// only source of local IPs). Private torrents (BEP 27) are skipped on both
+// paths — they must not receive peers via local discovery.
 func (cl *Client) OnLPDAnnouncement(addr string, infohashes []string) {
 	announced := make(map[*Torrent]struct{}, len(infohashes))
 	for _, ih := range infohashes {
 		if t, ok := cl.Torrent(metainfo.NewHashFromHex(ih)); ok {
+			if t.isPrivate() {
+				continue
+			}
 			lpdPeer(t, addr)
 			announced[t] = struct{}{}
 		}
@@ -182,7 +186,7 @@ func (cl *Client) OnLPDAnnouncement(addr string, infohashes []string) {
 	cl.rLock()
 	var rest []*Torrent
 	for t := range cl.torrents {
-		if _, ok := announced[t]; !ok {
+		if _, ok := announced[t]; !ok && !t.isPrivate() {
 			rest = append(rest, t)
 		}
 	}
@@ -194,12 +198,17 @@ func (cl *Client) OnLPDAnnouncement(addr string, infohashes []string) {
 }
 
 // TorrentInfohashesAndPort implements lpdClient. It returns a snapshot of
-// active torrent infohash hex strings and the listen port.
+// active torrent infohash hex strings and the listen port. Private torrents
+// (BEP 27) are excluded — they must not be announced via Local Peer
+// Discovery (BEP 14).
 func (cl *Client) TorrentInfohashesAndPort() (port int, infohashes []string) {
 	cl.rLock()
 	defer cl.rUnlock()
 	port = cl.LocalPort()
 	for t := range cl.torrents {
+		if t.isPrivate() {
+			continue
+		}
 		infohashes = append(infohashes, t.InfoHash().HexString())
 	}
 	return
@@ -1583,7 +1592,8 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 
 	cl.unlock()
 
-	if cl.lpd != nil {
+	// BEP 27: private torrents must not receive or announce via Local Peer Discovery.
+	if cl.lpd != nil && !t.isPrivate() {
 		cl.lpd.lpdPeers(t)
 		cl.lpd.lpdForce()
 	}

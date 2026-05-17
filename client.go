@@ -1338,6 +1338,12 @@ func (pc *PeerConn) sendInitialMessages() {
 		}
 		pc.postBitfield()
 	}()
+	// BEP 6: announce the Allowed Fast Set so the peer can request these pieces
+	// while still choked. Only meaningful when both sides support Fast Extension
+	// and we know how many pieces the torrent has.
+	if pc.fastEnabled() && t.haveInfo() {
+		pc.sendAllowedFastSet()
+	}
 	if pc.PeerExtensionBytes.SupportsDHT() && cl.config.Extensions.SupportsDHT() && cl.haveDhtServer() {
 		pc.write(pp.Message{
 			Type: pp.Port,

@@ -1448,16 +1448,32 @@ file:
 }
 
 func (pc *PeerConn) onReadHashes(msg *pp.Message) (err error) {
+	hr := hashRequestFromMessage(*msg)
+	// A BEP 52 Hashes message is only meaningful as a response to a request we sent. Treat anything
+	// else as peer-controlled protocol noise so it can't allocate per-file hash state or touch unknown
+	// pieces roots.
+	if !g.MapContains(pc.sentHashRequests, hr) {
+		return fmt.Errorf("received unsolicited hashes message: %v", hr)
+	}
+	delete(pc.sentHashRequests, hr)
+	if msg.ProofLayers != 0 {
+		return errors.New("proof layers not supported")
+	}
+	if uint64(msg.Length) != uint64(len(msg.Hashes)) {
+		return fmt.Errorf("received %d hashes for length %d", len(msg.Hashes), msg.Length)
+	}
 	file := pc.t.getFileByPiecesRoot(msg.PiecesRoot)
+	if file == nil {
+		return fmt.Errorf("no file for pieces root %x", msg.PiecesRoot)
+	}
 	filePieceHashes := pc.receivedHashPieces[msg.PiecesRoot]
 	if filePieceHashes == nil {
 		filePieceHashes = make([][32]byte, file.numPieces())
 		g.MakeMapIfNil(&pc.receivedHashPieces)
 		pc.receivedHashPieces[msg.PiecesRoot] = filePieceHashes
 	}
-	if msg.ProofLayers != 0 {
-		// This isn't handled yet.
-		panic(msg.ProofLayers)
+	if uint64(msg.Index) > uint64(len(filePieceHashes)) {
+		return fmt.Errorf("hash index %d is past file piece count %d", msg.Index, len(filePieceHashes))
 	}
 	copy(filePieceHashes[msg.Index:], msg.Hashes)
 	root := merkle.RootWithPadHash(

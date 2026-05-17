@@ -1,11 +1,13 @@
 package torrent
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/netip"
 	"sync"
@@ -16,9 +18,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
+	"github.com/anacrolix/torrent/merkle"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
+	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 )
 
 // Ensure that no race exists between sending a bitfield, and a subsequent
@@ -205,6 +209,127 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	qt.Assert(b, qt.IsNil(err))
 	qt.Assert(b, qt.Equals(cn._stats.ChunksReadUseful.Int64(), int64(b.N)*int64(numRequests)))
 	qt.Assert(b, qt.IsTrue(t.smartBanCache.HasBlocks()))
+}
+
+func TestPeerConnRejectsUnsolicitedHashes(t *testing.T) {
+	var knownRoot infohash_v2.T
+	knownRoot[0] = 1
+	cl := &Client{}
+	cl._mu.client = cl
+	cl.slogger = slog.Default()
+	tor := &Torrent{
+		cl:        cl,
+		chunkSize: defaultChunkSize,
+		files: &[]*File{{
+			piecesRoot: g.Some(knownRoot),
+		}},
+	}
+	var msgBuf bytes.Buffer
+	// Feed the message through the read loop so this covers the network-reachable path, not just the
+	// private handler.
+	msg := pp.Message{
+		Type:   pp.Hashes,
+		Length: 1,
+		Hashes: [][32]byte{{}},
+	}
+	require.NoError(t, msg.WriteTo(&msgBuf))
+	cn := &PeerConn{
+		Peer: Peer{
+			cl:        cl,
+			t:         tor,
+			callbacks: &Callbacks{},
+		},
+		r: bytes.NewReader(msgBuf.Bytes()),
+	}
+
+	cl.lock()
+	err := cn.mainReadLoop()
+	cl.unlock()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsolicited hashes message")
+}
+
+func TestPeerConnAcceptsSolicitedHashes(t *testing.T) {
+	pieceHashes := [][32]byte{{}, {}}
+	piecesRoot := infohash_v2.T(merkle.Root(pieceHashes))
+	var v1Hash metainfo.Hash
+	cl := &Client{}
+	tor := &Torrent{
+		cl:        cl,
+		chunkSize: defaultChunkSize,
+		info: &metainfo.Info{
+			PieceLength: 1,
+		},
+		pieces: []Piece{
+			{hash: &v1Hash},
+			{hash: &v1Hash, index: 1},
+		},
+		files: &[]*File{{
+			t:          nil,
+			length:     2,
+			fi:         metainfo.FileInfo{Length: 2, PiecesRoot: g.Some(piecesRoot)},
+			piecesRoot: g.Some(piecesRoot),
+		}},
+	}
+	(*tor.files)[0].t = tor
+	for i := range tor.pieces {
+		tor.pieces[i].t = tor
+	}
+	msg := pp.Message{
+		Type:       pp.Hashes,
+		PiecesRoot: piecesRoot,
+		Length:     2,
+		Hashes:     pieceHashes,
+	}
+	cn := &PeerConn{
+		Peer: Peer{
+			cl: cl,
+			t:  tor,
+		},
+		sentHashRequests: map[hashRequest]struct{}{
+			hashRequestFromMessage(msg): {},
+		},
+	}
+
+	require.NoError(t, cn.onReadHashes(&msg))
+	require.NotContains(t, cn.sentHashRequests, hashRequestFromMessage(msg))
+	// Matching the requested root should promote the received file layer hashes into piece v2 hashes.
+	require.Equal(t, g.Some(pieceHashes[0]), tor.pieces[0].hashV2)
+	require.Equal(t, g.Some(pieceHashes[1]), tor.pieces[1].hashV2)
+}
+
+func TestPeerConnRejectsHashesForMissingRoot(t *testing.T) {
+	var knownRoot infohash_v2.T
+	knownRoot[0] = 1
+	var missingRoot infohash_v2.T
+	missingRoot[0] = 2
+	cl := &Client{}
+	tor := &Torrent{
+		cl:        cl,
+		chunkSize: defaultChunkSize,
+		files: &[]*File{{
+			piecesRoot: g.Some(knownRoot),
+		}},
+	}
+	msg := pp.Message{
+		Type:       pp.Hashes,
+		PiecesRoot: missingRoot,
+		Length:     1,
+		Hashes:     [][32]byte{{}},
+	}
+	cn := &PeerConn{
+		Peer: Peer{
+			cl: cl,
+			t:  tor,
+		},
+		sentHashRequests: map[hashRequest]struct{}{
+			hashRequestFromMessage(msg): {},
+		},
+	}
+
+	err := cn.onReadHashes(&msg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no file for pieces root")
 }
 
 func TestConnPexPeerFlags(t *testing.T) {

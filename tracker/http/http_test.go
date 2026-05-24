@@ -73,3 +73,59 @@ func TestSetAnnounceInfohashParamWithSpaces(t *testing.T) {
 		qt.StringContains(someUrl.String(),
 			"info_hash=%2Bv%0A%A1x%93%200%C8G%DC%DF%8E%AE%BFV%0A%1B%D1l"))
 }
+
+// These cases cover various forms of malformed non-compact peer lists that a
+// tracker might return. Before the fix, several of these caused panics due to
+// bare type assertions on untrusted data.
+func TestUnmarshalPeersMalformed(t *testing.T) {
+	cases := []struct {
+		name      string
+		input     string
+		wantCount int
+	}{
+		{
+			// Integer in the peers list instead of a peer dictionary.
+			name:      "NonDictInList",
+			input:     "d8:intervali1800e5:peersli42eee",
+			wantCount: 0,
+		},
+		{
+			// Two valid peer dicts with an invalid integer between them.
+			// Both valid peers should still be collected.
+			name:      "MixedValidAndInvalid",
+			input:     "d5:peersld2:ip7:1.2.3.44:porti6881eei99ed2:ip8:5.6.7.894:porti6882eeee",
+			wantCount: 2,
+		},
+		{
+			// Peer dict has "peer id" but is missing the required "ip" and "port".
+			name:      "MissingFields",
+			input:     "d5:peersld7:peer id4:testeee",
+			wantCount: 0,
+		},
+		{
+			// "ip" is an integer and "port" is a string — wrong types for both.
+			name:      "WrongFieldTypes",
+			input:     "d5:peersld2:ipi12345e4:port7:not-inteee",
+			wantCount: 0,
+		},
+		{
+			// Empty peers list should work fine.
+			name:      "EmptyList",
+			input:     "d5:peerslee",
+			wantCount: 0,
+		},
+		{
+			// "ip" value is a string, but not a valid IP address.
+			name:      "InvalidIP",
+			input:     "d5:peersld2:ip9:not-an-ip4:porti6881eeee",
+			wantCount: 0,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var hr HttpResponse
+			require.NoError(t, bencode.Unmarshal([]byte(tc.input), &hr))
+			assert.Len(t, hr.Peers.List, tc.wantCount)
+		})
+	}
+}

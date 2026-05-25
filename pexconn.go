@@ -42,6 +42,10 @@ func (s *pexConnState) Init(c *PeerConn) {
 	if !ok || xid == 0 || c.t.cl.config.DisablePEX {
 		return
 	}
+	// BEP 27: private torrents must not exchange peers via PEX.
+	if c.t.isPrivate() {
+		return
+	}
 	s.xid = xid
 	s.last = nil
 	s.torrent = c.t

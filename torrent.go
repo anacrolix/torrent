@@ -1017,6 +1017,19 @@ func (t *Torrent) haveInfo() bool {
 	return t.info != nil
 }
 
+// isPrivate reports whether the torrent's metainfo carries BEP 27's
+// `private=1` flag. Private torrents must not be announced via DHT, must
+// not participate in PEX, and must not be discovered or announced via
+// Local Peer Discovery (BEP 14). Returns false when info has not yet been
+// loaded (e.g. magnet that hasn't fetched metadata yet) — callers that need
+// to be conservative should also check haveInfo().
+func (t *Torrent) isPrivate() bool {
+	if t.info == nil {
+		return false
+	}
+	return t.info.Private != nil && *t.info.Private
+}
+
 // Returns a run-time generated MetaInfo that includes the info bytes and
 // announce-list as currently known to the client.
 func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
@@ -2386,6 +2399,11 @@ func (t *Torrent) dhtAnnouncer(s DhtServer) {
 		for {
 			if t.closed.IsSet() {
 				return
+			}
+			// BEP 27: private torrents must not be announced via DHT. We re-check
+			// every loop because info may be loaded later (e.g. via magnet).
+			if t.isPrivate() {
+				goto wait
 			}
 			// We're also announcing ourselves as a listener, so we don't just want peer addresses.
 			// TODO: We can include the announce_peer step depending on whether we can receive

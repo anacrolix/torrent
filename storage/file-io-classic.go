@@ -151,7 +151,11 @@ type classicFileReader struct {
 }
 
 func (c classicFileReader) writeToN(w io.Writer, n int64) (written int64, err error) {
-	return io.CopyN(w, c.File, n)
+	lw := limitWriter{
+		rem: n,
+		w:   w,
+	}
+	return c.File.WriteTo(&lw)
 }
 
 func (c classicFileReader) seekDataOrEof(offset int64) (ret int64, err error) {

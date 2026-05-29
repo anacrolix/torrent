@@ -93,7 +93,6 @@ func TestReAddForcesFreshStartedAnnounce(t *testing.T) {
 	qt.Assert(t, qt.Equals(event, tracker.Started))
 	qt.Assert(t, qt.IsFalse(when.IsZero()))
 	state := d.announceStates[key]
-	qt.Assert(t, qt.IsTrue(state.forceStarted))
 	qt.Assert(t, qt.IsFalse(state.sentCompleted))
 	qt.Assert(t, qt.IsNil(state.Err))
 }

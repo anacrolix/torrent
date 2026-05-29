@@ -186,7 +186,7 @@ func (me *filePieceImpl) MarkComplete() (err error) {
 	for fileIndex := range me.fileExtents() {
 		f := me.t.file(fileIndex)
 		res := g.Result[bool]{}
-		if !(prevCompletion.Ok && prevCompletion.Complete) {
+		if !prevCompletion.Ok || !prevCompletion.Complete {
 			if allComplete, tracked := me.t.markFilePieceComplete(fileIndex); tracked {
 				res.SetOk(allComplete)
 			} else {

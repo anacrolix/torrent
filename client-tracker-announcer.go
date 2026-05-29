@@ -668,9 +668,6 @@ func (me *regularTrackerAnnounceDispatcher) singleAnnounce(
 				NumPeers:       len(resp.Peers),
 				Completed:      now,
 			}
-				if req.Event == tracker.Started {
-					state.forceStarted = false
-				}
 			if req.Event == tracker.Completed {
 				state.sentCompleted = true
 			}
@@ -698,7 +695,6 @@ func (me *regularTrackerAnnounceDispatcher) resetAnnounceStateForReadd(key torre
 		state.Err = nil
 		state.lastAttemptCompleted = time.Time{}
 		state.sentCompleted = false
-		state.forceStarted = true
 	})
 }
 
@@ -865,9 +861,6 @@ func (me *regularTrackerAnnounceDispatcher) nextAnnounceEvent(key torrentTracker
 	if !state.sentCompleted && t.sawInitiallyIncompleteData && t.haveAllPieces() {
 		return tracker.Completed, time.Now()
 	}
-	if state.forceStarted {
-		return tracker.Started, time.Now()
-	}
 	if lastOk.Completed.IsZero() || lastOk.AnnouncedEvent == tracker.Stopped {
 		// Returning now should be fine as sorting should occur on "overdue" derived value.
 		return tracker.Started, time.Now()
@@ -889,9 +882,6 @@ type announceState struct {
 	lastAttemptCompleted time.Time
 	// Has ever sent completed event. Should only be sent once.
 	sentCompleted bool
-	// Force the next eligible announce to be a fresh Started, used when a torrent is re-added while
-	// stale tracker lifecycle state for the same key still exists.
-	forceStarted bool
 }
 
 func (cl *Client) startTrackerAnnouncer(u *url.URL, urlStr trackerAnnouncerKey) {

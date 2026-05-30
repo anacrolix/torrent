@@ -91,6 +91,10 @@ func (ms *MMapSpan) WriteAt(p []byte, off int64) (n int, err error) {
 	// log.Printf("writing %v bytes at %v", len(p), off)
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
+	if ms.closed {
+		err = fs.ErrClosed
+		return
+	}
 	n = ms.locateCopy(func(a, b []byte) (_, _ []byte) { return b, a }, p, off)
 	if n != len(p) {
 		err = io.ErrShortWrite

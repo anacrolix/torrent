@@ -28,6 +28,7 @@ import (
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/internal/fast"
 	requestStrategy "github.com/anacrolix/torrent/internal/request-strategy"
 
 	"github.com/anacrolix/torrent/merkle"
@@ -444,6 +445,35 @@ func (cn *PeerConn) postBitfield() {
 		Bitfield: cn.t.bitfield(),
 	})
 	cn.sentHaves = cn.t._completedPieces.Clone()
+}
+
+// sendAllowedFastSet computes the BEP 6 Allowed Fast Set for the remote peer
+// and sends one AllowedFast message per piece in the set. Callers must ensure
+// fastEnabled() and torrent metadata are available; the function is a no-op
+// when those preconditions don't hold or when the peer's address is not IPv4
+// (BEP 6 defines the algorithm only for IPv4).
+func (cn *PeerConn) sendAllowedFastSet() {
+	numPieces := uint32(cn.t.numPieces())
+	if numPieces == 0 {
+		return
+	}
+	ip := cn.remoteIp()
+	if ip == nil {
+		return
+	}
+	// BEP 6 derives the fast set from the BitTorrent v1 info hash. Torrents
+	// without a v1 hash (rare, v2-only) cannot produce a verifiable set.
+	if !cn.t.infoHash.Ok {
+		return
+	}
+	set := fast.GenerateFastSet(fast.DefaultK, numPieces, cn.t.infoHash.Value, ip)
+	for _, idx := range set {
+		cn.write(pp.Message{
+			Type:  pp.AllowedFast,
+			Index: pp.Integer(idx),
+		})
+		torrent.Add("allowed fasts sent", 1)
+	}
 }
 
 func (cn *PeerConn) handleOnNeedUpdateRequests() {
@@ -1017,6 +1047,10 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.AllowedFast:
 			torrent.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).LogLevel(log.Debug, c.t.logger)
+			// Record the allowed-fast piece so requesting.go and shouldRequestWithoutBias
+			// can serve requests for it while we are choked. Without this Add, the
+			// peerAllowedFast bitmap stays empty and AllowedFast is effectively a no-op.
+			c.peerAllowedFast.Add(pieceIndex(msg.Index))
 			c.onNeedUpdateRequests("PeerConn.mainReadLoop allowed fast")
 		case pp.Extended:
 			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
@@ -1448,16 +1482,32 @@ file:
 }
 
 func (pc *PeerConn) onReadHashes(msg *pp.Message) (err error) {
+	hr := hashRequestFromMessage(*msg)
+	// A BEP 52 Hashes message is only meaningful as a response to a request we sent. Treat anything
+	// else as peer-controlled protocol noise so it can't allocate per-file hash state or touch unknown
+	// pieces roots.
+	if !g.MapContains(pc.sentHashRequests, hr) {
+		return fmt.Errorf("received unsolicited hashes message: %v", hr)
+	}
+	delete(pc.sentHashRequests, hr)
+	if msg.ProofLayers != 0 {
+		return errors.New("proof layers not supported")
+	}
+	if uint64(msg.Length) != uint64(len(msg.Hashes)) {
+		return fmt.Errorf("received %d hashes for length %d", len(msg.Hashes), msg.Length)
+	}
 	file := pc.t.getFileByPiecesRoot(msg.PiecesRoot)
+	if file == nil {
+		return fmt.Errorf("no file for pieces root %x", msg.PiecesRoot)
+	}
 	filePieceHashes := pc.receivedHashPieces[msg.PiecesRoot]
 	if filePieceHashes == nil {
 		filePieceHashes = make([][32]byte, file.numPieces())
 		g.MakeMapIfNil(&pc.receivedHashPieces)
 		pc.receivedHashPieces[msg.PiecesRoot] = filePieceHashes
 	}
-	if msg.ProofLayers != 0 {
-		// This isn't handled yet.
-		panic(msg.ProofLayers)
+	if uint64(msg.Index) > uint64(len(filePieceHashes)) {
+		return fmt.Errorf("hash index %d is past file piece count %d", msg.Index, len(filePieceHashes))
 	}
 	copy(filePieceHashes[msg.Index:], msg.Hashes)
 	root := merkle.RootWithPadHash(

@@ -1,6 +1,7 @@
 package httpTracker
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -30,13 +31,37 @@ func (p Peer) String() string {
 	}
 }
 
-// Set from the non-compact form in BEP 3.
-func (p *Peer) FromDictInterface(d map[string]interface{}) {
-	p.IP = net.ParseIP(d["ip"].(string))
-	if _, ok := d["peer id"]; ok {
-		p.ID = []byte(d["peer id"].(string))
+// Package-level errors for malformed peer dictionaries. We use these instead of
+// fmt.Errorf to avoid allocating a new error string on every malformed entry,
+// since a hostile tracker could send many of them in a single response.
+var (
+	errPeerDictMissingIP   = errors.New("peer dict: missing or invalid \"ip\"")
+	errPeerDictMissingPort = errors.New("peer dict: missing or invalid \"port\"")
+)
+
+// Set from the non-compact form in BEP 3. Returns an error if required fields
+// are missing or have unexpected types.
+func (p *Peer) FromDictInterface(d map[string]interface{}) error {
+	ipStr, ok := d["ip"].(string)
+	if !ok {
+		return errPeerDictMissingIP
 	}
-	p.Port = int(d["port"].(int64))
+	p.IP = net.ParseIP(ipStr)
+	if p.IP == nil {
+		// Don't let garbage like "not-an-ip" through — a nil IP would cause
+		// problems when we actually try to connect to this peer later.
+		return errPeerDictMissingIP
+	}
+	// "peer id" is optional in BEP 3. Only set it if present and valid.
+	if peerIdStr, ok := d["peer id"].(string); ok {
+		p.ID = []byte(peerIdStr)
+	}
+	portVal, ok := d["port"].(int64)
+	if !ok {
+		return errPeerDictMissingPort
+	}
+	p.Port = int(portVal)
+	return nil
 }
 
 func (p Peer) FromNodeAddr(na krpc.NodeAddr) Peer {

@@ -70,8 +70,18 @@ func (me *Peers) UnmarshalBencode(b []byte) (err error) {
 		vars.Add("http responses with list peers", 1)
 		me.Compact = false
 		for _, i := range v {
+			// BEP 3 peers are dictionaries. Skip malformed entries to avoid
+			// panicking on type assertions from untrusted tracker data.
+			peerDict, ok := i.(map[string]interface{})
+			if !ok {
+				continue
+			}
 			var p Peer
-			p.FromDictInterface(i.(map[string]interface{}))
+			// Use := here, not =. We don't want a parse error from the last
+			// entry to leak into the named return and fail the whole unmarshal.
+			if err := p.FromDictInterface(peerDict); err != nil {
+				continue
+			}
 			me.List = append(me.List, p)
 		}
 		return

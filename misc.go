@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"errors"
+	"fmt"
 	"net"
 
 	"github.com/RoaringBitmap/roaring/v2"
@@ -88,6 +89,11 @@ func torrentRequestOffset(torrentLength, pieceSize int64, r Request) (off int64)
 }
 
 func validateInfo(info *metainfo.Info) error {
+	if info.HasV2() {
+		if err := info.FileTree.Validate(); err != nil {
+			return fmt.Errorf("bad v2 file tree: %w", err)
+		}
+	}
 	if len(info.Pieces)%20 != 0 {
 		return errors.New("pieces has invalid length")
 	}

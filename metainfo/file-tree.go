@@ -1,6 +1,7 @@
 package metainfo
 
 import (
+	"fmt"
 	"iter"
 	"maps"
 	"slices"
@@ -156,4 +157,25 @@ func (ft *FileTree) PiecesRootAsByteArray() (ret g.Option[infohash_v2.T]) {
 	}
 	ret.Ok = true
 	return
+}
+
+// Validate checks structural invariants required by BEP 52. Non-empty leaf files must have a
+// pieces root of exactly 32 bytes; empty files must not have one.
+func (ft *FileTree) Validate() error {
+	var err error
+	ft.Walk(nil, func(path []string, node *FileTree) {
+		if err != nil {
+			return
+		}
+		if node.IsDir() {
+			return
+		}
+		n := len(node.File.PiecesRoot)
+		if node.File.Length > 0 && n != 32 {
+			err = fmt.Errorf("file %q: pieces root length %d, expected 32", path, n)
+		} else if node.File.Length == 0 && n != 0 {
+			err = fmt.Errorf("file %q: empty file has pieces root of length %d", path, n)
+		}
+	})
+	return err
 }

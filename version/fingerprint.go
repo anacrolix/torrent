@@ -2,19 +2,15 @@
 
 package version
 
-import (
-	"fmt"
-)
-
-// versionToChar converts an integer version number (0–35) to an ASCII character.
+// versionToChar converts an integer version number (0–35) to an ASCII byte.
 // 0–9 → '0'–'9'
 // 10-35 → 'A'-'Z'
-func versionToChar(v int) rune {
+func versionToChar(v int) byte {
 	switch {
 	case 0 <= v && v < 10:
-		return rune('0' + v)
+		return byte('0' + v)
 	case 10 <= v && v < 36:
-		return rune('A' + (v - 10))
+		return byte('A' + (v - 10))
 	default:
 		panic("invalid version number for fingerprint")
 	}
@@ -36,12 +32,14 @@ func GenerateFingerprint(name string, major, minor, revision, tag int) string {
 		panic("negative version number in fingerprint")
 	}
 
-	return fmt.Sprintf("-%c%c%c%c%c%c-",
+	return string([]byte{
+		'-',
 		name[0],
 		name[1],
 		versionToChar(major),
 		versionToChar(minor),
 		versionToChar(revision),
 		versionToChar(tag),
-	)
+		'-',
+	})
 }

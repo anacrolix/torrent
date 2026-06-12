@@ -8,8 +8,6 @@ import (
 	"testing"
 
 	qt "github.com/go-quicktest/qt"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func BenchmarkDecodePieces(t *testing.B) {
@@ -68,9 +66,9 @@ func TestDecodeShortPieceEOF(t *testing.T) {
 		}},
 	}
 	var m Message
-	require.NoError(t, d.Decode(&m))
-	assert.Len(t, m.Piece, 1)
-	assert.ErrorIs(t, d.Decode(&m), io.EOF)
+	qt.Assert(t, qt.IsNil(d.Decode(&m)))
+	qt.Check(t, qt.HasLen(m.Piece, 1))
+	qt.Check(t, qt.ErrorIs(d.Decode(&m), io.EOF))
 }
 
 func TestDecodeOverlongPiece(t *testing.T) {
@@ -88,5 +86,5 @@ func TestDecodeOverlongPiece(t *testing.T) {
 		}},
 	}
 	var m Message
-	require.Error(t, d.Decode(&m))
+	qt.Assert(t, qt.IsNotNil(d.Decode(&m)))
 }

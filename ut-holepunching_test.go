@@ -16,8 +16,6 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/iter"
 	qt "github.com/go-quicktest/qt"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/internal/testutil"
@@ -44,12 +42,12 @@ func TestHolepunchConnect(t *testing.T) {
 	cfg.DialRateLimiter = rate.NewLimiter(0, 1)
 	cfg.Logger = cfg.Logger.WithContextText("seeder")
 	seeder, err := NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer seeder.Close()
 	defer testutil.ExportStatusWriter(seeder, "s", t)()
 	seederTorrent, ok, err := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
-	require.NoError(t, err)
-	assert.True(t, ok)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Check(t, qt.IsTrue(ok))
 	seederTorrent.VerifyData()
 
 	cfg = TestingConfig(t)
@@ -62,7 +60,7 @@ func TestHolepunchConnect(t *testing.T) {
 	//cfg.DisablePEX = true
 	cfg.Debug = true
 	leecher, err := NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer leecher.Close()
 	defer testutil.ExportStatusWriter(leecher, "l", t)()
 
@@ -75,7 +73,7 @@ func TestHolepunchConnect(t *testing.T) {
 	cfg.Logger = cfg.Logger.WithContextText("leecher-leecher")
 	//cfg.DisableUTP = true
 	leecherLeecher, _ := NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer leecherLeecher.Close()
 	defer testutil.ExportStatusWriter(leecherLeecher, "ll", t)()
 	leecherGreeting, ok, err := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
@@ -84,15 +82,15 @@ func TestHolepunchConnect(t *testing.T) {
 		return
 	}())
 	_ = leecherGreeting
-	require.NoError(t, err)
-	assert.True(t, ok)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Check(t, qt.IsTrue(ok))
 	llg, ok, err := leecherLeecher.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 3
 		return
 	}())
-	require.NoError(t, err)
-	assert.True(t, ok)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Check(t, qt.IsTrue(ok))
 
 	var wg sync.WaitGroup
 	wg.Add(1)

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	qt "github.com/go-quicktest/qt"
 )
 
 func TestBinaryReadSliceOfPointers(t *testing.T) {
@@ -27,8 +27,8 @@ func TestBinaryReadSliceOfPointers(t *testing.T) {
 }
 
 func TestConstants(t *testing.T) {
-	assert.EqualValues(t, 3, NotInterested)
-	assert.EqualValues(t, 14, HaveAll)
+	qt.Check(t, qt.Equals(NotInterested, 3))
+	qt.Check(t, qt.Equals(HaveAll, 14))
 }
 
 func TestBitfieldEncode(t *testing.T) {

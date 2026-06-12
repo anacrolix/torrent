@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	g "github.com/anacrolix/generics"
-	"github.com/stretchr/testify/assert"
+	qt "github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/bencode"
 )
@@ -14,8 +14,8 @@ func TestMarshalInfo(t *testing.T) {
 	var info Info
 	g.MakeSliceWithLength(&info.Pieces, 0)
 	b, err := bencode.Marshal(info)
-	assert.NoError(t, err)
-	assert.EqualValues(t, "d4:name0:12:piece lengthi0e6:pieces0:e", string(b))
+	qt.Check(t, qt.IsNil(err))
+	qt.Check(t, qt.Equals(string(b), "d4:name0:12:piece lengthi0e6:pieces0:e"))
 }
 
 func TestFileTreeValidate(t *testing.T) {
@@ -108,4 +108,3 @@ func TestFileTreeValidate(t *testing.T) {
 		})
 	}
 }
-

@@ -2,11 +2,11 @@ package torrent
 
 import (
 	"net"
+	"reflect"
 	"testing"
 
 	"github.com/anacrolix/dht/v2/krpc"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	qt "github.com/go-quicktest/qt"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
@@ -44,7 +44,7 @@ func TestPexReset(t *testing.T) {
 	s.Drop(&conns[0])
 	s.Reset()
 	targ := new(pexState)
-	require.EqualValues(t, targ, s)
+	qt.Assert(t, qt.IsTrue(reflect.DeepEqual(s, targ)))
 }
 
 func krpcNodeAddrFromNetAddr(addr net.Addr) krpc.NodeAddr {
@@ -246,12 +246,12 @@ func (me *comparablePexMsg) From(f pp.PexMsg) {
 // For PexMsg created by pexMsgFactory, this is as good as it can get without using data structures
 // in pexMsgFactory that preserve insert ordering.
 func (actual comparablePexMsg) AssertEqual(t *testing.T, expected comparablePexMsg) {
-	assert.ElementsMatch(t, expected.added, actual.added)
-	assert.ElementsMatch(t, expected.addedFlags, actual.addedFlags)
-	assert.ElementsMatch(t, expected.added6, actual.added6)
-	assert.ElementsMatch(t, expected.added6Flags, actual.added6Flags)
-	assert.ElementsMatch(t, expected.dropped, actual.dropped)
-	assert.ElementsMatch(t, expected.dropped6, actual.dropped6)
+	qt.Check(t, qt.ContentEquals(expected.added, actual.added))
+	qt.Check(t, qt.ContentEquals(expected.addedFlags, actual.addedFlags))
+	qt.Check(t, qt.ContentEquals(expected.added6, actual.added6))
+	qt.Check(t, qt.ContentEquals(expected.added6Flags, actual.added6Flags))
+	qt.Check(t, qt.ContentEquals(expected.dropped, actual.dropped))
+	qt.Check(t, qt.ContentEquals(expected.dropped6, actual.dropped6))
 }
 
 func assertPexMsgsEqual(t *testing.T, expected, actual pp.PexMsg) {
@@ -278,7 +278,7 @@ func TestPexGenmsg0(t *testing.T) {
 				tc.update(&s)
 				m1, last := s.Genmsg(last)
 				assertPexMsgsEqual(t, tc.targ1, m1)
-				assert.NotNil(t, last)
+				qt.Check(t, qt.IsNotNil(last))
 			}
 		})
 	}
@@ -307,12 +307,12 @@ func TestPexInitialNoCutoff(t *testing.T) {
 	}
 	m, _ := s.Genmsg(nil)
 
-	require.EqualValues(t, n, len(m.Added))
-	require.EqualValues(t, n, len(m.AddedFlags))
-	require.EqualValues(t, 0, len(m.Added6))
-	require.EqualValues(t, 0, len(m.Added6Flags))
-	require.EqualValues(t, 0, len(m.Dropped))
-	require.EqualValues(t, 0, len(m.Dropped6))
+	qt.Assert(t, qt.Equals(len(m.Added), n))
+	qt.Assert(t, qt.Equals(len(m.AddedFlags), n))
+	qt.Assert(t, qt.Equals(len(m.Added6), 0))
+	qt.Assert(t, qt.Equals(len(m.Added6Flags), 0))
+	qt.Assert(t, qt.Equals(len(m.Dropped), 0))
+	qt.Assert(t, qt.Equals(len(m.Dropped6), 0))
 }
 
 func benchmarkPexInitialN(b *testing.B, npeers int) {

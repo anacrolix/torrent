@@ -15,7 +15,6 @@ import (
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo/v2/iter"
 	qt "github.com/go-quicktest/qt"
-	"github.com/stretchr/testify/require"
 )
 
 // Ensure net.IPs are stored big-endian, to match the way they're read from
@@ -36,18 +35,16 @@ func TestMarshalAnnounceResponse(t *testing.T) {
 		{[]byte{255, 0, 0, 3}, 4},
 	}
 	b, err := peers.MarshalBinary()
-	require.NoError(t, err)
-	require.EqualValues(t,
-		"\x7f\x00\x00\x01\x00\x02\xff\x00\x00\x03\x00\x04",
-		b)
-	require.EqualValues(t, 12, binary.Size(AnnounceResponseHeader{}))
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.Equals(string(b), "\x7f\x00\x00\x01\x00\x02\xff\x00\x00\x03\x00\x04"))
+	qt.Assert(t, qt.Equals(binary.Size(AnnounceResponseHeader{}), 12))
 }
 
 // Failure to write an entire packet to UDP is expected to given an error.
 func TestLongWriteUDP(t *testing.T) {
 	t.Parallel()
 	l, err := net.ListenUDP("udp4", nil)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer l.Close()
 	c, err := net.DialUDP("udp", nil, l.LocalAddr().(*net.UDPAddr))
 	if err != nil {

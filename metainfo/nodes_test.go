@@ -4,16 +4,15 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	qt "github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/bencode"
 )
 
 func testFileNodesMatch(t *testing.T, file string, nodes []Node) {
 	mi, err := LoadFromFile(file)
-	require.NoError(t, err)
-	assert.EqualValues(t, nodes, mi.Nodes)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Check(t, qt.DeepEquals(mi.Nodes, nodes))
 }
 
 func TestNodesListStrings(t *testing.T) {
@@ -44,8 +43,8 @@ func TestNodesListPairsBEP5(t *testing.T) {
 
 func testMarshalMetainfo(t *testing.T, expected string, mi *MetaInfo) {
 	b, err := bencode.Marshal(*mi)
-	assert.NoError(t, err)
-	assert.EqualValues(t, expected, string(b))
+	qt.Check(t, qt.IsNil(err))
+	qt.Check(t, qt.Equals(string(b), expected))
 }
 
 func TestMarshalMetainfoNodes(t *testing.T) {
@@ -60,15 +59,15 @@ func TestUnmarshalBadMetainfoNodes(t *testing.T) {
 	var mi MetaInfo
 	// Should barf on the integer in the nodes list.
 	err := bencode.Unmarshal([]byte("d5:nodesl1:ai42eee"), &mi)
-	require.Error(t, err)
+	qt.Assert(t, qt.IsNotNil(err))
 }
 
 func TestMetainfoEmptyInfoBytes(t *testing.T) {
 	var buf bytes.Buffer
-	require.NoError(t, (&MetaInfo{
+	qt.Assert(t, qt.IsNil((&MetaInfo{
 		// Include a non-empty field that comes after "info".
 		UrlList: []string{"hello"},
-	}).Write(&buf))
+	}).Write(&buf)))
 	var mi MetaInfo
-	require.NoError(t, bencode.Unmarshal(buf.Bytes(), &mi))
+	qt.Assert(t, qt.IsNil(bencode.Unmarshal(buf.Bytes(), &mi)))
 }

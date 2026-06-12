@@ -15,7 +15,6 @@ import (
 
 	g "github.com/anacrolix/generics"
 	"github.com/go-quicktest/qt"
-	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/merkle"
@@ -56,11 +55,11 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	// This will cause connection.writer to terminate.
 	c.closed.Set()
 	c.locker().Unlock()
-	require.NoError(t, err)
-	require.EqualValues(t, 15, n)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.Equals(n, 15))
 	// Here we see that the bitfield doesn't have piece 2 set, as that should
 	// arrive in the following Have message.
-	require.EqualValues(t, "\x00\x00\x00\x02\x05@\x00\x00\x00\x05\x04\x00\x00\x00\x02", string(b))
+	qt.Assert(t, qt.Equals(string(b), "\x00\x00\x00\x02\x05@\x00\x00\x00\x05\x04\x00\x00\x00\x02"))
 }
 
 type torrentStorage struct {
@@ -117,11 +116,11 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		Storage:                  &torrentStorageClient{ts},
 		DisableInitialPieceCheck: true,
 	})
-	require.NoError(b, t.setInfoUnlocked(&metainfo.Info{
+	qt.Assert(b, qt.IsNil(t.setInfoUnlocked(&metainfo.Info{
 		Pieces:      make([]byte, 20),
 		Length:      1 << 20,
 		PieceLength: 1 << 20,
-	}))
+	})))
 	//t.storage = &storage.Torrent{TorrentImpl: storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}}
 	//t.onSetInfo()
 	cl.lock()
@@ -185,8 +184,8 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			ts.allChunksWritten.Add(int(numRequests))
 			for _, wb := range msgBufs {
 				n, err := w.Write(wb)
-				require.NoError(b, err)
-				require.EqualValues(b, len(wb), n)
+				qt.Assert(b, qt.IsNil(err))
+				qt.Assert(b, qt.Equals(n, len(wb)))
 			}
 			// This is unlocked by a successful write to storage. So this unblocks when that is
 			// done.
@@ -232,7 +231,7 @@ func TestPeerConnRejectsUnsolicitedHashes(t *testing.T) {
 		Length: 1,
 		Hashes: [][32]byte{{}},
 	}
-	require.NoError(t, msg.WriteTo(&msgBuf))
+	qt.Assert(t, qt.IsNil(msg.WriteTo(&msgBuf)))
 	cn := &PeerConn{
 		Peer: Peer{
 			cl:        cl,
@@ -245,8 +244,8 @@ func TestPeerConnRejectsUnsolicitedHashes(t *testing.T) {
 	cl.lock()
 	err := cn.mainReadLoop()
 	cl.unlock()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unsolicited hashes message")
+	qt.Assert(t, qt.IsNotNil(err))
+	qt.Assert(t, qt.StringContains(err.Error(), "unsolicited hashes message"))
 }
 
 func TestPeerConnAcceptsSolicitedHashes(t *testing.T) {
@@ -291,11 +290,12 @@ func TestPeerConnAcceptsSolicitedHashes(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, cn.onReadHashes(&msg))
-	require.NotContains(t, cn.sentHashRequests, hashRequestFromMessage(msg))
+	qt.Assert(t, qt.IsNil(cn.onReadHashes(&msg)))
+	_, sentHashRequestPresent := cn.sentHashRequests[hashRequestFromMessage(msg)]
+	qt.Assert(t, qt.IsFalse(sentHashRequestPresent))
 	// Matching the requested root should promote the received file layer hashes into piece v2 hashes.
-	require.Equal(t, g.Some(pieceHashes[0]), tor.pieces[0].hashV2)
-	require.Equal(t, g.Some(pieceHashes[1]), tor.pieces[1].hashV2)
+	qt.Assert(t, qt.Equals(tor.pieces[0].hashV2, g.Some(pieceHashes[0])))
+	qt.Assert(t, qt.Equals(tor.pieces[1].hashV2, g.Some(pieceHashes[1])))
 }
 
 func TestPeerConnRejectsHashesForMissingRoot(t *testing.T) {
@@ -328,8 +328,8 @@ func TestPeerConnRejectsHashesForMissingRoot(t *testing.T) {
 	}
 
 	err := cn.onReadHashes(&msg)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "no file for pieces root")
+	qt.Assert(t, qt.IsNotNil(err))
+	qt.Assert(t, qt.StringContains(err.Error(), "no file for pieces root"))
 }
 
 func TestConnPexPeerFlags(t *testing.T) {
@@ -352,7 +352,7 @@ func TestConnPexPeerFlags(t *testing.T) {
 	}
 	for i, tc := range testcases {
 		f := tc.conn.pexPeerFlags()
-		require.EqualValues(t, tc.f, f, i)
+		qt.Assert(t, qt.Equals(f, tc.f), qt.Commentf("%v", i))
 	}
 }
 
@@ -550,12 +550,12 @@ func TestServePeerRequestTorrentClosedStorageReadFails(t *testing.T) {
 		Storage:                  &torrentStorageClient{ts},
 		DisableInitialPieceCheck: true,
 	})
-	require.NoError(t, tor.setInfoUnlocked(&metainfo.Info{
+	qt.Assert(t, qt.IsNil(tor.setInfoUnlocked(&metainfo.Info{
 		Pieces:      make([]byte, metainfo.HashSize),
 		PieceLength: 1,
 		Length:      1,
 		Name:        "test",
-	}))
+	})))
 
 	pc := cl.newConnection(nil, newConnectionOpts{network: "test"})
 	pc.setTorrent(tor)

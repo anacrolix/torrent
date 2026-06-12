@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/RoaringBitmap/roaring/v2"
-	"github.com/stretchr/testify/assert"
+	qt "github.com/go-quicktest/qt"
 )
 
 func TestFileExclusivePieces(t *testing.T) {
@@ -17,8 +17,8 @@ func TestFileExclusivePieces(t *testing.T) {
 		{1, 4, 2, 1, 2},
 	} {
 		begin, end := byteRegionExclusivePieces(_case.off, _case.size, _case.pieceSize)
-		assert.EqualValues(t, _case.begin, begin)
-		assert.EqualValues(t, _case.end, end)
+		qt.Check(t, qt.Equals(begin, _case.begin))
+		qt.Check(t, qt.Equals(end, _case.end))
 	}
 }
 
@@ -35,9 +35,9 @@ type testFileBytesLeft struct {
 
 func (me testFileBytesLeft) Run(t *testing.T) {
 	t.Run(me.name, func(t *testing.T) {
-		assert.EqualValues(t, me.expected, fileBytesLeft(me.usualPieceSize, me.firstPieceIndex, me.endPieceIndex, me.fileOffset, me.fileLength, &me.completedPieces, func(pieceIndex int) int64 {
+		qt.Check(t, qt.Equals(fileBytesLeft(me.usualPieceSize, me.firstPieceIndex, me.endPieceIndex, me.fileOffset, me.fileLength, &me.completedPieces, func(pieceIndex int) int64 {
 			return 0
-		}))
+		}), me.expected))
 	})
 }
 

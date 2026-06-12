@@ -3,7 +3,7 @@ package torrent
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	qt "github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/metainfo"
@@ -17,7 +17,7 @@ func TestHashPieceAfterStorageClosed(t *testing.T) {
 	defer cs.Close()
 	tt := cl.newTorrent(metainfo.Hash{1}, cs)
 	mi := testutil.GreetingMetaInfo()
-	require.NoError(t, tt.SetInfoBytes(mi.InfoBytes))
+	qt.Assert(t, qt.IsNil(tt.SetInfoBytes(mi.InfoBytes)))
 	go tt.piece(0).VerifyDataContext(t.Context())
-	require.NoError(t, tt.storage.Close())
+	qt.Assert(t, qt.IsNil(tt.storage.Close()))
 }

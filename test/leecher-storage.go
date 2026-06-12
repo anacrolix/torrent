@@ -10,8 +10,6 @@ import (
 	"testing/iotest"
 
 	qt "github.com/go-quicktest/qt"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent"
@@ -125,7 +123,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		ps.ConfigureSeeder.Config(cfg)
 	}
 	seeder, err := torrent.NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	if ps.ConfigureSeeder.Client != nil {
 		ps.ConfigureSeeder.Client(seeder)
 	}
@@ -159,7 +157,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		ps.ConfigureLeecher.Config(cfg)
 	}
 	leecher, err := torrent.NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer leecher.Close()
 	if ps.ConfigureLeecher.Client != nil {
 		ps.ConfigureLeecher.Client(leecher)
@@ -173,20 +171,20 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		}
 		return
 	}())
-	require.NoError(t, err)
-	assert.False(t, leecherTorrent.Complete().Bool())
-	assert.True(t, new)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Check(t, qt.IsFalse(leecherTorrent.Complete().Bool()))
+	qt.Check(t, qt.IsTrue(new))
 
 	//// This was used when observing coalescing of piece state changes.
 	//logPieceStateChanges(leecherTorrent)
 
 	// Now do some things with leecher and seeder.
 	added := leecherTorrent.AddClientPeer(seeder)
-	assert.False(t, leecherTorrent.Seeding())
+	qt.Check(t, qt.IsFalse(leecherTorrent.Seeding()))
 	// The leecher will use peers immediately if it doesn't have the metadata. Otherwise, they
 	// should be sitting idle until we demand data.
 	if !ps.LeecherStartsWithoutMetadata {
-		assert.EqualValues(t, added, leecherTorrent.Stats().PendingPeers)
+		qt.Check(t, qt.Equals(leecherTorrent.Stats().PendingPeers, added))
 	}
 	if ps.LeecherStartsWithoutMetadata {
 		<-leecherTorrent.GotInfo()
@@ -202,7 +200,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	}
 	assertReadAllGreeting(t, r)
 	info, err := mi.UnmarshalInfo()
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	canComplete := ps.LeecherStorageCapacity == 0 || ps.LeecherStorageCapacity >= info.TotalLength()
 	if !canComplete {
 		// Reading from a cache doesn't refresh older pieces until we fail to read those, so we need
@@ -214,13 +212,13 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	} else {
 		<-leecherTorrent.Complete().Off()
 	}
-	assert.NotEmpty(t, seederTorrent.PeerConns())
+	qt.Check(t, qt.Not(qt.HasLen(seederTorrent.PeerConns(), 0)))
 	leecherPeerConns := leecherTorrent.PeerConns()
 	if cfg.DropMutuallyCompletePeers {
 		// I don't think we can assume it will be empty already, due to timing.
-		// assert.Empty(t, leecherPeerConns)
+		// qt.Check(t, qt.HasLen(leecherPeerConns, 0))
 	} else {
-		assert.NotEmpty(t, leecherPeerConns)
+		qt.Check(t, qt.Not(qt.HasLen(leecherPeerConns, 0)))
 	}
 	foundSeeder := false
 	for _, pc := range leecherPeerConns {
@@ -235,12 +233,12 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	}
 
 	seederStats := seederTorrent.Stats()
-	assert.True(t, 13 <= seederStats.BytesWrittenData.Int64())
-	assert.True(t, 8 <= seederStats.ChunksWritten.Int64())
+	qt.Check(t, qt.IsTrue(13 <= seederStats.BytesWrittenData.Int64()))
+	qt.Check(t, qt.IsTrue(8 <= seederStats.ChunksWritten.Int64()))
 
 	leecherStats := leecherTorrent.Stats()
-	assert.True(t, 13 <= leecherStats.BytesReadData.Int64())
-	assert.True(t, 8 <= leecherStats.ChunksRead.Int64())
+	qt.Check(t, qt.IsTrue(13 <= leecherStats.BytesReadData.Int64()))
+	qt.Check(t, qt.IsTrue(8 <= leecherStats.ChunksRead.Int64()))
 
 	// Try reading through again for the cases where the torrent data size
 	// exceeds the size of the cache.
@@ -249,7 +247,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 
 func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
 	pos, err := r.Seek(0, io.SeekStart)
-	assert.NoError(t, err)
-	assert.EqualValues(t, 0, pos)
+	qt.Check(t, qt.IsNil(err))
+	qt.Check(t, qt.Equals(pos, 0))
 	qt.Check(t, qt.IsNil(iotest.TestReader(r, []byte(testutil.GreetingFileContents))))
 }

@@ -5,8 +5,6 @@ import (
 	"testing"
 
 	qt "github.com/go-quicktest/qt"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/tracker/udp"
@@ -14,43 +12,43 @@ import (
 
 func TestUnmarshalHTTPResponsePeerDicts(t *testing.T) {
 	var hr HttpResponse
-	require.NoError(t, bencode.Unmarshal(
+	qt.Assert(t, qt.IsNil(bencode.Unmarshal(
 		[]byte("d5:peersl"+
 			"d2:ip7:1.2.3.47:peer id20:thisisthe20bytepeeri4:porti9999ee"+
 			"d2:ip39:2001:0db8:85a3:0000:0000:8a2e:0370:73347:peer id20:thisisthe20bytepeeri4:porti9998ee"+
 			"e"+
 			"6:peers618:123412341234123456"+
 			"e"),
-		&hr))
+		&hr)))
 
-	require.Len(t, hr.Peers.List, 2)
-	assert.Equal(t, []byte("thisisthe20bytepeeri"), hr.Peers.List[0].ID)
-	assert.EqualValues(t, 9999, hr.Peers.List[0].Port)
-	assert.EqualValues(t, 9998, hr.Peers.List[1].Port)
-	assert.NotNil(t, hr.Peers.List[0].IP)
-	assert.NotNil(t, hr.Peers.List[1].IP)
+	qt.Assert(t, qt.HasLen(hr.Peers.List, 2))
+	qt.Check(t, qt.DeepEquals(hr.Peers.List[0].ID, []byte("thisisthe20bytepeeri")))
+	qt.Check(t, qt.Equals(hr.Peers.List[0].Port, 9999))
+	qt.Check(t, qt.Equals(hr.Peers.List[1].Port, 9998))
+	qt.Check(t, qt.IsNotNil(hr.Peers.List[0].IP))
+	qt.Check(t, qt.IsNotNil(hr.Peers.List[1].IP))
 
-	assert.Len(t, hr.Peers6, 1)
-	assert.EqualValues(t, "1234123412341234", hr.Peers6[0].IP)
-	assert.EqualValues(t, 0x3536, hr.Peers6[0].Port)
+	qt.Check(t, qt.HasLen(hr.Peers6, 1))
+	qt.Check(t, qt.Equals(string(hr.Peers6[0].IP), "1234123412341234"))
+	qt.Check(t, qt.Equals(hr.Peers6[0].Port, 0x3536))
 }
 
 func TestUnmarshalHttpResponseNoPeers(t *testing.T) {
 	var hr HttpResponse
-	require.NoError(t, bencode.Unmarshal(
+	qt.Assert(t, qt.IsNil(bencode.Unmarshal(
 		[]byte("d6:peers618:123412341234123456e"),
 		&hr,
-	))
-	require.Len(t, hr.Peers.List, 0)
-	assert.Len(t, hr.Peers6, 1)
+	)))
+	qt.Assert(t, qt.HasLen(hr.Peers.List, 0))
+	qt.Check(t, qt.HasLen(hr.Peers6, 1))
 }
 
 func TestUnmarshalHttpResponsePeers6NotCompact(t *testing.T) {
 	var hr HttpResponse
-	require.Error(t, bencode.Unmarshal(
+	qt.Assert(t, qt.IsNotNil(bencode.Unmarshal(
 		[]byte("d6:peers6lee"),
 		&hr,
-	))
+	)))
 }
 
 // Checks that infohash bytes that correspond to spaces are escaped with %20 instead of +. See
@@ -124,8 +122,8 @@ func TestUnmarshalPeersMalformed(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var hr HttpResponse
-			require.NoError(t, bencode.Unmarshal([]byte(tc.input), &hr))
-			assert.Len(t, hr.Peers.List, tc.wantCount)
+			qt.Assert(t, qt.IsNil(bencode.Unmarshal([]byte(tc.input), &hr)))
+			qt.Check(t, qt.HasLen(hr.Peers.List, tc.wantCount))
 		})
 	}
 }

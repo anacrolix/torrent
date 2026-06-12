@@ -12,8 +12,6 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/filecache"
 	qt "github.com/go-quicktest/qt"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent"
@@ -76,7 +74,7 @@ func TestClientTransferRateLimitedUpload(t *testing.T) {
 		// with is 2. Time taken is (13-burst)/rate.
 		SeederUploadRateLimiter: rate.NewLimiter(11, 2),
 	})
-	require.True(t, time.Since(started) > time.Second)
+	qt.Assert(t, qt.IsTrue(time.Since(started) > time.Second))
 }
 
 func TestClientTransferRateLimitedDownload(t *testing.T) {
@@ -147,12 +145,12 @@ func testSeedAfterDownloading(t *testing.T, disableUtp bool) {
 	cfg.DataDir = greetingTempDir
 	cfg.DisableUTP = disableUtp
 	seeder, err := torrent.NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer seeder.Close()
 	defer testutil.ExportStatusWriter(seeder, "s", t)()
 	seederTorrent, ok, err := seeder.AddTorrentSpec(torrent.TorrentSpecFromMetaInfo(mi))
-	require.NoError(t, err)
-	assert.True(t, ok)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Check(t, qt.IsTrue(ok))
 	seederTorrent.VerifyDataContext(context.TODO())
 
 	cfg = torrent.TestingConfig(t)
@@ -167,7 +165,7 @@ func testSeedAfterDownloading(t *testing.T, disableUtp bool) {
 	//cfg.Debug = true
 	cfg.Logger = log.Default.WithContextText("leecher") //nolint:staticcheck
 	leecher, err := torrent.NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer leecher.Close()
 	defer testutil.ExportStatusWriter(leecher, "l", t)()
 
@@ -179,7 +177,7 @@ func testSeedAfterDownloading(t *testing.T, disableUtp bool) {
 	cfg.Logger = log.Default.WithContextText("leecher-leecher") //nolint:staticcheck
 	cfg.Debug = true
 	leecherLeecher, _ := torrent.NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer leecherLeecher.Close()
 	defer testutil.ExportStatusWriter(leecherLeecher, "ll", t)()
 	leecherGreeting, ok, err := leecher.AddTorrentSpec(func() (ret *torrent.TorrentSpec) {
@@ -187,15 +185,15 @@ func testSeedAfterDownloading(t *testing.T, disableUtp bool) {
 		ret.ChunkSize = 2
 		return
 	}())
-	require.NoError(t, err)
-	assert.True(t, ok)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Check(t, qt.IsTrue(ok))
 	llg, ok, err := leecherLeecher.AddTorrentSpec(func() (ret *torrent.TorrentSpec) {
 		ret = torrent.TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 3
 		return
 	}())
-	require.NoError(t, err)
-	assert.True(t, ok)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Check(t, qt.IsTrue(ok))
 	// Simultaneously DownloadAll in Leecher, and read the contents
 	// consecutively in LeecherLeecher. This non-deterministically triggered a
 	// case where the leecher wouldn't unchoke the LeecherLeecher.

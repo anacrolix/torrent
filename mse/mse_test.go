@@ -11,8 +11,7 @@ import (
 	"testing"
 
 	_ "github.com/anacrolix/envpprof"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	qt "github.com/go-quicktest/qt"
 )
 
 func sliceIter(skeys [][]byte) SecretKeyIter {
@@ -65,8 +64,8 @@ func handshakeTest(t testing.TB, ia []byte, aData, bData string, cryptoProvides 
 	go func() {
 		defer wg.Done()
 		a, cm, err := InitiateHandshake(a, []byte("yep"), ia, cryptoProvides)
-		require.NoError(t, err)
-		assert.Equal(t, cryptoSelect(cryptoProvides), cm)
+		qt.Assert(t, qt.IsNil(err))
+		qt.Check(t, qt.Equals(cm, cryptoSelect(cryptoProvides)))
 		go a.Write([]byte(aData))
 
 		var msg [20]byte
@@ -84,10 +83,10 @@ func handshakeTest(t testing.TB, ia []byte, aData, bData string, cryptoProvides 
 			sliceIter([][]byte{[]byte("nope"), []byte("yep"), []byte("maybe")}),
 			cryptoSelect,
 		)
-		require.NoError(t, res.error)
-		assert.EqualValues(t, "yep", res.SecretKey)
+		qt.Assert(t, qt.IsNil(res.error))
+		qt.Check(t, qt.Equals(string(res.SecretKey), "yep"))
 		b := res.ReadWriter
-		assert.Equal(t, cryptoSelect(cryptoProvides), res.CryptoMethod)
+		qt.Check(t, qt.Equals(res.CryptoMethod, cryptoSelect(cryptoProvides)))
 		go b.Write([]byte(bData))
 		// Need to be exact here, as there are several reads, and net.Pipe is most synchronous.
 		msg := make([]byte, len(ia)+len(aData))
@@ -138,16 +137,16 @@ func TestReceiveRandomData(t *testing.T) {
 	tr := trackReader{rand.Reader, 0}
 	_, _, err := ReceiveHandshake(context.Background(), readWriter{&tr, io.Discard}, nil, DefaultCryptoSelector)
 	// No skey matches
-	require.Error(t, err)
+	qt.Assert(t, qt.IsNotNil(err))
 	// Establishing S, and then reading the maximum padding for giving up on
 	// synchronizing.
-	require.EqualValues(t, 96+532, tr.n)
+	qt.Assert(t, qt.Equals(tr.n, 96+532))
 }
 
 func fillRand(t testing.TB, bs ...[]byte) {
 	for _, b := range bs {
 		_, err := rand.Read(b)
-		require.NoError(t, err)
+		qt.Assert(t, qt.IsNil(err))
 	}
 }
 
@@ -186,8 +185,8 @@ func benchmarkStream(t *testing.B, crypto CryptoMethod) {
 			defer ac.Close()
 			defer wg.Done()
 			rw, _, err := InitiateHandshake(ac, []byte("cats"), ia, crypto)
-			require.NoError(t, err)
-			require.NoError(t, readAndWrite(rw, ar, a))
+			qt.Assert(t, qt.IsNil(err))
+			qt.Assert(t, qt.IsNil(readAndWrite(rw, ar, a)))
 		}()
 		func() {
 			defer bc.Close()
@@ -197,8 +196,8 @@ func benchmarkStream(t *testing.B, crypto CryptoMethod) {
 				sliceIter([][]byte{[]byte("cats")}),
 				func(CryptoMethod) CryptoMethod { return crypto },
 			)
-			require.NoError(t, err)
-			require.NoError(t, readAndWrite(rw, br, b))
+			qt.Assert(t, qt.IsNil(err))
+			qt.Assert(t, qt.IsNil(readAndWrite(rw, br, b)))
 		}()
 		wg.Wait()
 		t.StopTimer()
@@ -211,9 +210,9 @@ func benchmarkStream(t *testing.B, crypto CryptoMethod) {
 		if !bytes.Equal(br[len(ia):], a) {
 			t.Fatalf("B read the wrong A")
 		}
-		// require.Equal(t, b, ar)
-		// require.Equal(t, ia, br[:len(ia)])
-		// require.Equal(t, a, br[len(ia):])
+		// qt.Assert(t, qt.Equals(ar, b))
+		// qt.Assert(t, qt.Equals(br[:len(ia)], ia))
+		// qt.Assert(t, qt.Equals(br[len(ia):], a))
 	}
 }
 
@@ -228,23 +227,23 @@ func BenchmarkStreamPlaintext(t *testing.B) {
 func BenchmarkPipeRC4(t *testing.B) {
 	key := make([]byte, 20)
 	n, _ := rand.Read(key)
-	require.Equal(t, len(key), n)
+	qt.Assert(t, qt.Equals(n, len(key)))
 	var buf bytes.Buffer
 	c, err := rc4.NewCipher(key)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	r := cipherReader{
 		c: c,
 		r: &buf,
 	}
 	c, err = rc4.NewCipher(key)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	w := cipherWriter{
 		c: c,
 		w: &buf,
 	}
 	a := make([]byte, 0x1000)
 	n, _ = io.ReadFull(rand.Reader, a)
-	require.Equal(t, len(a), n)
+	qt.Assert(t, qt.Equals(n, len(a)))
 	b := make([]byte, len(a))
 	t.SetBytes(int64(len(a)))
 	t.ResetTimer()

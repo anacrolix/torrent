@@ -5,7 +5,7 @@ package torrentfs
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	qt "github.com/go-quicktest/qt"
 )
 
 func TestIsSubPath(t *testing.T) {
@@ -21,6 +21,6 @@ func TestIsSubPath(t *testing.T) {
 		{"a/b", "a/b/c", true},
 		{"a/b", "a//b", false},
 	} {
-		assert.Equal(t, case_.is, IsSubPath(case_.parent, case_.child))
+		qt.Check(t, qt.Equals(IsSubPath(case_.parent, case_.child), case_.is))
 	}
 }

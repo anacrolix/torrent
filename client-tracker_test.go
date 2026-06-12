@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	qt "github.com/go-quicktest/qt"
 	"github.com/gorilla/websocket"
-	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/tracker"
@@ -29,14 +29,14 @@ func TestClientInvalidTracker(t *testing.T) {
 		}
 		if e.Event == TrackerDisconnected {
 			gotTrackerDisconnectedEvt = true
-			require.Equal(t, "ws://test.invalid:4242", e.Url)
-			require.Error(t, e.Error)
+			qt.Assert(t, qt.Equals(e.Url, "ws://test.invalid:4242"))
+			qt.Assert(t, qt.IsNotNil(e.Error))
 		}
 		receivedStatusUpdate <- true
 	})
 
 	cl, err := NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer cl.Close()
 
 	dir, mi := testutil.GreetingTestTorrent()
@@ -47,13 +47,13 @@ func TestClientInvalidTracker(t *testing.T) {
 	}
 
 	to, err := cl.AddTorrent(mi)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 
 	select {
 	case <-timeout.C:
 	case <-receivedStatusUpdate:
 	}
-	require.True(t, gotTrackerDisconnectedEvt)
+	qt.Assert(t, qt.IsTrue(gotTrackerDisconnectedEvt))
 	to.Drop()
 }
 
@@ -89,14 +89,14 @@ func TestClientValidTrackerConn(t *testing.T) {
 	cfg.Callbacks.StatusUpdated = append(cfg.Callbacks.StatusUpdated, func(e StatusUpdatedEvent) {
 		if e.Event == TrackerConnected {
 			gotTrackerConnectedEvt = true
-			require.Equal(t, trackerUrl, e.Url)
-			require.NoError(t, e.Error)
+			qt.Assert(t, qt.Equals(e.Url, trackerUrl))
+			qt.Assert(t, qt.IsNil(e.Error))
 		}
 		receivedStatusUpdate <- true
 	})
 
 	cl, err := NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer cl.Close()
 
 	dir, mi := testutil.GreetingTestTorrent()
@@ -107,13 +107,13 @@ func TestClientValidTrackerConn(t *testing.T) {
 	}
 
 	to, err := cl.AddTorrent(mi)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 
 	select {
 	case <-timeout.C:
 	case <-receivedStatusUpdate:
 	}
-	require.True(t, gotTrackerConnectedEvt)
+	qt.Assert(t, qt.IsTrue(gotTrackerConnectedEvt))
 	to.Drop()
 }
 
@@ -136,16 +136,16 @@ func TestClientAnnounceFailure(t *testing.T) {
 		}
 		if e.Event == TrackerAnnounceError {
 			gotTrackerAnnounceErrorEvt = true
-			require.Equal(t, trackerUrl, e.Url)
-			require.Equal(t, to.InfoHash().HexString(), e.InfoHash)
-			require.Error(t, e.Error)
-			require.Equal(t, "test error", e.Error.Error())
+			qt.Assert(t, qt.Equals(e.Url, trackerUrl))
+			qt.Assert(t, qt.Equals(e.InfoHash, to.InfoHash().HexString()))
+			qt.Assert(t, qt.IsNotNil(e.Error))
+			qt.Assert(t, qt.Equals(e.Error.Error(), "test error"))
 		}
 		receivedStatusUpdate <- true
 	})
 
 	cl, err := NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer cl.Close()
 
 	cl.websocketTrackers.GetAnnounceRequest = func(event tracker.AnnounceEvent, infoHash [20]byte) (tracker.AnnounceRequest, error) {
@@ -160,13 +160,13 @@ func TestClientAnnounceFailure(t *testing.T) {
 	}
 
 	to, err = cl.AddTorrent(mi)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 
 	select {
 	case <-timeout.C:
 	case <-receivedStatusUpdate:
 	}
-	require.True(t, gotTrackerAnnounceErrorEvt)
+	qt.Assert(t, qt.IsTrue(gotTrackerAnnounceErrorEvt))
 	to.Drop()
 }
 
@@ -189,15 +189,15 @@ func TestClientAnnounceSuccess(t *testing.T) {
 		}
 		if e.Event == TrackerAnnounceSuccessful {
 			gotTrackerAnnounceSuccessfulEvt = true
-			require.Equal(t, trackerUrl, e.Url)
-			require.Equal(t, to.InfoHash().HexString(), e.InfoHash)
-			require.NoError(t, e.Error)
+			qt.Assert(t, qt.Equals(e.Url, trackerUrl))
+			qt.Assert(t, qt.Equals(e.InfoHash, to.InfoHash().HexString()))
+			qt.Assert(t, qt.IsNil(e.Error))
 		}
 		receivedStatusUpdate <- true
 	})
 
 	cl, err := NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer cl.Close()
 
 	dir, mi := testutil.GreetingTestTorrent()
@@ -208,13 +208,13 @@ func TestClientAnnounceSuccess(t *testing.T) {
 	}
 
 	to, err = cl.AddTorrent(mi)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 
 	select {
 	case <-timeout.C:
 	case <-receivedStatusUpdate:
 	}
-	require.True(t, gotTrackerAnnounceSuccessfulEvt)
+	qt.Assert(t, qt.IsTrue(gotTrackerAnnounceSuccessfulEvt))
 	to.Drop()
 }
 

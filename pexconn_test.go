@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/anacrolix/dht/v2/krpc"
-	"github.com/stretchr/testify/require"
+	qt "github.com/go-quicktest/qt"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
@@ -37,7 +37,7 @@ func TestPexConnState(t *testing.T) {
 
 	connWriteCond := c.messageWriter.writeCond.Signaled()
 	c.pex.Init(c)
-	require.True(t, c.pex.IsEnabled(), "should get enabled")
+	qt.Assert(t, qt.IsTrue(c.pex.IsEnabled()), qt.Commentf("should get enabled"))
 	defer c.pex.Close()
 
 	var out pp.Message
@@ -49,13 +49,13 @@ func TestPexConnState(t *testing.T) {
 	}
 	<-connWriteCond
 	c.pex.Share(testWriter)
-	require.True(t, writerCalled)
-	require.EqualValues(t, pp.Extended, out.Type)
-	require.NotEqualValues(t, out.ExtendedID, 0)
-	require.EqualValues(t, c.PeerExtensionIDs[pp.ExtensionNamePex], out.ExtendedID)
+	qt.Assert(t, qt.IsTrue(writerCalled))
+	qt.Assert(t, qt.Equals(out.Type, pp.Extended))
+	qt.Assert(t, qt.Not(qt.Equals(0, out.ExtendedID)))
+	qt.Assert(t, qt.Equals(out.ExtendedID, c.PeerExtensionIDs[pp.ExtensionNamePex]))
 
 	x, err := pp.LoadPexMsg(out.ExtendedPayload)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	targx := pp.PexMsg{
 		Added:      krpc.CompactIPv4NodeAddrs(nil),
 		AddedFlags: []pp.PexPeerFlags{},
@@ -64,5 +64,5 @@ func TestPexConnState(t *testing.T) {
 		},
 		Added6Flags: []pp.PexPeerFlags{0},
 	}
-	require.EqualValues(t, targx, x)
+	qt.Assert(t, qt.DeepEquals(x, targx))
 }

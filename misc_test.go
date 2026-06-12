@@ -7,7 +7,7 @@ import (
 
 	g "github.com/anacrolix/generics"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/stretchr/testify/assert"
+	qt "github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/metainfo"
 	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
@@ -16,8 +16,8 @@ import (
 func TestTorrentOffsetRequest(t *testing.T) {
 	check := func(tl, ps, off int64, expected Request, ok bool) {
 		req, _ok := torrentOffsetRequest(tl, ps, defaultChunkSize, off)
-		assert.Equal(t, _ok, ok)
-		assert.Equal(t, req, expected)
+		qt.Check(t, qt.Equals(ok, _ok))
+		qt.Check(t, qt.Equals(expected, req))
 	}
 	check(13, 5, 0, newRequest(0, 0, 5), true)
 	check(13, 5, 3, newRequest(0, 0, 5), true)
@@ -29,7 +29,7 @@ func TestSpewConnStats(t *testing.T) {
 	s := spew.Sdump(ConnStats{})
 	t.Logf("\n%s", s)
 	lines := strings.Count(s, "\n")
-	assert.EqualValues(t, 2+reflect.ValueOf(ConnStats{}).NumField(), lines)
+	qt.Check(t, qt.Equals(lines, 2+reflect.ValueOf(ConnStats{}).NumField()))
 }
 
 func TestValidateInfoShortV2Root(t *testing.T) {

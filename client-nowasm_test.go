@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	qt "github.com/go-quicktest/qt"
-	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/storage"
@@ -17,7 +16,7 @@ import (
 func TestBoltPieceCompletionClosedWhenClientClosed(t *testing.T) {
 	cfg := TestingConfig(t)
 	pc, err := storage.NewBoltPieceCompletion(cfg.DataDir)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	ci := storage.NewFileWithCompletion(cfg.DataDir, pc)
 	defer ci.Close()
 	cfg.DefaultStorage = ci
@@ -26,7 +25,7 @@ func TestBoltPieceCompletionClosedWhenClientClosed(t *testing.T) {
 	cl.Close()
 	// And again, https://github.com/anacrolix/torrent/issues/158
 	cl, err = NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	cl.Close()
 }
 

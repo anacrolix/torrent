@@ -11,17 +11,15 @@ import (
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/davecgh/go-spew/spew"
 	qt "github.com/go-quicktest/qt"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/bencode"
 )
 
 func testFile(t *testing.T, filename string) {
 	mi, err := LoadFromFile(filename)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	info, err := mi.UnmarshalInfo()
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 
 	if len(info.Files) == 1 {
 		t.Logf("Single file: %s (length: %d)\n", info.BestName(), info.Files[0].Length)
@@ -39,8 +37,8 @@ func testFile(t *testing.T, filename string) {
 	}
 
 	b, err := bencode.Marshal(&info)
-	require.NoError(t, err)
-	assert.EqualValues(t, string(b), string(mi.InfoBytes))
+	qt.Assert(t, qt.IsNil(err))
+	qt.Check(t, qt.Equals(string(mi.InfoBytes), string(b)))
 }
 
 func TestFile(t *testing.T) {
@@ -72,8 +70,8 @@ func TestNumPieces(t *testing.T) {
 		err := info.GeneratePieces(func(fi FileInfo) (io.ReadCloser, error) {
 			return io.NopCloser(missinggo.ZeroReader), nil
 		})
-		assert.NoError(t, err)
-		assert.EqualValues(t, _case.NumPieces, info.NumPieces())
+		qt.Check(t, qt.IsNil(err))
+		qt.Check(t, qt.Equals(info.NumPieces(), _case.NumPieces))
 	}
 }
 
@@ -88,28 +86,28 @@ func touchFile(path string) (err error) {
 
 func TestBuildFromFilePathOrder(t *testing.T) {
 	td := t.TempDir()
-	require.NoError(t, touchFile(filepath.Join(td, "b")))
-	require.NoError(t, touchFile(filepath.Join(td, "a")))
+	qt.Assert(t, qt.IsNil(touchFile(filepath.Join(td, "b"))))
+	qt.Assert(t, qt.IsNil(touchFile(filepath.Join(td, "a"))))
 	info := Info{
 		PieceLength: 1,
 	}
-	require.NoError(t, info.BuildFromFilePath(td))
-	assert.EqualValues(t, []FileInfo{{
+	qt.Assert(t, qt.IsNil(info.BuildFromFilePath(td)))
+	qt.Check(t, qt.DeepEquals(info.Files, []FileInfo{{
 		Path: []string{"a"},
 	}, {
 		Path: []string{"b"},
-	}}, info.Files)
+	}}))
 }
 
 func testUnmarshal(t *testing.T, input string, expected *MetaInfo) {
 	var actual MetaInfo
 	err := bencode.Unmarshal([]byte(input), &actual)
 	if expected == nil {
-		assert.Error(t, err)
+		qt.Check(t, qt.IsNotNil(err))
 		return
 	}
-	assert.NoError(t, err)
-	assert.EqualValues(t, *expected, actual)
+	qt.Check(t, qt.IsNil(err))
+	qt.Check(t, qt.DeepEquals(actual, *expected))
 }
 
 func TestUnmarshal(t *testing.T) {
@@ -121,8 +119,8 @@ func TestUnmarshal(t *testing.T) {
 
 func TestMetainfoWithListURLList(t *testing.T) {
 	mi, err := LoadFromFile("testdata/SKODAOCTAVIA336x280_archive.torrent")
-	require.NoError(t, err)
-	assert.Len(t, mi.UrlList, 3)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Check(t, qt.HasLen(mi.UrlList, 3))
 	qt.Assert(t, qt.ContentEquals(mi.Magnet(nil, nil).String(),
 		strings.Join([]string{
 			"magnet:?xt=urn:btih:d4b197dff199aad447a9a352e31528adbbd97922",
@@ -136,8 +134,8 @@ func TestMetainfoWithListURLList(t *testing.T) {
 
 func TestMetainfoWithStringURLList(t *testing.T) {
 	mi, err := LoadFromFile("testdata/flat-url-list.torrent")
-	require.NoError(t, err)
-	assert.Len(t, mi.UrlList, 1)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Check(t, qt.HasLen(mi.UrlList, 1))
 	qt.Assert(t, qt.ContentEquals(mi.Magnet(nil, nil).String(),
 		strings.Join([]string{
 			"magnet:?xt=urn:btih:9da24e606e4ed9c7b91c1772fb5bf98f82bd9687",
@@ -153,7 +151,7 @@ func TestMetainfoWithStringURLList(t *testing.T) {
 // a syntax error on a field with the ignore_unmarshal_type_error tag.
 func TestStringCreationDate(t *testing.T) {
 	var mi MetaInfo
-	assert.NoError(t, bencode.Unmarshal([]byte("d13:creation date23:29.03.2018 22:18:14 UTC4:infodee"), &mi))
+	qt.Check(t, qt.IsNil(bencode.Unmarshal([]byte("d13:creation date23:29.03.2018 22:18:14 UTC4:infodee"), &mi)))
 }
 
 // See https://github.com/anacrolix/torrent/issues/843.

@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
+	qt "github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent"
 	torrentfs "github.com/anacrolix/torrent/fs"
@@ -70,15 +70,15 @@ func testStreamSintel(t *testing.T, mount MountFunc) {
 	}
 
 	mi, err := metainfo.LoadFromFile(sintelTorrentPath)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	m, err := mi.MagnetV2()
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 
 	cfg := torrent.NewDefaultClientConfig()
 	cfg.ListenPort = 0
 	cfg.HTTPProxy = http.ProxyFromEnvironment
 	cl, err := torrent.NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer cl.Close()
 
 	mountDir := t.TempDir()
@@ -117,12 +117,12 @@ func testStreamSintel(t *testing.T, mount MountFunc) {
 	}()
 
 	f, err := openFileWhenExists(t, ctx, filepath.Join(mountDir, "Sintel", targetFile))
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	t.Logf("opened %v", f.Name())
 	defer f.Close()
 
 	fi, err := f.Stat()
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 
 	var written int64
 	h := md5.New()
@@ -145,23 +145,23 @@ func testStreamSintel(t *testing.T, mount MountFunc) {
 	if ctx.Err() != nil {
 		t.Fatal(ctx.Err())
 	}
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 
-	require.Equal(t, sintelFileHashes[targetFile], hex.EncodeToString(h.Sum(nil)))
+	qt.Assert(t, qt.Equals(hex.EncodeToString(h.Sum(nil)), sintelFileHashes[targetFile]))
 
 	// Warm re-read: all pieces are now fully local. Re-read via the same FUSE
 	// mount without any network activity to verify the filesystem handles a
 	// completed torrent correctly.
 	f2, err := os.Open(filepath.Join(mountDir, "Sintel", targetFile))
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer f2.Close()
 	h2 := md5.New()
 	_, err = io.Copy(h2, f2)
 	if ctx.Err() != nil {
 		t.Fatal(ctx.Err())
 	}
-	require.NoError(t, err)
-	require.Equal(t, sintelFileHashes[targetFile], hex.EncodeToString(h2.Sum(nil)))
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.Equals(hex.EncodeToString(h2.Sum(nil)), sintelFileHashes[targetFile]))
 }
 
 func openFileWhenExists(t *testing.T, ctx context.Context, name string) (*os.File, error) {
@@ -206,7 +206,6 @@ func hasInternetConnectivity() bool {
 	conn.Close()
 	return true
 }
-
 
 type progressWriter struct {
 	onWrite func(n int)

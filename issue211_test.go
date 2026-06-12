@@ -7,8 +7,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	qt "github.com/go-quicktest/qt"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/internal/testutil"
@@ -23,7 +22,7 @@ func TestDropTorrentWithMmapStorageWhileHashing(t *testing.T) {
 	cfg.DialForPeerConns = false
 	cfg.AcceptPeerConnections = false
 	cl, err := NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer cl.Close()
 
 	td, mi := testutil.GreetingTestTorrent()
@@ -34,7 +33,7 @@ func TestDropTorrentWithMmapStorageWhileHashing(t *testing.T) {
 		InfoHash:  mi.HashInfoBytes(),
 		InfoBytes: mi.InfoBytes,
 	})
-	assert.True(t, new)
+	qt.Check(t, qt.IsTrue(new))
 
 	r := tt.NewReader()
 	go tt.Drop()

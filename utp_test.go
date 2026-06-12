@@ -4,12 +4,12 @@ import (
 	"testing"
 
 	"github.com/anacrolix/log"
-	"github.com/stretchr/testify/assert"
+	qt "github.com/go-quicktest/qt"
 )
 
 func TestNewUtpSocketErrorNilInterface(t *testing.T) {
 	s, err := NewUtpSocket("fix", "your:language", nil, log.Default)
-	assert.Error(t, err)
+	qt.Check(t, qt.IsNotNil(err))
 	if s != nil {
 		t.Fatalf("expected nil, got %#v", s)
 	}

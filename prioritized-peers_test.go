@@ -6,8 +6,8 @@ import (
 	"net/netip"
 	"testing"
 
+	qt "github.com/go-quicktest/qt"
 	"github.com/google/btree"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestPrioritizedPeers(t *testing.T) {
@@ -18,8 +18,8 @@ func TestPrioritizedPeers(t *testing.T) {
 		},
 	}
 	_, ok := pp.DeleteMin()
-	assert.Panics(t, func() { pp.PopMax() })
-	assert.False(t, ok)
+	qt.Check(t, qt.PanicMatches(func() { pp.PopMax() }, ".*"))
+	qt.Check(t, qt.IsFalse(ok))
 	ps := []PeerInfo{
 		{Addr: ipPortAddr{IP: net.ParseIP("1.2.3.4")}},
 		{Addr: ipPortAddr{IP: net.ParseIP("1::2")}},
@@ -28,24 +28,24 @@ func TestPrioritizedPeers(t *testing.T) {
 	}
 	for i, p := range ps {
 		t.Logf("peer %d priority: %08x trusted: %t\n", i, pp.getPrio(p), p.Trusted)
-		assert.False(t, pp.Add(p))
-		assert.True(t, pp.Add(p))
-		assert.Equal(t, i+1, pp.Len())
+		qt.Check(t, qt.IsFalse(pp.Add(p)))
+		qt.Check(t, qt.IsTrue(pp.Add(p)))
+		qt.Check(t, qt.Equals(pp.Len(), i+1))
 	}
 	pop := func(expected *PeerInfo) {
 		if expected == nil {
-			assert.Panics(t, func() { pp.PopMax() })
+			qt.Check(t, qt.PanicMatches(func() { pp.PopMax() }, ".*"))
 		} else {
-			assert.Equal(t, *expected, pp.PopMax())
+			qt.Check(t, qt.DeepEquals(pp.PopMax(), *expected))
 		}
 	}
 	min := func(expected *PeerInfo) {
 		i, ok := pp.DeleteMin()
 		if expected == nil {
-			assert.False(t, ok)
+			qt.Check(t, qt.IsFalse(ok))
 		} else {
-			assert.True(t, ok)
-			assert.Equal(t, *expected, i.p)
+			qt.Check(t, qt.IsTrue(ok))
+			qt.Check(t, qt.DeepEquals(i.p, *expected))
 		}
 	}
 	pop(&ps[3])
@@ -72,7 +72,7 @@ func TestPrioritizedPeersAddrHash(t *testing.T) {
 			var expected maphash.Hash
 			expected.SetSeed(hashSeed)
 			expected.WriteString(addr.String())
-			assert.Equal(t, int64(expected.Sum64()), item.addrHash)
+			qt.Check(t, qt.Equals(item.addrHash, int64(expected.Sum64())))
 		})
 	}
 }

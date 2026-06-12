@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/log"
-	"github.com/stretchr/testify/require"
+	qt "github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/internal/testutil"
 )
@@ -38,8 +38,8 @@ cookie: name=value
 		return
 	}
 	ihs := req.Header[http.CanonicalHeaderKey("Infohash")]
-	require.Equal(t, []string{"123123", "2222"}, ihs)
-	require.Equal(t, "3333", req.Header.Get("Port"))
+	qt.Assert(t, qt.DeepEquals(ihs, []string{"123123", "2222"}))
+	qt.Assert(t, qt.Equals(req.Header.Get("Port"), "3333"))
 }
 
 // setupTestLPD installs a mock lpdServer on cl. The conn4 has no real
@@ -76,13 +76,13 @@ func TestDiscovery(t *testing.T) {
 	config := TestingConfig(t)
 
 	client1, err := NewClient(config)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	t.Cleanup(func() { client1.Close() })
 	setupTestLPD(client1)
 	testutil.ExportStatusWriter(client1, "1", t)
 
 	client2, err := NewClient(config)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	t.Cleanup(func() { client2.Close() })
 	setupTestLPD(client2)
 	testutil.ExportStatusWriter(client2, "2", t)
@@ -104,11 +104,11 @@ func TestDiscovery(t *testing.T) {
 	injectAnnounce(t, client2, peer1, []string{ih})
 
 	waitForPeers(t, seederTorrent, 1)
-	require.Equal(t, 1, seederTorrent.numTotalPeers())
-	require.Equal(t, 1, len(client1.lpd.peers))
+	qt.Assert(t, qt.Equals(seederTorrent.numTotalPeers(), 1))
+	qt.Assert(t, qt.Equals(len(client1.lpd.peers), 1))
 	waitForPeers(t, leecherGreeting, 1)
-	require.Equal(t, 1, leecherGreeting.numTotalPeers())
-	require.Equal(t, 1, len(client2.lpd.peers))
+	qt.Assert(t, qt.Equals(leecherGreeting.numTotalPeers(), 1))
+	qt.Assert(t, qt.Equals(len(client2.lpd.peers), 1))
 }
 
 // TestLPDPeerDeduplication verifies that adding the same peer address twice
@@ -117,7 +117,7 @@ func TestLPDPeerDeduplication(t *testing.T) {
 	lpd := &lpdServer{peers: make(map[string]time.Time)}
 	lpd.peer("1.2.3.4:6881")
 	lpd.peer("1.2.3.4:6881")
-	require.Len(t, lpd.peers, 1)
+	qt.Assert(t, qt.HasLen(lpd.peers, 1))
 }
 
 // TestLPDPeerExpiry verifies that stale peers are removed after
@@ -128,12 +128,12 @@ func TestLPDPeerExpiry(t *testing.T) {
 	// Inject a stale entry directly into the map.
 	lpd.peers["1.2.3.4:6881"] = time.Now().Add(-3 * bep14LongTimeout)
 	lpd.refresh()
-	require.Empty(t, lpd.peers, "stale peer should be removed after refresh")
+	qt.Assert(t, qt.HasLen(lpd.peers, 0), qt.Commentf("stale peer should be removed after refresh"))
 
 	// A fresh peer should survive a refresh.
 	lpd.peer("5.6.7.8:6881")
 	lpd.refresh()
-	require.Len(t, lpd.peers, 1, "fresh peer should survive refresh")
+	qt.Assert(t, qt.HasLen(lpd.peers, 1), qt.Commentf("fresh peer should survive refresh"))
 }
 
 // TestPeerAddedToAllTorrents verifies that a peer discovered via LPD is added
@@ -144,7 +144,7 @@ func TestPeerAddedToAllTorrents(t *testing.T) {
 	config := TestingConfig(t)
 
 	cl, err := NewClient(config)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	t.Cleanup(func() { cl.Close() })
 	setupTestLPD(cl)
 
@@ -163,8 +163,8 @@ func TestPeerAddedToAllTorrents(t *testing.T) {
 
 	waitForPeers(t, greetingTorrent, 1)
 	waitForPeers(t, otherTorrent, 1)
-	require.Equal(t, 1, greetingTorrent.numTotalPeers())
-	require.Equal(t, 1, otherTorrent.numTotalPeers())
+	qt.Assert(t, qt.Equals(greetingTorrent.numTotalPeers(), 1))
+	qt.Assert(t, qt.Equals(otherTorrent.numTotalPeers(), 1))
 }
 
 // TestNewTorrentGetsExistingPeers verifies that when a torrent is added after
@@ -174,7 +174,7 @@ func TestNewTorrentGetsExistingPeers(t *testing.T) {
 	config := TestingConfig(t)
 
 	cl, err := NewClient(config)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	t.Cleanup(func() { cl.Close() })
 	setupTestLPD(cl)
 
@@ -187,7 +187,7 @@ func TestNewTorrentGetsExistingPeers(t *testing.T) {
 	peer := &net.UDPAddr{IP: net.IPv4(10, 11, 12, 13), Port: 6881}
 	injectAnnounce(t, cl, peer, []string{greetingTorrent.InfoHash().HexString()})
 	waitForPeers(t, greetingTorrent, 1)
-	require.Len(t, cl.lpd.peers, 1)
+	qt.Assert(t, qt.HasLen(cl.lpd.peers, 1))
 
 	// A torrent added now should synchronously receive the known LPD peer
 	// through AddTorrentSpec's cl.lpd.lpdPeers(t) call.
@@ -196,7 +196,7 @@ func TestNewTorrentGetsExistingPeers(t *testing.T) {
 	newTorrent, _, _ := cl.AddTorrentSpec(newSpec)
 
 	waitForPeers(t, newTorrent, 1)
-	require.Equal(t, 1, newTorrent.numTotalPeers())
+	qt.Assert(t, qt.Equals(newTorrent.numTotalPeers(), 1))
 }
 
 // TestReceiverMalformedMessages verifies that the receiver silently drops
@@ -206,7 +206,7 @@ func TestReceiverMalformedMessages(t *testing.T) {
 	config := TestingConfig(t)
 
 	cl, err := NewClient(config)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	t.Cleanup(func() { cl.Close() })
 	setupTestLPD(cl)
 
@@ -227,8 +227,8 @@ func TestReceiverMalformedMessages(t *testing.T) {
 		cl.lpd.conn4.handleAnnouncePacket(cl, []byte(msg), from)
 	}
 
-	require.Equal(t, 0, tor.numTotalPeers(), "malformed messages should not add peers")
-	require.Empty(t, cl.lpd.peers, "malformed messages should not record LPD peers")
+	qt.Assert(t, qt.Equals(tor.numTotalPeers(), 0), qt.Commentf("malformed messages should not add peers"))
+	qt.Assert(t, qt.HasLen(cl.lpd.peers, 0), qt.Commentf("malformed messages should not record LPD peers"))
 }
 
 // TestBuildAnnouncePacketSingle verifies that a small queue produces one packet
@@ -239,12 +239,12 @@ func TestBuildAnnouncePacketSingle(t *testing.T) {
 		"1122334455667788990011223344556677889900",
 	}
 	packet, nextIdx, rotated := buildAnnouncePacket(bep14Host4, 6881, queue, 0, bep14MaxPacketSize)
-	require.NotEmpty(t, packet)
-	require.Zero(t, nextIdx)
-	require.True(t, rotated)
+	qt.Assert(t, qt.Not(qt.HasLen(packet, 0)))
+	qt.Assert(t, qt.Equals(nextIdx, 0))
+	qt.Assert(t, qt.IsTrue(rotated))
 	body := string(packet)
 	for _, ih := range queue {
-		require.Contains(t, body, strings.ToUpper(ih))
+		qt.Assert(t, qt.StringContains(body, strings.ToUpper(ih)))
 	}
 }
 
@@ -264,8 +264,8 @@ func TestBuildAnnouncePacketFragments(t *testing.T) {
 	idx := 0
 	for {
 		packet, nextIdx, rotated := buildAnnouncePacket(bep14Host4, 6881, queue, idx, bep14MaxPacketSize)
-		require.NotEmpty(t, packet)
-		require.Less(t, len(packet), bep14MaxPacketSize)
+		qt.Assert(t, qt.Not(qt.HasLen(packet, 0)))
+		qt.Assert(t, qt.IsTrue(len(packet) < bep14MaxPacketSize))
 		packets++
 		end := nextIdx
 		if rotated {
@@ -275,17 +275,17 @@ func TestBuildAnnouncePacketFragments(t *testing.T) {
 			seen[strings.ToUpper(queue[i])]++
 		}
 		if rotated {
-			require.Zero(t, nextIdx)
+			qt.Assert(t, qt.Equals(nextIdx, 0))
 			break
 		}
-		require.Greater(t, nextIdx, idx, "must make progress")
+		qt.Assert(t, qt.IsTrue(nextIdx > idx), qt.Commentf("must make progress"))
 		idx = nextIdx
 	}
 
-	require.Greater(t, packets, 1, "queue should require more than one packet")
-	require.Len(t, seen, n, "every infohash must appear")
+	qt.Assert(t, qt.IsTrue(packets > 1), qt.Commentf("queue should require more than one packet"))
+	qt.Assert(t, qt.HasLen(seen, n), qt.Commentf("every infohash must appear"))
 	for ih, count := range seen {
-		require.Equal(t, 1, count, "%s announced %d times, want 1", ih, count)
+		qt.Assert(t, qt.Equals(count, 1), qt.Commentf("%s announced %d times, want 1", ih, count))
 	}
 }
 
@@ -293,9 +293,9 @@ func TestBuildAnnouncePacketFragments(t *testing.T) {
 // packet and is treated as a (trivially) completed rotation.
 func TestBuildAnnouncePacketEmptyQueue(t *testing.T) {
 	packet, nextIdx, rotated := buildAnnouncePacket(bep14Host4, 6881, nil, 0, bep14MaxPacketSize)
-	require.Nil(t, packet)
-	require.Zero(t, nextIdx)
-	require.True(t, rotated)
+	qt.Assert(t, qt.IsNil(packet))
+	qt.Assert(t, qt.Equals(nextIdx, 0))
+	qt.Assert(t, qt.IsTrue(rotated))
 }
 
 // waitForPeers blocks until tor has exactly num peers, or fails the test if

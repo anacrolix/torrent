@@ -6,8 +6,6 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	qt "github.com/go-quicktest/qt"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -28,8 +26,8 @@ func init() {
 // Converting from our Magnet type to URL string.
 func TestMagnetString(t *testing.T) {
 	m, err := ParseMagnetUri(exampleMagnet.String())
-	require.NoError(t, err)
-	assert.EqualValues(t, exampleMagnet, m)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Check(t, qt.DeepEquals(m, exampleMagnet))
 }
 
 func TestParseMagnetURI(t *testing.T) {
@@ -46,8 +44,8 @@ func TestParseMagnetURI(t *testing.T) {
 
 	// Checking if the magnet instance struct is built correctly from parsing
 	m, err = ParseMagnetUri(exampleMagnetURI)
-	assert.EqualValues(t, exampleMagnet, m)
-	assert.NoError(t, err)
+	qt.Check(t, qt.DeepEquals(m, exampleMagnet))
+	qt.Check(t, qt.IsNil(err))
 
 	// empty string URI case
 	_, err = ParseMagnetUri("")
@@ -73,13 +71,13 @@ func TestParseMagnetURI(t *testing.T) {
 
 func TestMagnetize(t *testing.T) {
 	mi, err := LoadFromFile("../testdata/bootstrap.dat.torrent")
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 
 	info, err := mi.UnmarshalInfo()
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	m := mi.Magnet(nil, &info)
 
-	assert.EqualValues(t, "bootstrap.dat", m.DisplayName)
+	qt.Check(t, qt.Equals(m.DisplayName, "bootstrap.dat"))
 
 	ih := [20]byte{
 		54, 113, 155, 162, 206, 207, 159, 59, 215, 197,

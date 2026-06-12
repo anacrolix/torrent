@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	qt "github.com/go-quicktest/qt"
 )
 
 type random_encode_test struct {
@@ -85,7 +85,7 @@ func bigIntFromString(s string) *big.Int {
 func TestRandomEncode(t *testing.T) {
 	for _, test := range random_encode_tests {
 		data, err := Marshal(test.value)
-		assert.NoError(t, err, "%s", test)
-		assert.EqualValues(t, test.expected, string(data))
+		qt.Check(t, qt.IsNil(err), qt.Commentf("%s", test))
+		qt.Check(t, qt.Equals(string(data), test.expected))
 	}
 }

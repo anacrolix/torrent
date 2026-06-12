@@ -12,8 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	qt "github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent"
 	torrentfs "github.com/anacrolix/torrent/fs"
@@ -94,11 +93,11 @@ func testUnmountWedged(t *testing.T, mount MountFunc) {
 	cfg.DisableTCP = true
 	cfg.DisableUTP = true
 	client, err := torrent.NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer client.Close()
 
 	tt, err := client.AddTorrent(layout.Metainfo)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 
 	tfs := torrentfs.New(client)
 	unmount := mount(t, tfs, layout.MountDir)
@@ -142,7 +141,7 @@ func testUnmountWedged(t *testing.T, mount MountFunc) {
 	// assertion rather than blocking indefinitely.
 	select {
 	case readErr := <-readErrCh:
-		require.Error(t, readErr)
+		qt.Assert(t, qt.IsNotNil(readErr))
 	case <-time.After(time.Second):
 	}
 }
@@ -162,14 +161,14 @@ func testDownloadOnDemand(t *testing.T, mount MountFunc) {
 	cfg.ListenPort = 0
 	cfg.ListenHost = torrent.LoopbackListenHost
 	seeder, err := torrent.NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer seeder.Close()
 	defer testutil.ExportStatusWriter(seeder, "s", t)()
 
 	seederTorrent, err := seeder.AddMagnet(
 		fmt.Sprintf("magnet:?xt=urn:btih:%s", layout.Metainfo.HashInfoBytes().HexString()),
 	)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	go func() {
 		<-seederTorrent.GotInfo()
 		seederTorrent.VerifyDataContext(context.TODO())
@@ -184,12 +183,12 @@ func testDownloadOnDemand(t *testing.T, mount MountFunc) {
 	cfg.ListenHost = torrent.LoopbackListenHost
 	cfg.ListenPort = 0
 	leecher, err := torrent.NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer testutil.ExportStatusWriter(leecher, "l", t)()
 	defer leecher.Close()
 
 	leecherTorrent, err := leecher.AddTorrent(layout.Metainfo)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	leecherTorrent.AddClientPeer(seeder)
 
 	tfs := torrentfs.New(leecher)
@@ -199,6 +198,6 @@ func testDownloadOnDemand(t *testing.T, mount MountFunc) {
 	startDeadlineBreaker(t, tfs, unmount)
 
 	data, err := os.ReadFile(filepath.Join(layout.MountDir, "greeting"))
-	require.NoError(t, err)
-	assert.EqualValues(t, testutil.GreetingFileContents, data)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Check(t, qt.Equals(string(data), testutil.GreetingFileContents))
 }

@@ -8,8 +8,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	qt "github.com/go-quicktest/qt"
 )
 
 type mockSocket struct {
@@ -17,8 +16,8 @@ type mockSocket struct {
 }
 
 func (m mockSocket) Accept() (net.Conn, error) { panic("not implemented") }
-func (m mockSocket) Addr() net.Addr             { return m.addr }
-func (m mockSocket) Close() error               { return nil }
+func (m mockSocket) Addr() net.Addr            { return m.addr }
+func (m mockSocket) Close() error              { return nil }
 func (m mockSocket) Dial(_ context.Context, _ string) (net.Conn, error) {
 	panic("not implemented")
 }
@@ -47,9 +46,9 @@ func TestListenAllRetryPermissionError(t *testing.T) {
 	}
 
 	ss, retry, err := listenAllRetry(nahs, 0, nil, slog.Default(), mockListen)
-	require.Error(t, err)
-	assert.Nil(t, ss, "sockets should be cleaned up on retry")
-	assert.True(t, retry, "should retry when subsequent listen fails with EACCES on dynamic port")
+	qt.Assert(t, qt.IsNotNil(err))
+	qt.Check(t, qt.IsNil(ss), qt.Commentf("sockets should be cleaned up on retry"))
+	qt.Check(t, qt.IsTrue(retry), qt.Commentf("should retry when subsequent listen fails with EACCES on dynamic port"))
 }
 
 // TestListenAllRetryFirstListenFails verifies that listenAllRetry does NOT retry when the first
@@ -67,9 +66,9 @@ func TestListenAllRetryFirstListenFails(t *testing.T) {
 	}
 
 	ss, retry, err := listenAllRetry(nahs, 0, nil, slog.Default(), mockListen)
-	require.Error(t, err)
-	assert.Nil(t, ss)
-	assert.False(t, retry, "should not retry when first listen fails")
+	qt.Assert(t, qt.IsNotNil(err))
+	qt.Check(t, qt.IsNil(ss))
+	qt.Check(t, qt.IsFalse(retry), qt.Commentf("should not retry when first listen fails"))
 }
 
 // TestListenAllRetryLimit verifies that listenAll gives up after the retry limit when the
@@ -99,9 +98,9 @@ func TestListenAllRetryLimit(t *testing.T) {
 		func(string) string { return "127.0.0.1" },
 		0, nil, slog.Default(), mockListen,
 	)
-	require.Error(t, err)
-	assert.Nil(t, ss)
+	qt.Assert(t, qt.IsNotNil(err))
+	qt.Check(t, qt.IsNil(ss))
 	// Each attempt calls listen twice (first succeeds, second fails), so expect 2 * limit calls.
 	expectedCalls := 2 * listenAllRetryLimit
-	assert.Equal(t, expectedCalls, callCount, "should stop retrying after the limit")
+	qt.Check(t, qt.Equals(callCount, expectedCalls), qt.Commentf("should stop retrying after the limit"))
 }

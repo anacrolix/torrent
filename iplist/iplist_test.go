@@ -7,8 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	qt "github.com/go-quicktest/qt"
 )
 
 var (
@@ -80,10 +79,10 @@ func TestBadIP(t *testing.T) {
 		// New(nil),
 		NewFromPacked([]byte("\x00\x00\x00\x00\x00\x00\x00\x00")),
 	} {
-		assert.False(t, lookupOk(iplist.Lookup(net.IP(make([]byte, 4)))), "%v", iplist)
-		assert.False(t, lookupOk(iplist.Lookup(net.IP(make([]byte, 16)))))
-		assert.Panics(t, func() { iplist.Lookup(nil) })
-		assert.Panics(t, func() { iplist.Lookup(net.IP(make([]byte, 5))) })
+		qt.Check(t, qt.IsFalse(lookupOk(iplist.Lookup(net.IP(make([]byte, 4))))), qt.Commentf("%v", iplist))
+		qt.Check(t, qt.IsFalse(lookupOk(iplist.Lookup(net.IP(make([]byte, 16))))))
+		qt.Check(t, qt.PanicMatches(func() { iplist.Lookup(nil) }, ".*"))
+		qt.Check(t, qt.PanicMatches(func() { iplist.Lookup(net.IP(make([]byte, 5))) }, ".*"))
 	}
 }
 
@@ -103,20 +102,20 @@ func testLookuperSimple(t *testing.T, iplist Ranger) {
 		{"1.2.8.2", true, "eff"},
 	} {
 		ip := net.ParseIP(_case.IP)
-		require.NotNil(t, ip, _case.IP)
+		qt.Assert(t, qt.IsNotNil(ip), qt.Commentf("%v", _case.IP))
 		r, ok := iplist.Lookup(ip)
-		assert.Equal(t, _case.Hit, ok, "%s", _case)
+		qt.Check(t, qt.Equals(ok, _case.Hit), qt.Commentf("%s", _case))
 		if !_case.Hit {
 			continue
 		}
-		assert.Equal(t, _case.Desc, r.Description, "%T", iplist)
+		qt.Check(t, qt.Equals(r.Description, _case.Desc), qt.Commentf("%T", iplist))
 	}
 }
 
 func TestSimple(t *testing.T) {
 	ranges, err := sampleRanges(t)
-	require.NoError(t, err)
-	require.Len(t, ranges, 5)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.HasLen(ranges, 5))
 	iplist := New(ranges)
 	testLookuperSimple(t, iplist)
 	packed := NewFromPacked(packedSample)

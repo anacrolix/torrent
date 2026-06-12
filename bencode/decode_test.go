@@ -11,8 +11,7 @@ import (
 	"testing"
 
 	qt "github.com/go-quicktest/qt"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/google/go-cmp/cmp"
 )
 
 type random_decode_test struct {
@@ -53,7 +52,9 @@ func TestRandomDecode(t *testing.T) {
 			t.Error(err, test.data)
 			continue
 		}
-		assert.EqualValues(t, test.expected, value)
+		qt.Check(t, qt.CmpEquals(value, test.expected, cmp.Comparer(func(a, b *big.Int) bool {
+			return a.Cmp(b) == 0
+		})))
 	}
 }
 
@@ -61,46 +62,46 @@ func TestLoneE(t *testing.T) {
 	var v int
 	err := Unmarshal([]byte("e"), &v)
 	se := err.(*SyntaxError)
-	require.EqualValues(t, 0, se.Offset)
+	qt.Assert(t, qt.Equals(se.Offset, 0))
 }
 
 func TestDecoderConsecutive(t *testing.T) {
 	d := NewDecoder(bytes.NewReader([]byte("i1ei2e")))
 	var i int
 	err := d.Decode(&i)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, i)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.Equals(i, 1))
 	err = d.Decode(&i)
-	require.NoError(t, err)
-	require.EqualValues(t, 2, i)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.Equals(i, 2))
 	err = d.Decode(&i)
-	require.Equal(t, io.EOF, err)
+	qt.Assert(t, qt.Equals(err, io.EOF))
 }
 
 func TestDecoderConsecutiveDicts(t *testing.T) {
 	bb := bytes.NewBufferString("d4:herp4:derped3:wat1:ke17:oh baby a triple!")
 
 	d := NewDecoder(bb)
-	assert.EqualValues(t, "d4:herp4:derped3:wat1:ke17:oh baby a triple!", bb.Bytes())
-	assert.EqualValues(t, 0, d.Offset)
+	qt.Check(t, qt.Equals(bb.String(), "d4:herp4:derped3:wat1:ke17:oh baby a triple!"))
+	qt.Check(t, qt.Equals(d.Offset, 0))
 
 	var m map[string]interface{}
 
-	require.NoError(t, d.Decode(&m))
-	assert.Len(t, m, 1)
-	assert.Equal(t, "derp", m["herp"])
-	assert.Equal(t, "d3:wat1:ke17:oh baby a triple!", bb.String())
-	assert.EqualValues(t, 14, d.Offset)
+	qt.Assert(t, qt.IsNil(d.Decode(&m)))
+	qt.Check(t, qt.HasLen(m, 1))
+	qt.Check(t, qt.Equals(m["herp"], "derp"))
+	qt.Check(t, qt.Equals(bb.String(), "d3:wat1:ke17:oh baby a triple!"))
+	qt.Check(t, qt.Equals(d.Offset, 14))
 
-	require.NoError(t, d.Decode(&m))
-	assert.Equal(t, "k", m["wat"])
-	assert.Equal(t, "17:oh baby a triple!", bb.String())
-	assert.EqualValues(t, 24, d.Offset)
+	qt.Assert(t, qt.IsNil(d.Decode(&m)))
+	qt.Check(t, qt.Equals(m["wat"], "k"))
+	qt.Check(t, qt.Equals(bb.String(), "17:oh baby a triple!"))
+	qt.Check(t, qt.Equals(d.Offset, 24))
 
 	var s string
-	require.NoError(t, d.Decode(&s))
-	assert.Equal(t, "oh baby a triple!", s)
-	assert.EqualValues(t, 44, d.Offset)
+	qt.Assert(t, qt.IsNil(d.Decode(&s)))
+	qt.Check(t, qt.Equals(s, "oh baby a triple!"))
+	qt.Check(t, qt.Equals(d.Offset, 44))
 }
 
 func check_error(t *testing.T, err error) {
@@ -148,10 +149,10 @@ func TestIgnoreUnmarshalTypeError(t *testing.T) {
 		Ignore int `bencode:",ignore_unmarshal_type_error"`
 		Normal int
 	}{}
-	require.Error(t, Unmarshal([]byte("d6:Normal5:helloe"), &s))
-	assert.NoError(t, Unmarshal([]byte("d6:Ignore5:helloe"), &s))
+	qt.Assert(t, qt.IsNotNil(Unmarshal([]byte("d6:Normal5:helloe"), &s)))
+	qt.Check(t, qt.IsNil(Unmarshal([]byte("d6:Ignore5:helloe"), &s)))
 	qt.Assert(t, qt.IsNil(Unmarshal([]byte("d6:Ignorei42ee"), &s)))
-	assert.EqualValues(t, 42, s.Ignore)
+	qt.Check(t, qt.Equals(s.Ignore, 42))
 }
 
 // Test unmarshalling []byte into something that has the same kind but
@@ -162,22 +163,22 @@ func TestDecodeCustomSlice(t *testing.T) {
 	// We do a longer slice then a shorter slice to see if the buffers are
 	// shared.
 	d := NewDecoder(bytes.NewBufferString("3:\x01\x10\xff2:\x04\x0f"))
-	require.NoError(t, d.Decode(&fs3))
-	require.NoError(t, d.Decode(&fs2))
-	assert.EqualValues(t, []flag{1, 16, 255}, fs3)
-	assert.EqualValues(t, []flag{4, 15}, fs2)
+	qt.Assert(t, qt.IsNil(d.Decode(&fs3)))
+	qt.Assert(t, qt.IsNil(d.Decode(&fs2)))
+	qt.Check(t, qt.DeepEquals(fs3, []flag{1, 16, 255}))
+	qt.Check(t, qt.DeepEquals(fs2, []flag{4, 15}))
 }
 
 func TestUnmarshalUnusedBytes(t *testing.T) {
 	var i int
-	require.EqualValues(t, ErrUnusedTrailingBytes{1}, Unmarshal([]byte("i42ee"), &i))
-	assert.EqualValues(t, 42, i)
+	qt.Assert(t, qt.Equals(Unmarshal([]byte("i42ee"), &i), error(ErrUnusedTrailingBytes{1})))
+	qt.Check(t, qt.Equals(i, 42))
 }
 
 func TestUnmarshalByteArray(t *testing.T) {
 	var ba [2]byte
-	assert.NoError(t, Unmarshal([]byte("2:hi"), &ba))
-	assert.EqualValues(t, "hi", ba[:])
+	qt.Check(t, qt.IsNil(Unmarshal([]byte("2:hi"), &ba)))
+	qt.Check(t, qt.Equals(string(ba[:]), "hi"))
 }
 
 func TestDecodeDictIntoUnsupported(t *testing.T) {

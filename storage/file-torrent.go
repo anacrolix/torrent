@@ -22,6 +22,7 @@ type fileTorrentImpl struct {
 	segmentLocater    segments.Index
 	infoHash          metainfo.Hash
 	io                fileIo
+	checkpoint        *torrentCheckpointBuffer
 	// Save memory by pointing to the other data.
 	client *fileClientImpl
 }
@@ -82,6 +83,51 @@ func (me *fileTorrentImpl) setCompletionFromPartFiles() error {
 	return nil
 }
 
+func (me *fileTorrentImpl) initFileCompletionTracking() error {
+	for fileIndex := range me.files {
+		f := me.file(fileIndex)
+		remaining := 0
+		for pieceIndex := f.beginPieceIndex(); pieceIndex < f.endPieceIndex(); pieceIndex++ {
+			c := me.getCompletion(pieceIndex)
+			if c.Err != nil {
+				return fmt.Errorf("getting completion for piece %d: %w", pieceIndex, c.Err)
+			}
+			if !c.Ok || !c.Complete {
+				remaining++
+			}
+		}
+		me.files[fileIndex].mu.Lock()
+		me.files[fileIndex].remainingPieces = remaining
+		me.files[fileIndex].remainingKnown = true
+		me.files[fileIndex].mu.Unlock()
+	}
+	return nil
+}
+
+func (me *fileTorrentImpl) markFilePieceComplete(fileIndex int) (allComplete, tracked bool) {
+	file := &me.files[fileIndex]
+	file.mu.Lock()
+	defer file.mu.Unlock()
+	if !file.remainingKnown {
+		return false, false
+	}
+	if file.remainingPieces > 0 {
+		file.remainingPieces--
+	}
+	return file.remainingPieces == 0, true
+}
+
+func (me *fileTorrentImpl) markFilePieceIncomplete(fileIndex int) (tracked bool) {
+	file := &me.files[fileIndex]
+	file.mu.Lock()
+	defer file.mu.Unlock()
+	if !file.remainingKnown {
+		return false
+	}
+	file.remainingPieces++
+	return true
+}
+
 func (me *fileTorrentImpl) partFiles() bool {
 	return me.client.opts.partFiles()
 }
@@ -112,7 +158,32 @@ func (me *fileTorrentImpl) Piece(p metainfo.Piece) PieceImpl {
 }
 
 func (me *fileTorrentImpl) Close() error {
-	return me.io.Close()
+	var err error
+	if me.checkpoint != nil {
+		err = errors.Join(err, me.checkpoint.close())
+	}
+	err = errors.Join(err, me.io.Close())
+	return err
+}
+
+func (me *fileTorrentImpl) CloseWriters() error {
+	closedPaths, remaining, err := me.io.closeWriters()
+	me.logger().Debug("closing writer cache after torrent completion", "count", len(closedPaths))
+	for _, path := range closedPaths {
+		me.logger().Debug("closed cached writer after torrent completion", "path", path)
+	}
+	me.logger().Debug(
+		"writer cache close result after torrent completion",
+		"closedCount",
+		len(closedPaths),
+		"remainingCount",
+		remaining,
+		"cleared",
+		remaining == 0,
+		"err",
+		err,
+	)
+	return err
 }
 
 func (me *fileTorrentImpl) file(index int) file {

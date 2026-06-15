@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
-	"sync"
+	"sync/atomic"
 
 	"github.com/RoaringBitmap/roaring/v2"
 	"github.com/anacrolix/chansync"
@@ -45,10 +45,11 @@ type Piece struct {
 	// the Peer isn't recorded in Torrent.connsWithAllPieces.
 	relativeAvailability int
 
-	// This can be locked when the Client lock is taken, but probably not vice versa.
-	pendingWritesMutex sync.Mutex
-	pendingWrites      int
-	noPendingWrites    sync.Cond
+	// Tracks writes to this piece that haven't yet reached storage, and lets readers/hashers wait
+	// for them to drain. Allocated lazily on the first write because many pieces never receive any.
+	// Loaded with an atomic because waiters don't hold the Client lock; mutations are serialized by
+	// the Client lock.
+	pendingWrites atomic.Pointer[piecePendingWrites]
 
 	// Connections that have written data to this piece since its last check.
 	// This can include connections that have closed.
@@ -64,6 +65,13 @@ type Piece struct {
 	storageCompletionOk bool
 	// Sticks on once set for the first time.
 	storageCompletionHasBeenOk bool
+}
+
+// Outstanding writes to a Piece and a way to wait for them to drain. Allocated on demand so Pieces
+// that are never written don't carry the cost.
+type piecePendingWrites struct {
+	count      atomic.Int64
+	noneRemain chansync.BroadcastCond
 }
 
 func (p *Piece) String() string {
@@ -121,30 +129,49 @@ func (p *Piece) numChunks() chunkIndexType {
 	return p.t.pieceNumChunks(p.index)
 }
 
+// Serialized by the Client lock, so the lazy allocation races only with atomic loads in waiters,
+// which treat a nil pointer as "no pending writes".
 func (p *Piece) incrementPendingWrites() {
-	p.pendingWritesMutex.Lock()
-	p.pendingWrites++
-	p.pendingWritesMutex.Unlock()
+	pw := p.pendingWrites.Load()
+	if pw == nil {
+		pw = &piecePendingWrites{}
+		p.pendingWrites.Store(pw)
+	}
+	pw.count.Add(1)
 }
 
 func (p *Piece) decrementPendingWrites() {
-	p.pendingWritesMutex.Lock()
-	if p.pendingWrites == 0 {
-		panic("assertion")
+	pw := p.pendingWrites.Load()
+	panicif.Nil(pw)
+	n := pw.count.Add(-1)
+	panicif.LessThan(n, 0)
+	if n == 0 {
+		pw.noneRemain.Broadcast()
 	}
-	p.pendingWrites--
-	if p.pendingWrites == 0 {
-		p.noPendingWrites.Broadcast()
+}
+
+func (p *Piece) pendingWritesCount() int64 {
+	pw := p.pendingWrites.Load()
+	if pw == nil {
+		return 0
 	}
-	p.pendingWritesMutex.Unlock()
+	return pw.count.Load()
 }
 
 func (p *Piece) waitNoPendingWrites() {
-	p.pendingWritesMutex.Lock()
-	for p.pendingWrites != 0 {
-		p.noPendingWrites.Wait()
+	pw := p.pendingWrites.Load()
+	if pw == nil {
+		return
 	}
-	p.pendingWritesMutex.Unlock()
+	for {
+		// Fetch the channel before checking the count so a Broadcast between the check and the
+		// receive can't be missed.
+		signaled := pw.noneRemain.Signaled()
+		if pw.count.Load() == 0 {
+			return
+		}
+		<-signaled
+	}
 }
 
 func (p *Piece) chunkIndexDirty(chunk chunkIndexType) bool {

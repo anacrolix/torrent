@@ -447,7 +447,6 @@ func (t *Torrent) makePieces() {
 		piece := &t.pieces[i]
 		piece.t = t
 		piece.index = i
-		piece.noPendingWrites.L = &piece.pendingWritesMutex
 		if t.info.HasV1() {
 			piece.hash = (*metainfo.Hash)(unsafe.Pointer(
 				unsafe.SliceData(t.info.Pieces[i*sha1.Size : (i+1)*sha1.Size])))

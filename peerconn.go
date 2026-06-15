@@ -1442,7 +1442,7 @@ file:
 			if !pc.peerHasPiece(torrentPieceIndex) {
 				continue file
 			}
-			if !pc.t.piece(torrentPieceIndex).hashV2.Ok {
+			if pc.t.piece(torrentPieceIndex).hashV2 == nil {
 				haveAllHashes = false
 			}
 		}

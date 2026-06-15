@@ -294,8 +294,8 @@ func TestPeerConnAcceptsSolicitedHashes(t *testing.T) {
 	_, sentHashRequestPresent := cn.sentHashRequests[hashRequestFromMessage(msg)]
 	qt.Assert(t, qt.IsFalse(sentHashRequestPresent))
 	// Matching the requested root should promote the received file layer hashes into piece v2 hashes.
-	qt.Assert(t, qt.Equals(tor.pieces[0].hashV2, g.Some(pieceHashes[0])))
-	qt.Assert(t, qt.Equals(tor.pieces[1].hashV2, g.Some(pieceHashes[1])))
+	qt.Assert(t, qt.DeepEquals(tor.pieces[0].hashV2, &pieceHashes[0]))
+	qt.Assert(t, qt.DeepEquals(tor.pieces[1].hashV2, &pieceHashes[1]))
 }
 
 func TestPeerConnRejectsHashesForMissingRoot(t *testing.T) {

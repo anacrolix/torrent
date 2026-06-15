@@ -22,14 +22,14 @@ import (
 type pieceVerifyCount = int64
 
 // Fields are ordered for compactness rather than logical grouping: see the layout asserted by
-// TestTypeSizes. The single-byte fields below are clustered together so they fall into the padding
-// that hashV2 (a 33-byte, 1-aligned Option) would otherwise waste before the next pointer.
+// TestTypeSizes. The single-byte fields below are clustered together to minimize padding.
 type Piece struct {
 	// The completed piece SHA1 hash, from the metainfo "pieces" field. Nil if the info is not V1
 	// compatible.
 	hash *metainfo.Hash
-	// Not easy to use unique.Handle because we need this as a slice sometimes.
-	hashV2 g.Option[[32]byte]
+	// The piece's v2 hash. Nil if not yet known or the info is not V2 compatible. A pointer rather
+	// than an inline array to keep Piece small; only v2 pieces pay for the allocation.
+	hashV2 *[32]byte
 
 	// Piece-specific priority. There are other priorities like File and Reader.
 	priority PiecePriority
@@ -96,8 +96,8 @@ func (p *Piece) Storage() storage.Piece {
 		pieceHash.Set(p.hash.Bytes())
 	} else if !p.hasPieceLayer() {
 		pieceHash.Set(p.mustGetOnlyFile().piecesRoot.UnwrapPtr()[:])
-	} else if p.hashV2.Ok {
-		pieceHash.Set(p.hashV2.Value[:])
+	} else if p.hashV2 != nil {
+		pieceHash.Set(p.hashV2[:])
 	}
 	return p.t.storage.PieceWithHash(p.Info(), pieceHash)
 }
@@ -412,9 +412,10 @@ func (p *Piece) setV2Hash(v2h [32]byte) {
 	// See Torrent.onSetInfo. We want to trigger an initial check if appropriate, if we didn't yet
 	// have a piece hash (can occur with v2 when we don't start with piece layers).
 	p.t.storageLock.Lock()
-	oldV2Hash := p.hashV2.Set(v2h)
+	hadV2Hash := p.hashV2 != nil
+	p.hashV2 = &v2h
 	p.t.storageLock.Unlock()
-	if !oldV2Hash.Ok && p.hash == nil {
+	if !hadV2Hash && p.hash == nil {
 		p.t.updatePieceCompletion(p.Index())
 		p.t.queueInitialPieceCheck(p.Index())
 	}
@@ -428,7 +429,7 @@ func (p *Piece) haveHash() bool {
 	if !p.hasPieceLayer() {
 		return true
 	}
-	return p.hashV2.Ok
+	return p.hashV2 != nil
 }
 
 func (p *Piece) hasPieceLayer() bool {
@@ -438,8 +439,8 @@ func (p *Piece) hasPieceLayer() bool {
 // TODO: This looks inefficient. It will rehash everytime it is called. The hashes should be
 // generated once.
 func (p *Piece) obtainHashV2() (hash [32]byte, err error) {
-	if p.hashV2.Ok {
-		hash = p.hashV2.Value
+	if p.hashV2 != nil {
+		hash = *p.hashV2
 		return
 	}
 	if !p.hasPieceLayer() {

@@ -34,14 +34,14 @@ func (me *storagePieceReader) Close() (err error) {
 
 func (me *storagePieceReader) getReaderAt(p *Piece) (err error) {
 	if me.pr != nil {
-		if me.prIndex == p.index {
+		if me.prIndex == p.Index() {
 			return
 		}
 		panicif.Err(me.pr.Close())
 		me.pr = nil
 	}
 	ps := p.Storage()
-	me.prIndex = p.index
+	me.prIndex = p.Index()
 	me.pr, err = ps.NewReader()
 	return
 }

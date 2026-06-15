@@ -27,10 +27,14 @@ type Piece struct {
 	hash *metainfo.Hash
 	// Not easy to use unique.Handle because we need this as a slice sometimes.
 	hashV2 g.Option[[32]byte]
-	t      *Torrent
-	index  pieceIndex
+	t     *Torrent
+	index int32
 	// First and one after the last file indexes.
-	beginFile, endFile int
+	beginFile, endFile int32
+	// Availability adjustment for this piece relative to len(Torrent.connsWithAllPieces). This is
+	// incremented for any piece a peer has when a peer has a piece, Torrent.haveInfo is true, and
+	// the Peer isn't recorded in Torrent.connsWithAllPieces.
+	relativeAvailability int32
 
 	readerCond chansync.BroadcastCond
 
@@ -40,10 +44,6 @@ type Piece struct {
 	publicPieceState PieceState
 	// Piece-specific priority. There are other priorities like File and Reader.
 	priority PiecePriority
-	// Availability adjustment for this piece relative to len(Torrent.connsWithAllPieces). This is
-	// incremented for any piece a peer has when a peer has a piece, Torrent.haveInfo is true, and
-	// the Peer isn't recorded in Torrent.connsWithAllPieces.
-	relativeAvailability int
 
 	// Tracks writes to this piece that haven't yet reached storage, and lets readers/hashers wait
 	// for them to drain. Allocated lazily on the first write because many pieces never receive any.
@@ -74,12 +74,16 @@ type piecePendingWrites struct {
 	noneRemain chansync.BroadcastCond
 }
 
+func (p *Piece) Index() pieceIndex {
+	return pieceIndex(p.index)
+}
+
 func (p *Piece) String() string {
-	return fmt.Sprintf("%s/%d", p.t.canonicalShortInfohash().HexString(), p.index)
+	return fmt.Sprintf("%s/%d", p.t.canonicalShortInfohash().HexString(), p.Index())
 }
 
 func (p *Piece) Info() metainfo.Piece {
-	return p.t.info.Piece(p.index)
+	return p.t.info.Piece(p.Index())
 }
 
 func (p *Piece) Storage() storage.Piece {
@@ -110,23 +114,23 @@ func (p *Piece) numDirtyChunks() chunkIndexType {
 	return chunkIndexType(roaringBitmapRangeCardinality[RequestIndex](
 		&p.t.dirtyChunks,
 		p.requestIndexBegin(),
-		p.t.pieceRequestIndexBegin(p.index+1),
+		p.t.pieceRequestIndexBegin(p.Index()+1),
 	))
 }
 
 func (p *Piece) unpendChunkIndex(i chunkIndexType) {
 	p.t.dirtyChunks.Add(p.requestIndexBegin() + i)
-	p.t.updatePieceRequestOrderPiece(p.index)
+	p.t.updatePieceRequestOrderPiece(p.Index())
 	p.readerCond.Broadcast()
 }
 
 func (p *Piece) pendChunkIndex(i RequestIndex) {
 	p.t.dirtyChunks.Remove(p.requestIndexBegin() + i)
-	p.t.updatePieceRequestOrderPiece(p.index)
+	p.t.updatePieceRequestOrderPiece(p.Index())
 }
 
 func (p *Piece) numChunks() chunkIndexType {
-	return p.t.pieceNumChunks(p.index)
+	return p.t.pieceNumChunks(p.Index())
 }
 
 // Serialized by the Client lock, so the lazy allocation races only with atomic loads in waiters,
@@ -221,7 +225,7 @@ func (p *Piece) numDirtyBytes() (ret pp.Integer) {
 }
 
 func (p *Piece) length() pp.Integer {
-	return p.t.pieceLength(p.index)
+	return p.t.pieceLength(p.Index())
 }
 
 func (p *Piece) chunkSize() pp.Integer {
@@ -233,7 +237,7 @@ func (p *Piece) lastChunkIndex() chunkIndexType {
 }
 
 func (p *Piece) bytesLeft() (ret pp.Integer) {
-	if p.t.pieceComplete(p.index) {
+	if p.t.pieceComplete(p.Index()) {
 		return 0
 	}
 	return p.length() - p.numDirtyBytes()
@@ -253,7 +257,7 @@ func (p *Piece) VerifyDataContext(ctx context.Context) error {
 	if p.t.closed.IsSet() {
 		return errTorrentClosed
 	}
-	target, err := p.t.queuePieceCheck(p.index)
+	target, err := p.t.queuePieceCheck(p.Index())
 	locker.Unlock()
 	if err != nil {
 		return err
@@ -280,11 +284,11 @@ func (p *Piece) VerifyDataContext(ctx context.Context) error {
 }
 
 func (p *Piece) queuedForHash() bool {
-	return p.t.piecesQueuedForHash.Contains(p.index)
+	return p.t.piecesQueuedForHash.Contains(p.Index())
 }
 
 func (p *Piece) torrentBeginOffset() int64 {
-	return int64(p.index) * p.t.info.PieceLength
+	return int64(p.Index()) * p.t.info.PieceLength
 }
 
 func (p *Piece) torrentEndOffset() int64 {
@@ -295,7 +299,7 @@ func (p *Piece) SetPriority(prio PiecePriority) {
 	p.t.cl.lock()
 	defer p.t.cl.unlock()
 	p.priority = prio
-	p.t.updatePiecePriority(p.index, "Piece.SetPriority")
+	p.t.updatePiecePriority(p.Index(), "Piece.SetPriority")
 }
 
 // This is priority based only on piece, file and reader priorities.
@@ -303,13 +307,13 @@ func (p *Piece) purePriority() (ret PiecePriority) {
 	for _, f := range p.files() {
 		ret.Raise(f.prio)
 	}
-	if p.t.readerNowPieces().Contains(p.index) {
+	if p.t.readerNowPieces().Contains(p.Index()) {
 		ret.Raise(PiecePriorityNow)
 	}
 	// if t._readerNowPieces.Contains(piece - 1) {
 	// 	return PiecePriorityNext
 	// }
-	if p.t.readerReadaheadPieces().Contains(p.index) {
+	if p.t.readerReadaheadPieces().Contains(p.Index()) {
 		ret.Raise(PiecePriorityReadahead)
 	}
 	ret.Raise(p.priority)
@@ -328,7 +332,7 @@ func (p *Piece) ignoreForRequests() bool {
 		return true
 	}
 	// This is valid after we know that storage completion has been cached.
-	if p.t.pieceComplete(p.index) {
+	if p.t.pieceComplete(p.Index()) {
 		return true
 	}
 	if p.queuedForHash() {
@@ -352,14 +356,14 @@ func (p *Piece) effectivePriority() (ret PiecePriority) {
 func (p *Piece) UpdateCompletion() {
 	p.t.cl.lock()
 	defer p.t.cl.unlock()
-	p.t.updatePieceCompletion(p.index)
+	p.t.updatePieceCompletion(p.Index())
 }
 
 // TODO: Probably don't include Completion.Err?
 func (p *Piece) completion() (ret storage.Completion) {
 	ret.Ok = p.storageCompletionOk
 	if ret.Ok {
-		ret.Complete = p.t.pieceComplete(p.index)
+		ret.Complete = p.t.pieceComplete(p.Index())
 	}
 	return
 }
@@ -369,27 +373,27 @@ func (p *Piece) allChunksDirty() bool {
 }
 
 func (p *Piece) State() PieceState {
-	return p.t.PieceState(p.index)
+	return p.t.PieceState(p.Index())
 }
 
 // The first possible request index for the piece.
 func (p *Piece) requestIndexBegin() RequestIndex {
-	return p.t.pieceRequestIndexBegin(p.index)
+	return p.t.pieceRequestIndexBegin(p.Index())
 }
 
 // The maximum end request index for the piece. Some of the requests might not be valid, it's for
 // cleaning up arrays and bitmaps in broad strokes.
 func (p *Piece) requestIndexMaxEnd() RequestIndex {
-	new := min(p.t.pieceRequestIndexBegin(p.index+1), p.t.maxEndRequest())
+	new := min(p.t.pieceRequestIndexBegin(p.Index()+1), p.t.maxEndRequest())
 	if false {
-		old := p.t.pieceRequestIndexBegin(p.index + 1)
+		old := p.t.pieceRequestIndexBegin(p.Index() + 1)
 		panicif.NotEq(new, old)
 	}
 	return new
 }
 
 func (p *Piece) availability() int {
-	return len(p.t.connsWithAllPieces) + p.relativeAvailability
+	return len(p.t.connsWithAllPieces) + int(p.relativeAvailability)
 }
 
 // For v2 torrents, files are aligned to pieces so there should always only be a single file for a
@@ -407,8 +411,8 @@ func (p *Piece) setV2Hash(v2h [32]byte) {
 	oldV2Hash := p.hashV2.Set(v2h)
 	p.t.storageLock.Unlock()
 	if !oldV2Hash.Ok && p.hash == nil {
-		p.t.updatePieceCompletion(p.index)
-		p.t.queueInitialPieceCheck(p.index)
+		p.t.updatePieceCompletion(p.Index())
+		p.t.queueInitialPieceCheck(p.Index())
 	}
 }
 
@@ -455,7 +459,7 @@ func (p *Piece) obtainHashV2() (hash [32]byte, err error) {
 func (p *Piece) files() iter.Seq2[int, *File] {
 	return func(yield func(int, *File) bool) {
 		for i := p.beginFile; i < p.endFile; i++ {
-			if !yield(i, (*p.t.files)[i]) {
+			if !yield(int(i), (*p.t.files)[i]) {
 				return
 			}
 		}
@@ -463,7 +467,7 @@ func (p *Piece) files() iter.Seq2[int, *File] {
 }
 
 func (p *Piece) numFiles() int {
-	return p.endFile - p.beginFile
+	return int(p.endFile - p.beginFile)
 }
 
 // The value of numVerifies after the next hashing operation that hasn't yet begun.
@@ -479,11 +483,11 @@ func (p *Piece) nextNovelHashCount() (ret pieceVerifyCount) {
 // Here so it's zero-arity and we can use it in DeferOnce.
 func (p *Piece) publishStateChange() {
 	t := p.t
-	cur := t.pieceState(p.index)
+	cur := t.pieceState(p.Index())
 	if cur != p.publicPieceState {
 		p.publicPieceState = cur
 		t.pieceStateChanges.Publish(PieceStateChange{
-			p.index,
+			p.Index(),
 			cur,
 		})
 	}

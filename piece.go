@@ -21,12 +21,29 @@ import (
 // Why is it an int64?
 type pieceVerifyCount = int64
 
+// Fields are ordered for compactness rather than logical grouping: see the layout asserted by
+// TestTypeSizes. The single-byte fields below are clustered together so they fall into the padding
+// that hashV2 (a 33-byte, 1-aligned Option) would otherwise waste before the next pointer.
 type Piece struct {
 	// The completed piece SHA1 hash, from the metainfo "pieces" field. Nil if the info is not V1
 	// compatible.
 	hash *metainfo.Hash
 	// Not easy to use unique.Handle because we need this as a slice sometimes.
 	hashV2 g.Option[[32]byte]
+
+	// Piece-specific priority. There are other priorities like File and Reader.
+	priority PiecePriority
+	// Value to twiddle to detect races.
+	race byte
+	// Currently being hashed.
+	hashing bool
+	// The piece state may have changed, and is being synchronized with storage.
+	marking bool
+	// The Completion.Ok field cached from the storage layer.
+	storageCompletionOk bool
+	// Sticks on once set for the first time.
+	storageCompletionHasBeenOk bool
+
 	t     *Torrent
 	index int32
 	// First and one after the last file indexes.
@@ -42,8 +59,6 @@ type Piece struct {
 	numVerifiesCond chansync.BroadcastCond
 
 	publicPieceState PieceState
-	// Piece-specific priority. There are other priorities like File and Reader.
-	priority PiecePriority
 
 	// Tracks writes to this piece that haven't yet reached storage, and lets readers/hashers wait
 	// for them to drain. Allocated lazily on the first write because many pieces never receive any.
@@ -54,17 +69,6 @@ type Piece struct {
 	// Connections that have written data to this piece since its last check.
 	// This can include connections that have closed.
 	dirtiers map[*Peer]struct{}
-
-	// Value to twiddle to detect races.
-	race byte
-	// Currently being hashed.
-	hashing bool
-	// The piece state may have changed, and is being synchronized with storage.
-	marking bool
-	// The Completion.Ok field cached from the storage layer.
-	storageCompletionOk bool
-	// Sticks on once set for the first time.
-	storageCompletionHasBeenOk bool
 }
 
 // Outstanding writes to a Piece and a way to wait for them to drain. Allocated on demand so Pieces

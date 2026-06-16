@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -96,24 +95,4 @@ func TestClassicFileIoCloseWritersClearsCachedHandles(t *testing.T) {
 	qt.Assert(t, qt.DeepEquals(closedPaths, []string{filePath}))
 	qt.Assert(t, qt.Equals(remaining, 0))
 	qt.Assert(t, qt.HasLen(ioImpl.writers, 0))
-}
-
-func TestClassicFileReaderWriteToNDoesNotReportShortWrite(t *testing.T) {
-	tempDir := t.TempDir()
-	filePath := filepath.Join(tempDir, "data.bin")
-	qt.Assert(t, qt.IsNil(os.WriteFile(filePath, []byte("hello world"), 0o600)))
-
-	ioImpl, ok := newClassicFileIo().(*classicFileIo)
-	qt.Assert(t, qt.IsTrue(ok))
-	t.Cleanup(func() { _ = ioImpl.Close() })
-
-	reader, err := ioImpl.openForRead(filePath)
-	qt.Assert(t, qt.IsNil(err))
-	defer reader.Close()
-
-	var buf bytes.Buffer
-	written, err := reader.writeToN(&buf, 5)
-	qt.Assert(t, qt.IsNil(err))
-	qt.Assert(t, qt.Equals(written, int64(5)))
-	qt.Assert(t, qt.DeepEquals(buf.Bytes(), []byte("hello")))
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"iter"
 	"sync/atomic"
+	"unique"
 
 	"github.com/RoaringBitmap/roaring/v2"
 	"github.com/anacrolix/chansync"
@@ -58,7 +59,10 @@ type Piece struct {
 	numVerifies     pieceVerifyCount
 	numVerifiesCond chansync.BroadcastCond
 
-	publicPieceState PieceState
+	// Cached state last published to pieceStateChanges, used to detect changes. Interned because
+	// PieceState has few distinct values across pieces, which both shrinks Piece and dedups storage.
+	// The zero handle means nothing has been published yet.
+	publicPieceState unique.Handle[PieceState]
 
 	// Tracks writes to this piece that haven't yet reached storage, and lets readers/hashers wait
 	// for them to drain. Allocated lazily on the first write because many pieces never receive any.
@@ -489,8 +493,9 @@ func (p *Piece) nextNovelHashCount() (ret pieceVerifyCount) {
 func (p *Piece) publishStateChange() {
 	t := p.t
 	cur := t.pieceState(p.Index())
-	if cur != p.publicPieceState {
-		p.publicPieceState = cur
+	curHandle := unique.Make(cur)
+	if curHandle != p.publicPieceState {
+		p.publicPieceState = curHandle
 		t.pieceStateChanges.Publish(PieceStateChange{
 			p.Index(),
 			cur,

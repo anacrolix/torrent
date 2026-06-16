@@ -28,7 +28,7 @@ func justLogSizeof[T any](t *testing.T) {
 
 func TestTypeSizes(t *testing.T) {
 	justLogSizeof[[]*File](t)
-	checkSizeLessThan[Piece](t, 168)
+	checkSizeLessThan[Piece](t, 144)
 	justLogSizeof[map[*Peer]struct{}](t)
 	justLogSizeof[chansync.BroadcastCond](t)
 

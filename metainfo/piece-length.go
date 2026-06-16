@@ -42,12 +42,41 @@ const targetPieceCountMax = targetPieceCountMin << 1
 
 // Choose a good piecelength.
 func ChoosePieceLength(totalLength int64) (pieceLength int64) {
-	// Must be a power of 2.
-	// Must be a multiple of 16KB
-	// Prefer to provide around 1024..2048 pieces.
-	pieceLength = minimumPieceLength
-	pieces := totalLength / pieceLength
-	for pieces >= targetPieceCountMax {
+	return ChoosePieceLengthEx(ChoosePieceLengthOpts{TotalLength: totalLength})
+}
+
+type ChoosePieceLengthOpts struct {
+	TotalLength       int64
+	MinPieceSize      int64
+	MaxPieceSize      int64
+	SoftMinPieceCount int64
+	SoftMaxPieceCount int64
+}
+
+// Choose a good piece length within the given bounds. Starting from MinPieceSize, the piece
+// length is doubled (halving the piece count) until the count drops below SoftMaxPieceCount,
+// staying within MaxPieceSize and not taking the count below SoftMinPieceCount. The hard size
+// bounds win over the soft count targets. Any zero-valued option assumes its default; MaxPieceSize
+// defaults to no upper bound.
+func ChoosePieceLengthEx(opts ChoosePieceLengthOpts) (pieceLength int64) {
+	if opts.MinPieceSize == 0 {
+		opts.MinPieceSize = minimumPieceLength
+	}
+	if opts.SoftMaxPieceCount == 0 {
+		opts.SoftMaxPieceCount = targetPieceCountMax
+	}
+	if opts.SoftMinPieceCount == 0 {
+		opts.SoftMinPieceCount = opts.SoftMaxPieceCount / 2
+	}
+	pieceLength = opts.MinPieceSize
+	pieces := opts.TotalLength / pieceLength
+	for pieces >= opts.SoftMaxPieceCount {
+		if opts.MaxPieceSize != 0 && pieceLength<<1 > opts.MaxPieceSize {
+			break
+		}
+		if opts.SoftMinPieceCount != 0 && pieces>>1 < opts.SoftMinPieceCount {
+			break
+		}
 		pieceLength <<= 1
 		pieces >>= 1
 	}

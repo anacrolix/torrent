@@ -389,23 +389,23 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	}
 	c.lastUsefulChunkReceived = time.Now()
 
-	// Need to record that it hasn't been written yet, before we attempt to do
-	// anything with it.
-	piece.incrementPendingWrites()
-	// Record that we have the chunk, so we aren't trying to download it while
-	// waiting for it to be written to storage.
-	piece.unpendChunkIndex(chunkIndexFromChunkSpec(ppReq.ChunkSpec, t.chunkSize))
+	// Record that the chunk hasn't been written yet before we do anything with it, holding a
+	// pending-write reference across the write below so the tracking struct can't be reclaimed while
+	// this write is in flight.
+	err = piece.withPendingWriteRef(func() error {
+		// Record that we have the chunk, so we aren't trying to download it while
+		// waiting for it to be written to storage.
+		piece.unpendChunkIndex(chunkIndexFromChunkSpec(ppReq.ChunkSpec, t.chunkSize))
 
-	// Cancel pending requests for this chunk from *other* peers.
-	if p := t.requestingPeer(req); p != nil {
-		if p.peerPtr() == c {
-			p.logger.Slogger().Error("received chunk but still pending request", "peer", p, "req", req)
-			panic("should not be pending request from conn that just received it")
+		// Cancel pending requests for this chunk from *other* peers.
+		if p := t.requestingPeer(req); p != nil {
+			if p.peerPtr() == c {
+				p.logger.Slogger().Error("received chunk but still pending request", "peer", p, "req", req)
+				panic("should not be pending request from conn that just received it")
+			}
+			p.cancel(req)
 		}
-		p.cancel(req)
-	}
 
-	err = func() error {
 		cl.unlock()
 		defer cl.lock()
 		// Opportunistically do this here while we aren't holding the client lock.
@@ -418,9 +418,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		// defer any concurrency to the storage and have that notify the client of errors. TODO: Do
 		// that instead.
 		return t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
-	}()
-
-	piece.decrementPendingWrites()
+	})
 
 	if err != nil {
 		c.logger.WithDefaultLevel(log.Error).Printf("writing received chunk %v: %v", req, err)

@@ -7,6 +7,7 @@ import (
 	"iter"
 	"sync/atomic"
 	"unique"
+	"weak"
 
 	"github.com/RoaringBitmap/roaring/v2"
 	"github.com/anacrolix/chansync"
@@ -67,8 +68,10 @@ type Piece struct {
 	// Tracks writes to this piece that haven't yet reached storage, and lets readers/hashers wait
 	// for them to drain. Allocated lazily on the first write because many pieces never receive any.
 	// Loaded with an atomic because waiters don't hold the Client lock; mutations are serialized by
-	// the Client lock.
-	pendingWrites atomic.Pointer[piecePendingWrites]
+	// the Client lock. Held weakly so the struct (and its lazily-allocated wait channel) can be
+	// reclaimed once no write is in flight and no waiter is parked: writers and waiters keep a strong
+	// reference for the duration they care about, so the GC only collects it when it's genuinely idle.
+	pendingWrites atomic.Pointer[weak.Pointer[piecePendingWrites]]
 
 	// Connections that have written data to this piece since its last check.
 	// This can include connections that have closed.
@@ -141,20 +144,34 @@ func (p *Piece) numChunks() chunkIndexType {
 	return p.t.pieceNumChunks(p.Index())
 }
 
-// Serialized by the Client lock, so the lazy allocation races only with atomic loads in waiters,
-// which treat a nil pointer as "no pending writes".
-func (p *Piece) incrementPendingWrites() {
-	pw := p.pendingWrites.Load()
-	if pw == nil {
-		pw = &piecePendingWrites{}
-		p.pendingWrites.Store(pw)
+// Upgrades the weak pointer to a strong one. Returns nil if no struct is allocated or it has been
+// reclaimed (both meaning "no pending writes"). Callers that need the struct to stay alive must hold
+// the returned pointer for as long as that matters.
+func (p *Piece) loadPendingWrites() *piecePendingWrites {
+	wp := p.pendingWrites.Load()
+	if wp == nil {
+		return nil
 	}
-	pw.count.Add(1)
+	return wp.Value()
 }
 
-func (p *Piece) decrementPendingWrites() {
-	pw := p.pendingWrites.Load()
-	panicif.Nil(pw)
+// Records a write in flight and returns a strong reference to the tracking struct. The caller MUST
+// keep the returned pointer alive until it calls decrementPendingWrites on it: while a write is in
+// flight nothing else holds a strong reference, so the GC would otherwise be free to reclaim the
+// struct mid-write. Serialized by the Client lock, so the lazy allocation races only with weak loads
+// in waiters, which treat a nil result as "no pending writes".
+func (p *Piece) incrementPendingWrites() *piecePendingWrites {
+	pw := p.loadPendingWrites()
+	if pw == nil {
+		pw = &piecePendingWrites{}
+		wp := weak.Make(pw)
+		p.pendingWrites.Store(&wp)
+	}
+	pw.count.Add(1)
+	return pw
+}
+
+func (pw *piecePendingWrites) decrementPendingWrites() {
 	n := pw.count.Add(-1)
 	panicif.LessThan(n, 0)
 	if n == 0 {
@@ -162,8 +179,20 @@ func (p *Piece) decrementPendingWrites() {
 	}
 }
 
+// withPendingWriteRef records a write in flight for the duration of f. It increments before f and
+// decrements after it returns (even on error), holding the strong reference returned by
+// incrementPendingWrites across the call via the deferred decrement, so the tracking struct can't be
+// reclaimed (nor its count lost to a fresh allocation) while the write is in flight. Call with the
+// Client lock held; f may release and reacquire it, as long as it's held again on return so the
+// decrement stays serialized with allocation.
+func (p *Piece) withPendingWriteRef(f func() error) error {
+	pw := p.incrementPendingWrites()
+	defer pw.decrementPendingWrites()
+	return f()
+}
+
 func (p *Piece) pendingWritesCount() int64 {
-	pw := p.pendingWrites.Load()
+	pw := p.loadPendingWrites()
 	if pw == nil {
 		return 0
 	}
@@ -171,8 +200,14 @@ func (p *Piece) pendingWritesCount() int64 {
 }
 
 func (p *Piece) waitNoPendingWrites() {
-	pw := p.pendingWrites.Load()
+	// Holding the strong reference for the duration of the wait keeps the struct alive, so any write
+	// that starts while we wait reuses this same struct (and its count) rather than allocating a
+	// fresh one we wouldn't be watching.
+	pw := p.loadPendingWrites()
 	if pw == nil {
+		return
+	}
+	if pw.count.Load() == 0 {
 		return
 	}
 	for {

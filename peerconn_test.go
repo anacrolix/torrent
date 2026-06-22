@@ -251,18 +251,16 @@ func TestPeerConnRejectsUnsolicitedHashes(t *testing.T) {
 func TestPeerConnAcceptsSolicitedHashes(t *testing.T) {
 	pieceHashes := [][32]byte{{}, {}}
 	piecesRoot := infohash_v2.T(merkle.Root(pieceHashes))
-	var v1Hash metainfo.Hash
 	cl := &Client{}
 	tor := &Torrent{
 		cl:        cl,
 		chunkSize: defaultChunkSize,
 		info: &metainfo.Info{
 			PieceLength: 1,
+			// Two zero v1 piece hashes; the per-piece hash is derived from here now.
+			Pieces: make([]byte, 2*metainfo.HashSize),
 		},
-		pieces: []Piece{
-			{hash: &v1Hash},
-			{hash: &v1Hash, index: 1},
-		},
+		pieces: make([]pieceState, 2),
 		files: &[]*File{{
 			t:          nil,
 			length:     2,
@@ -271,9 +269,6 @@ func TestPeerConnAcceptsSolicitedHashes(t *testing.T) {
 		}},
 	}
 	(*tor.files)[0].t = tor
-	for i := range tor.pieces {
-		tor.pieces[i].t = tor
-	}
 	msg := pp.Message{
 		Type:       pp.Hashes,
 		PiecesRoot: piecesRoot,

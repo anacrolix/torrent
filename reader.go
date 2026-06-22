@@ -236,7 +236,7 @@ func (r *reader) waitAvailable(
 	for {
 		t.cl.rLock()
 		avail = r.available(pos, wanted)
-		readerCond := t.piece(int((r.offset + pos) / t.info.PieceLength)).readerCond.Signaled()
+		readerCond := t.piece(int((r.offset + pos) / t.info.PieceLength)).state().readerCond.Signaled()
 		t.cl.rUnlock()
 		if avail != 0 {
 			return

@@ -94,7 +94,7 @@ func (t *Torrent) PieceBytesMissing(piece int) int64 {
 	t.cl.rLock()
 	defer t.cl.rUnlock()
 
-	return int64(t.pieces[piece].bytesLeft())
+	return int64(t.piece(piece).bytesLeft())
 }
 
 // Drop the torrent from the client, and close it. It's always safe to do this. No data corruption
@@ -208,7 +208,7 @@ func (t *Torrent) CancelPieces(begin, end pieceIndex) {
 
 func (t *Torrent) cancelPiecesLocked(begin, end pieceIndex, reason updateRequestReason) {
 	for i := begin; i < end; i++ {
-		p := t.piece(i)
+		p := &t.pieces[i]
 		// Intentionally cancelling only the piece-specific priority here.
 		if p.priority == PiecePriorityNone {
 			continue

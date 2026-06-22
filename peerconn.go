@@ -1442,7 +1442,7 @@ file:
 			if !pc.peerHasPiece(torrentPieceIndex) {
 				continue file
 			}
-			if pc.t.piece(torrentPieceIndex).hashV2 == nil {
+			if pc.t.pieces[torrentPieceIndex].hashV2 == nil {
 				haveAllHashes = false
 			}
 		}
@@ -1774,8 +1774,7 @@ func (cn *PeerConn) shouldRequest(r RequestIndex) error {
 	if cn.t.hashingPiece(pi) {
 		panic("piece is being hashed")
 	}
-	p := cn.t.piece(pi)
-	if p.marking {
+	if cn.t.pieces[pi].marking {
 		panic("piece is being marked")
 	}
 	if cn.t.pieceQueuedForHash(pi) {

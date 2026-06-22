@@ -74,7 +74,8 @@ type requestStrategyPiece struct {
 }
 
 func (r requestStrategyPiece) CountUnverified() bool {
-	return r.p.hashing || r.p.marking || r.p.queuedForHash()
+	s := r.p.state()
+	return s.hashing || s.marking || r.p.queuedForHash()
 }
 
 func (r requestStrategyPiece) Request() bool {

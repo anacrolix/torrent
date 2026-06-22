@@ -29,6 +29,29 @@ type PieceCompletionPersistenter interface {
 	Persistent() bool
 }
 
+type PieceCompletionChange struct {
+	Key      metainfo.PieceKey
+	Complete bool
+}
+
+// Optional interface for piece completion implementations that can persist multiple changes in a
+// single transaction.
+type PieceCompletionBatchSetter interface {
+	SetBatch([]PieceCompletionChange) error
+}
+
+// Optional interface for piece completion implementations that buffer runtime updates and expose a
+// checkpoint hook to persist them later.
+type PieceCompletionCheckpointer interface {
+	Checkpoint([]metainfo.PieceKey) error
+}
+
+// Optional interface for piece completion implementations that can clear all persisted state for a
+// specific torrent infohash.
+type PieceCompletionTorrentDeleter interface {
+	DeleteTorrent(metainfo.Hash) error
+}
+
 func pieceCompletionIsPersistent(pc PieceCompletion) bool {
 	if p, ok := pc.(PieceCompletionPersistenter); ok {
 		return p.Persistent()

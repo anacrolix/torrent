@@ -103,7 +103,11 @@ func (fs *fileClientImpl) OpenTorrent(
 		info.FileSegmentsIndex(),
 		infoHash,
 		defaultFileIo(),
+		nil,
 		fs,
+	}
+	if checkpointer, ok := fs.opts.PieceCompletion.(PieceCompletionCheckpointer); ok {
+		t.checkpoint = newTorrentCheckpointBuffer(t, checkpointer)
 	}
 	if t.partFiles() {
 		err = t.setCompletionFromPartFiles()
@@ -111,9 +115,15 @@ func (fs *fileClientImpl) OpenTorrent(
 			err = fmt.Errorf("setting completion from part files: %w", err)
 			return
 		}
+		err = t.initFileCompletionTracking()
+		if err != nil {
+			err = fmt.Errorf("initializing file completion tracking: %w", err)
+			return
+		}
 	}
 	return TorrentImpl{
-		Piece: t.Piece,
-		Close: t.Close,
+		Piece:        t.Piece,
+		Close:        t.Close,
+		CloseWriters: t.CloseWriters,
 	}, nil
 }

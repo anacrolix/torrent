@@ -167,18 +167,34 @@ func (me *filePieceImpl) markIncompletePieces(file *file, size int64) {
 }
 
 func (me *filePieceImpl) MarkComplete() (err error) {
+	prevCompletion := me.t.getCompletion(me.p.Index())
 	err = me.pieceCompletion().Set(me.pieceKey(), true)
 	if err != nil {
 		return
 	}
-	if pieceCompletionIsPersistent(me.pieceCompletion()) {
+	if me.t.checkpoint != nil {
+		err = me.t.checkpoint.queuePiece(me.pieceKey(), me.p.Length(), me.checkpointTargets())
+		if err != nil {
+			me.logger().Warn("error checkpointing completed piece", "piece", me.p.Index(), "err", err)
+		}
+	} else if pieceCompletionIsPersistent(me.pieceCompletion()) {
 		err := me.Flush()
 		if err != nil {
 			me.logger().Warn("error flushing completed piece", "piece", me.p.Index(), "err", err)
 		}
 	}
-	for f := range me.pieceFiles() {
-		res := me.allFilePiecesComplete(f)
+	for fileIndex := range me.fileExtents() {
+		f := me.t.file(fileIndex)
+		res := g.Result[bool]{}
+		if !prevCompletion.Ok || !prevCompletion.Complete {
+			if allComplete, tracked := me.t.markFilePieceComplete(fileIndex); tracked {
+				res.SetOk(allComplete)
+			} else {
+				res = me.allFilePiecesComplete(f)
+			}
+		} else {
+			res = me.allFilePiecesComplete(f)
+		}
 		if res.Err != nil {
 			err = res.Err
 			return
@@ -221,11 +237,16 @@ func (me *filePieceImpl) allFilePiecesComplete(f file) (ret g.Result[bool]) {
 }
 
 func (me *filePieceImpl) MarkNotComplete() (err error) {
+	prevCompletion := me.t.getCompletion(me.p.Index())
 	err = me.pieceCompletion().Set(me.pieceKey(), false)
 	if err != nil {
 		return
 	}
-	for f := range me.pieceFiles() {
+	for fileIndex := range me.fileExtents() {
+		if prevCompletion.Ok && prevCompletion.Complete {
+			me.t.markFilePieceIncomplete(fileIndex)
+		}
+		f := me.t.file(fileIndex)
 		err = me.onFileNotComplete(f)
 		if err != nil {
 			err = fmt.Errorf("preparing incomplete file %q: %w", f.safeOsPath, err)
@@ -237,14 +258,14 @@ func (me *filePieceImpl) MarkNotComplete() (err error) {
 }
 
 func (me *filePieceImpl) promotePartFile(f file) (err error) {
-	// Flush file on completion, even if we don't promote it.
+	if !me.partFiles() {
+		return nil
+	}
+	// Flush the part file before promotion so its contents are durable.
 	err = me.t.io.flush(f.partFilePath(), 0, f.length())
 	if err != nil {
 		me.logger().Warn("error flushing file before promotion", "file", f.partFilePath(), "err", err)
 		err = nil
-	}
-	if !me.partFiles() {
-		return nil
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -295,6 +316,28 @@ func (me *filePieceImpl) onFileNotComplete(f file) (err error) {
 
 func (me *filePieceImpl) partFiles() bool {
 	return me.t.partFiles()
+}
+
+func (me *filePieceImpl) checkpointTargets() []fileCheckpointTarget {
+	targets := make([]fileCheckpointTarget, 0, len(me.t.files))
+	seen := make(map[string]struct{})
+	for fileIndex := range me.fileExtents() {
+		f := me.t.file(fileIndex)
+		primary := me.t.pathForWrite(&f)
+		if _, ok := seen[primary]; ok {
+			continue
+		}
+		seen[primary] = struct{}{}
+		target := fileCheckpointTarget{
+			primary: primary,
+			length:  f.length(),
+		}
+		if primary != f.safeOsPath {
+			target.fallback = f.safeOsPath
+		}
+		targets = append(targets, target)
+	}
+	return targets
 }
 
 func (me *filePieceImpl) WriteTo(w io.Writer) (n int64, err error) {

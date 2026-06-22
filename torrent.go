@@ -3592,6 +3592,15 @@ func (t *Torrent) canonicalShortInfohash() *infohash.T {
 	return t.infoHashV2.UnwrapPtr().ToShort()
 }
 
+func (t *Torrent) CloseWriters() error {
+	t.storageLock.RLock()
+	defer t.storageLock.RUnlock()
+	if t.storage == nil {
+		return nil
+	}
+	return t.storage.CloseWriters()
+}
+
 func (t *Torrent) iterShortInfohashes() iter.Seq[shortInfohash] {
 	return func(yield func(shortInfohash) bool) {
 		t.eachShortInfohash(func(short [20]byte) {

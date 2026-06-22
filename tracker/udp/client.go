@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/anacrolix/dht/v2/krpc"
@@ -17,15 +19,28 @@ import (
 // Client interacts with UDP trackers via its Writer and Dispatcher. It has no knowledge of
 // connection specifics.
 type Client struct {
-	mu           ctxlock.Lock
-	connId       ConnectionId
+	// Guards connId / connIdIssued / connSeq. Held only for short, in-memory critical
+	// sections — never across network I/O.
+	stateMu sync.Mutex
+	// Serialises actual connect round-trips. Held across the connect's network I/O so a burst
+	// of expirations causes one roundtrip rather than N. Cancellable so a goroutine waiting
+	// for an in-flight connect can bail when its ctx is done.
+	connectMu ctxlock.Lock
+
+	connId ConnectionId
+	// Set to zero if connId is invalidated or expired (you can still use connId, but it's a hint
+	// to trigger a reconnect).
 	connIdIssued time.Time
+	// Local-only value tracking connection ID issuance. Incremented on connect replies.
+	connSeq connSeq
 
 	shouldReconnectOverride func() bool
 
 	Dispatcher *Dispatcher
 	Writer     io.Writer
 }
+
+type connSeq int
 
 func (cl *Client) Announce(
 	ctx context.Context, req AnnounceRequest, opts Options,
@@ -37,7 +52,7 @@ func (cl *Client) Announce(
 	peers AnnounceResponsePeers,
 	err error,
 ) {
-	respBody, addr, err := cl.request(ctx, ActionAnnounce, append(mustMarshal(req), opts.Encode()...))
+	respBody, addr, err := cl.actionRequest(ctx, ActionAnnounce, append(mustMarshal(req), opts.Encode()...))
 	if err != nil {
 		return
 	}
@@ -65,7 +80,7 @@ func (cl *Client) Scrape(
 ) (
 	out ScrapeResponse, err error,
 ) {
-	respBody, _, err := cl.request(ctx, ActionScrape, mustMarshal(ScrapeRequest(ihs)))
+	respBody, _, err := cl.actionRequest(ctx, ActionScrape, mustMarshal(ScrapeRequest(ihs)))
 	if err != nil {
 		return
 	}
@@ -85,77 +100,105 @@ func (cl *Client) Scrape(
 	return
 }
 
-func (cl *Client) shouldReconnectDefault() bool {
-	return cl.connIdIssued.IsZero() || time.Since(cl.connIdIssued) >= time.Minute
+// actionRequest runs an Announce or Scrape: get a connId, send the request, and on a
+// "Connection ID missmatch" reply, retry once. resetConn no-ops when another goroutine has
+// already reconnected, so the retry naturally reuses the newer connId rather than forcing
+// yet another connect.
+func (cl *Client) actionRequest(
+	ctx context.Context, action Action, body []byte,
+) (respBody []byte, addr net.Addr, err error) {
+	const maxAttempts = 2
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		var connId ConnectionId
+		var seq connSeq
+		connId, seq, err = cl.ensureConnId(ctx)
+		if err != nil {
+			return
+		}
+		respBody, addr, err = cl.request(ctx, action, body, connId)
+		if err == nil {
+			return
+		}
+		if !isConnIdMismatch(err) {
+			return
+		}
+		cl.resetConn(seq)
+	}
+	return
 }
 
-func (cl *Client) shouldReconnect() bool {
+func isConnIdMismatch(err error) bool {
+	var er ErrorResponse
+	return errors.As(err, &er) && er.Message == ConnectionIdMissmatchNul
+}
+
+// shouldReconnectLocked reports whether a fresh connect is needed. Caller must hold stateMu.
+func (cl *Client) shouldReconnectLocked() bool {
 	if cl.shouldReconnectOverride != nil {
 		return cl.shouldReconnectOverride()
 	}
-	return cl.shouldReconnectDefault()
+	return cl.connIdIssued.IsZero() || time.Since(cl.connIdIssued) >= time.Minute
 }
 
-func (cl *Client) connect(ctx context.Context) (err error) {
-	if !cl.shouldReconnect() {
-		return nil
+// ensureConnId returns a connection ID valid right now, performing a connect round-trip if
+// necessary. seq is the issuance generation; pass it to resetConn(seq) to invalidate without
+// clobbering a fresher connect issued by another goroutine.
+//
+// Caller must NOT hold stateMu or connectMu.
+func (cl *Client) ensureConnId(ctx context.Context) (id ConnectionId, seq connSeq, err error) {
+	cl.stateMu.Lock()
+	if !cl.shouldReconnectLocked() {
+		id, seq = cl.connId, cl.connSeq
+		cl.stateMu.Unlock()
+		return
 	}
+	cl.stateMu.Unlock()
+
+	if err = cl.connectMu.LockCtx(ctx); err != nil {
+		err = fmt.Errorf("locking connection: %w", err)
+		return
+	}
+	defer cl.connectMu.Unlock()
+
+	// Another goroutine may have completed a connect while we were waiting on connectMu.
+	cl.stateMu.Lock()
+	if !cl.shouldReconnectLocked() {
+		id, seq = cl.connId, cl.connSeq
+		cl.stateMu.Unlock()
+		return
+	}
+	cl.stateMu.Unlock()
+
 	return cl.doConnectRoundTrip(ctx)
 }
 
-// This just does the connect request and updates local state if it succeeds.
-func (cl *Client) doConnectRoundTrip(ctx context.Context) (err error) {
-	respBody, _, err := cl.request(ctx, ActionConnect, nil)
+// doConnectRoundTrip does the connect request and updates local state if it succeeds. Returns
+// the freshly-issued (id, seq). Caller MUST hold connectMu (this is what serialises concurrent
+// connects). stateMu is taken briefly only to publish the result.
+func (cl *Client) doConnectRoundTrip(ctx context.Context) (id ConnectionId, seq connSeq, err error) {
+	respBody, _, err := cl.request(ctx, ActionConnect, nil, ConnectRequestConnectionId)
 	if err != nil {
-		return err
+		return
 	}
 	var connResp ConnectionResponse
 	err = binary.Read(bytes.NewReader(respBody), binary.BigEndian, &connResp)
 	if err != nil {
 		return
 	}
+	cl.stateMu.Lock()
 	cl.connId = connResp.ConnectionId
 	cl.connIdIssued = time.Now()
-	//log.Printf("conn id set to %x", cl.connId)
-	return
-}
-
-func (cl *Client) connIdForRequest(ctx context.Context, action Action) (id ConnectionId, err error) {
-	if action == ActionConnect {
-		id = ConnectRequestConnectionId
-		return
-	}
-	err = cl.connect(ctx)
-	if err != nil {
-		return
-	}
-	id = cl.connId
+	cl.connSeq++
+	id, seq = cl.connId, cl.connSeq
+	cl.stateMu.Unlock()
 	return
 }
 
 func (cl *Client) writeRequest(
-	ctx context.Context, action Action, body []byte, tId TransactionId, buf *bytes.Buffer,
+	ctx context.Context, action Action, body []byte, tId TransactionId, connId ConnectionId, buf *bytes.Buffer,
 ) (
 	err error,
 ) {
-	var connId ConnectionId
-	if action == ActionConnect {
-		connId = ConnectRequestConnectionId
-	} else {
-		// We lock here while establishing a connection ID, and then ensuring that the request is
-		// written before allowing the connection ID to change again. This is to ensure the server
-		// doesn't assign us another ID before we've sent this request. Note that this doesn't allow
-		// for us to return if the context is cancelled while we wait to obtain a new ID.
-		err = cl.mu.LockCtx(ctx)
-		if err != nil {
-			return fmt.Errorf("locking connection id: %w", err)
-		}
-		defer cl.mu.Unlock()
-		connId, err = cl.connIdForRequest(ctx, action)
-		if err != nil {
-			return
-		}
-	}
 	buf.Reset()
 	err = Write(buf, RequestHeader{
 		ConnectionId:  connId,
@@ -167,8 +210,18 @@ func (cl *Client) writeRequest(
 	}
 	buf.Write(body)
 	_, err = cl.Writer.Write(buf.Bytes())
-	//log.Printf("sent request with conn id %x", connId)
 	return
+}
+
+// resetConn marks the connection ID as expired so the next ensureConnId reconnects. If
+// cl.connSeq has advanced past seq, another goroutine has already reconnected — nothing to
+// do, the next caller will see the fresher connId.
+func (cl *Client) resetConn(seq connSeq) {
+	cl.stateMu.Lock()
+	defer cl.stateMu.Unlock()
+	if cl.connSeq == seq {
+		cl.connIdIssued = time.Time{}
+	}
 }
 
 func (cl *Client) requestWriter(
@@ -176,10 +229,11 @@ func (cl *Client) requestWriter(
 	action Action,
 	body []byte,
 	tId TransactionId,
+	connId ConnectionId,
 ) (err error) {
 	var buf bytes.Buffer
 	for n := 0; ; n++ {
-		err = cl.writeRequest(ctx, action, body, tId, &buf)
+		err = cl.writeRequest(ctx, action, body, tId, connId, &buf)
 		if err != nil {
 			return
 		}
@@ -201,10 +255,14 @@ func (me ErrorResponse) Error() string {
 	return fmt.Sprintf("error response: %#q", me.Message)
 }
 
+// request sends a single tracker request with the provided connId and waits for the matching
+// response. It does not touch stateMu or connectMu. Connection-ID expiry is the caller's
+// concern (via ensureConnId / resetConn).
 func (cl *Client) request(
 	ctx context.Context,
 	action Action,
 	body []byte,
+	connId ConnectionId,
 ) (respBody []byte, addr net.Addr, err error) {
 	respChan := make(chan DispatchedResponse, 1)
 	t := cl.Dispatcher.NewTransaction(func(dr DispatchedResponse) {
@@ -215,7 +273,7 @@ func (cl *Client) request(
 	defer cancel()
 	writeErr := make(chan error, 1)
 	go func() {
-		writeErr <- cl.requestWriter(ctx, action, body, t.Id())
+		writeErr <- cl.requestWriter(ctx, action, body, t.Id(), connId)
 	}()
 	select {
 	case dr := <-respChan:
@@ -231,9 +289,6 @@ func (cl *Client) request(
 			if stringBody == ConnectionIdMissmatchNul {
 				err = log.WithLevel(log.Debug, err)
 			}
-			// Force a reconnection. Probably any error is worth doing this for, but the one we're
-			// specifically interested in is ConnectionIdMissmatchNul.
-			cl.connIdIssued = time.Time{}
 		default:
 			err = fmt.Errorf("unexpected response action %v", dr.Header.Action)
 		}

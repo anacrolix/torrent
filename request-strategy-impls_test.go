@@ -2,13 +2,11 @@ package torrent
 
 import (
 	"context"
-	"io"
 	"runtime"
 	"testing"
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/iter"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/go-quicktest/qt"
 
 	requestStrategy "github.com/anacrolix/torrent/internal/request-strategy"
@@ -17,20 +15,20 @@ import (
 	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 )
 
-func makeRequestStrategyPiece(t requestStrategy.Torrent) requestStrategy.Piece {
-	return t.Piece(0)
-}
+// Assigned to keep the result alive so the call below isn't optimised away, without itself
+// allocating.
+var requestStrategyResultSink bool
 
 func TestRequestStrategyPieceDoesntAlloc(t *testing.T) {
-	akshalTorrent := &Torrent{pieces: make([]Piece, 1)}
-	rst := requestStrategyTorrent{akshalTorrent}
+	akshalTorrent := &Torrent{pieces: make([]pieceState, 1)}
+	// Query through the interface, as the request strategy does. Piece is now an index-based call
+	// returning a bool, so no per-piece value is boxed and nothing is allocated.
+	var input requestStrategy.Torrent = requestStrategyTorrent{akshalTorrent}
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	p := makeRequestStrategyPiece(rst)
+	requestStrategyResultSink = input.PieceRequest(0)
 	runtime.ReadMemStats(&after)
 	qt.Assert(t, qt.Equals(before.HeapAlloc, after.HeapAlloc))
-	// We have to use p, or it gets optimized away.
-	spew.Fdump(io.Discard, p)
 }
 
 type storagePiece struct {

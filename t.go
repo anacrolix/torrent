@@ -280,7 +280,7 @@ func (t *Torrent) ModifyTrackers(announceList [][]string) {
 	t.modifyTrackers(announceList)
 }
 
-func (t *Torrent) Piece(i pieceIndex) *Piece {
+func (t *Torrent) Piece(i pieceIndex) Piece {
 	return t.piece(i)
 }
 

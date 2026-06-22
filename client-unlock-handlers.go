@@ -15,7 +15,7 @@ type torrentUnlockActions struct {
 // A non-dynamic way to register handlers to run just once when the client is unlocked.
 type clientUnlockHandlers struct {
 	torrentActions     map[*Torrent]torrentUnlockActions
-	changedPieceStates map[*Piece]struct{}
+	changedPieceStates map[Piece]struct{}
 }
 
 func (me *clientUnlockHandlers) init() {

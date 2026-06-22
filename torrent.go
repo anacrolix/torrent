@@ -3056,12 +3056,12 @@ func (t *Torrent) dialTimeout() time.Duration {
 	return reducedDialTimeout(t.cl.config.MinDialTimeout, t.cl.config.NominalDialTimeout, t.cl.config.HalfOpenConnsPerTorrent, t.peers.Len())
 }
 
-func (t *Torrent) piece(i int) *Piece {
-	return &Piece{t: t, index: int32(i)}
+func (t *Torrent) piece(i int) Piece {
+	return Piece{t: t, index: int32(i)}
 }
 
-func (t *Torrent) pieceForOffset(off int64) *Piece {
-	return &Piece{t: t, index: int32(off / t.info.PieceLength)}
+func (t *Torrent) pieceForOffset(off int64) Piece {
+	return Piece{t: t, index: int32(off / t.info.PieceLength)}
 }
 
 func (t *Torrent) onWriteChunkErr(err error) {
@@ -3815,7 +3815,7 @@ func (t *Torrent) hasActiveWebseedRequests() bool {
 }
 
 // Increment pieces dirtied for conns and aggregate upstreams.
-func (t *Torrent) incrementPiecesDirtiedStats(p *Piece, inc func(stats *ConnStats) bool) {
+func (t *Torrent) incrementPiecesDirtiedStats(p Piece, inc func(stats *ConnStats) bool) {
 	dirtiers := p.state().dirtiers
 	if len(dirtiers) == 0 {
 		// Avoid allocating map.

@@ -85,23 +85,23 @@ type piecePendingWrites struct {
 	noneRemain chansync.BroadcastCond
 }
 
-func (p *Piece) Index() pieceIndex {
+func (p Piece) Index() pieceIndex {
 	return pieceIndex(p.index)
 }
 
 // state returns the piece's mutable, underivable state, located via the Torrent and piece index.
-func (p *Piece) state() *pieceState {
+func (p Piece) state() *pieceState {
 	return &p.t.pieces[p.index]
 }
 
 // v1Hash returns the piece's expected v1 SHA-1 hash, derived from the info. None if the info isn't v1
 // compatible.
-func (p *Piece) v1Hash() g.Option[metainfo.Hash] {
+func (p Piece) v1Hash() g.Option[metainfo.Hash] {
 	return p.Info().V1Hash()
 }
 
 // beginFile is the index of the first file this piece overlaps.
-func (p *Piece) beginFile() int {
+func (p Piece) beginFile() int {
 	return int(p.state().beginFile)
 }
 
@@ -109,7 +109,7 @@ func (p *Piece) beginFile() int {
 // this piece's end offset is the next piece's begin offset, so the next piece's first file is also
 // this piece's last file, unless the boundary falls exactly on a file boundary (in which case this
 // piece ends at the previous file).
-func (p *Piece) endFile() int {
+func (p Piece) endFile() int {
 	t := p.t
 	if int(p.index) == len(t.pieces)-1 {
 		return len(*t.files)
@@ -121,15 +121,15 @@ func (p *Piece) endFile() int {
 	return nextBegin
 }
 
-func (p *Piece) String() string {
+func (p Piece) String() string {
 	return fmt.Sprintf("%s/%d", p.t.canonicalShortInfohash().HexString(), p.Index())
 }
 
-func (p *Piece) Info() metainfo.Piece {
+func (p Piece) Info() metainfo.Piece {
 	return p.t.info.Piece(p.Index())
 }
 
-func (p *Piece) Storage() storage.Piece {
+func (p Piece) Storage() storage.Piece {
 	var pieceHash g.Option[[]byte]
 	if h := p.v1Hash(); h.Ok {
 		pieceHash.Set(h.Value[:])
@@ -141,19 +141,19 @@ func (p *Piece) Storage() storage.Piece {
 	return p.t.storage.PieceWithHash(p.Info(), pieceHash)
 }
 
-func (p *Piece) pendingChunkIndex(chunkIndex chunkIndexType) bool {
+func (p Piece) pendingChunkIndex(chunkIndex chunkIndexType) bool {
 	return !p.chunkIndexDirty(chunkIndex)
 }
 
-func (p *Piece) pendingChunk(cs ChunkSpec, chunkSize pp.Integer) bool {
+func (p Piece) pendingChunk(cs ChunkSpec, chunkSize pp.Integer) bool {
 	return p.pendingChunkIndex(chunkIndexFromChunkSpec(cs, chunkSize))
 }
 
-func (p *Piece) hasDirtyChunks() bool {
+func (p Piece) hasDirtyChunks() bool {
 	return p.numDirtyChunks() != 0
 }
 
-func (p *Piece) numDirtyChunks() chunkIndexType {
+func (p Piece) numDirtyChunks() chunkIndexType {
 	return chunkIndexType(roaringBitmapRangeCardinality[RequestIndex](
 		&p.t.dirtyChunks,
 		p.requestIndexBegin(),
@@ -161,25 +161,25 @@ func (p *Piece) numDirtyChunks() chunkIndexType {
 	))
 }
 
-func (p *Piece) unpendChunkIndex(i chunkIndexType) {
+func (p Piece) unpendChunkIndex(i chunkIndexType) {
 	p.t.dirtyChunks.Add(p.requestIndexBegin() + i)
 	p.t.updatePieceRequestOrderPiece(p.Index())
 	p.state().readerCond.Broadcast()
 }
 
-func (p *Piece) pendChunkIndex(i RequestIndex) {
+func (p Piece) pendChunkIndex(i RequestIndex) {
 	p.t.dirtyChunks.Remove(p.requestIndexBegin() + i)
 	p.t.updatePieceRequestOrderPiece(p.Index())
 }
 
-func (p *Piece) numChunks() chunkIndexType {
+func (p Piece) numChunks() chunkIndexType {
 	return p.t.pieceNumChunks(p.Index())
 }
 
 // Upgrades the weak pointer to a strong one. Returns nil if no struct is allocated or it has been
 // reclaimed (both meaning "no pending writes"). Callers that need the struct to stay alive must hold
 // the returned pointer for as long as that matters.
-func (p *Piece) loadPendingWrites() *piecePendingWrites {
+func (p Piece) loadPendingWrites() *piecePendingWrites {
 	wp := p.state().pendingWrites.Load()
 	if wp == nil {
 		return nil
@@ -192,7 +192,7 @@ func (p *Piece) loadPendingWrites() *piecePendingWrites {
 // flight nothing else holds a strong reference, so the GC would otherwise be free to reclaim the
 // struct mid-write. Serialized by the Client lock, so the lazy allocation races only with weak loads
 // in waiters, which treat a nil result as "no pending writes".
-func (p *Piece) incrementPendingWrites() *piecePendingWrites {
+func (p Piece) incrementPendingWrites() *piecePendingWrites {
 	pw := p.loadPendingWrites()
 	if pw == nil {
 		pw = &piecePendingWrites{}
@@ -217,13 +217,13 @@ func (pw *piecePendingWrites) decrementPendingWrites() {
 // reclaimed (nor its count lost to a fresh allocation) while the write is in flight. Call with the
 // Client lock held; f may release and reacquire it, as long as it's held again on return so the
 // decrement stays serialized with allocation.
-func (p *Piece) withPendingWriteRef(f func() error) error {
+func (p Piece) withPendingWriteRef(f func() error) error {
 	pw := p.incrementPendingWrites()
 	defer pw.decrementPendingWrites()
 	return f()
 }
 
-func (p *Piece) pendingWritesCount() int64 {
+func (p Piece) pendingWritesCount() int64 {
 	pw := p.loadPendingWrites()
 	if pw == nil {
 		return 0
@@ -231,7 +231,7 @@ func (p *Piece) pendingWritesCount() int64 {
 	return pw.count.Load()
 }
 
-func (p *Piece) waitNoPendingWrites() {
+func (p Piece) waitNoPendingWrites() {
 	// Holding the strong reference for the duration of the wait keeps the struct alive, so any write
 	// that starts while we wait reuses this same struct (and its count) rather than allocating a
 	// fresh one we wouldn't be watching.
@@ -253,11 +253,11 @@ func (p *Piece) waitNoPendingWrites() {
 	}
 }
 
-func (p *Piece) chunkIndexDirty(chunk chunkIndexType) bool {
+func (p Piece) chunkIndexDirty(chunk chunkIndexType) bool {
 	return p.t.dirtyChunks.Contains(p.requestIndexBegin() + chunk)
 }
 
-func (p *Piece) iterCleanChunks(it *roaring.IntIterator) iter.Seq[chunkIndexType] {
+func (p Piece) iterCleanChunks(it *roaring.IntIterator) iter.Seq[chunkIndexType] {
 	return func(yield func(chunkIndexType) bool) {
 		it.Initialize(&p.t.dirtyChunks.Bitmap)
 		begin := uint32(p.requestIndexBegin())
@@ -273,18 +273,18 @@ func (p *Piece) iterCleanChunks(it *roaring.IntIterator) iter.Seq[chunkIndexType
 	}
 }
 
-func (p *Piece) firstCleanChunk() (_ g.Option[chunkIndexType]) {
+func (p Piece) firstCleanChunk() (_ g.Option[chunkIndexType]) {
 	for some := range p.iterCleanChunks(&p.t.cl.roaringIntIterator) {
 		return g.Some(some)
 	}
 	return
 }
 
-func (p *Piece) chunkIndexSpec(chunk chunkIndexType) ChunkSpec {
+func (p Piece) chunkIndexSpec(chunk chunkIndexType) ChunkSpec {
 	return chunkIndexSpec(pp.Integer(chunk), p.length(), p.chunkSize())
 }
 
-func (p *Piece) numDirtyBytes() (ret pp.Integer) {
+func (p Piece) numDirtyBytes() (ret pp.Integer) {
 	// defer func() {
 	// 	if ret > p.length() {
 	// 		panic("too many dirty bytes")
@@ -299,19 +299,19 @@ func (p *Piece) numDirtyBytes() (ret pp.Integer) {
 	return
 }
 
-func (p *Piece) length() pp.Integer {
+func (p Piece) length() pp.Integer {
 	return p.t.pieceLength(p.Index())
 }
 
-func (p *Piece) chunkSize() pp.Integer {
+func (p Piece) chunkSize() pp.Integer {
 	return p.t.chunkSize
 }
 
-func (p *Piece) lastChunkIndex() chunkIndexType {
+func (p Piece) lastChunkIndex() chunkIndexType {
 	return p.numChunks() - 1
 }
 
-func (p *Piece) bytesLeft() (ret pp.Integer) {
+func (p Piece) bytesLeft() (ret pp.Integer) {
 	if p.t.pieceComplete(p.Index()) {
 		return 0
 	}
@@ -319,14 +319,14 @@ func (p *Piece) bytesLeft() (ret pp.Integer) {
 }
 
 // Forces the piece data to be rehashed.
-func (p *Piece) VerifyData() error {
+func (p Piece) VerifyData() error {
 	return p.VerifyDataContext(context.Background())
 }
 
 // Forces the piece data to be rehashed. This might be a temporary method until
 // an event-based one is created. Possibly this blocking style is more suited to
 // external control of hashing concurrency.
-func (p *Piece) VerifyDataContext(ctx context.Context) error {
+func (p Piece) VerifyDataContext(ctx context.Context) error {
 	locker := p.t.cl.locker()
 	locker.Lock()
 	if p.t.closed.IsSet() {
@@ -358,19 +358,19 @@ func (p *Piece) VerifyDataContext(ctx context.Context) error {
 	}
 }
 
-func (p *Piece) queuedForHash() bool {
+func (p Piece) queuedForHash() bool {
 	return p.t.piecesQueuedForHash.Contains(p.Index())
 }
 
-func (p *Piece) torrentBeginOffset() int64 {
+func (p Piece) torrentBeginOffset() int64 {
 	return int64(p.Index()) * p.t.info.PieceLength
 }
 
-func (p *Piece) torrentEndOffset() int64 {
+func (p Piece) torrentEndOffset() int64 {
 	return p.torrentBeginOffset() + int64(p.t.usualPieceSize())
 }
 
-func (p *Piece) SetPriority(prio PiecePriority) {
+func (p Piece) SetPriority(prio PiecePriority) {
 	p.t.cl.lock()
 	defer p.t.cl.unlock()
 	p.state().priority = prio
@@ -378,7 +378,7 @@ func (p *Piece) SetPriority(prio PiecePriority) {
 }
 
 // This is priority based only on piece, file and reader priorities.
-func (p *Piece) purePriority() (ret PiecePriority) {
+func (p Piece) purePriority() (ret PiecePriority) {
 	for _, f := range p.files() {
 		ret.Raise(f.prio)
 	}
@@ -395,7 +395,7 @@ func (p *Piece) purePriority() (ret PiecePriority) {
 	return
 }
 
-func (p *Piece) ignoreForRequests() bool {
+func (p Piece) ignoreForRequests() bool {
 	// Ordered by cheapest checks and most likely to persist first.
 
 	// There's a method that gets this with complete, but that requires a bitmap lookup. Defer that.
@@ -418,7 +418,7 @@ func (p *Piece) ignoreForRequests() bool {
 }
 
 // This is the priority adjusted for piece state like completion, hashing etc.
-func (p *Piece) effectivePriority() (ret PiecePriority) {
+func (p Piece) effectivePriority() (ret PiecePriority) {
 	if p.ignoreForRequests() {
 		return PiecePriorityNone
 	}
@@ -429,14 +429,14 @@ func (p *Piece) effectivePriority() (ret PiecePriority) {
 // necessary. Might be useful if you know the state of the piece data has
 // changed externally. TODO: Document why this is public, maybe change name to
 // SyncCompletion or something.
-func (p *Piece) UpdateCompletion() {
+func (p Piece) UpdateCompletion() {
 	p.t.cl.lock()
 	defer p.t.cl.unlock()
 	p.t.updatePieceCompletion(p.Index())
 }
 
 // TODO: Probably don't include Completion.Err?
-func (p *Piece) completion() (ret storage.Completion) {
+func (p Piece) completion() (ret storage.Completion) {
 	ret.Ok = p.state().storageCompletionOk
 	if ret.Ok {
 		ret.Complete = p.t.pieceComplete(p.Index())
@@ -444,22 +444,22 @@ func (p *Piece) completion() (ret storage.Completion) {
 	return
 }
 
-func (p *Piece) allChunksDirty() bool {
+func (p Piece) allChunksDirty() bool {
 	return p.numDirtyChunks() == p.numChunks()
 }
 
-func (p *Piece) State() PieceState {
+func (p Piece) State() PieceState {
 	return p.t.PieceState(p.Index())
 }
 
 // The first possible request index for the piece.
-func (p *Piece) requestIndexBegin() RequestIndex {
+func (p Piece) requestIndexBegin() RequestIndex {
 	return p.t.pieceRequestIndexBegin(p.Index())
 }
 
 // The maximum end request index for the piece. Some of the requests might not be valid, it's for
 // cleaning up arrays and bitmaps in broad strokes.
-func (p *Piece) requestIndexMaxEnd() RequestIndex {
+func (p Piece) requestIndexMaxEnd() RequestIndex {
 	new := min(p.t.pieceRequestIndexBegin(p.Index()+1), p.t.maxEndRequest())
 	if false {
 		old := p.t.pieceRequestIndexBegin(p.Index() + 1)
@@ -468,19 +468,19 @@ func (p *Piece) requestIndexMaxEnd() RequestIndex {
 	return new
 }
 
-func (p *Piece) availability() int {
+func (p Piece) availability() int {
 	return len(p.t.connsWithAllPieces) + int(p.state().relativeAvailability)
 }
 
 // For v2 torrents, files are aligned to pieces so there should always only be a single file for a
 // given piece.
-func (p *Piece) mustGetOnlyFile() *File {
+func (p Piece) mustGetOnlyFile() *File {
 	panicif.NotEq(p.numFiles(), 1)
 	return (*p.t.files)[p.beginFile()]
 }
 
 // Sets the v2 piece hash, queuing initial piece checks if appropriate.
-func (p *Piece) setV2Hash(v2h [32]byte) {
+func (p Piece) setV2Hash(v2h [32]byte) {
 	// See Torrent.onSetInfo. We want to trigger an initial check if appropriate, if we didn't yet
 	// have a piece hash (can occur with v2 when we don't start with piece layers).
 	p.t.storageLock.Lock()
@@ -495,7 +495,7 @@ func (p *Piece) setV2Hash(v2h [32]byte) {
 }
 
 // Can't do certain things if we don't know the piece hash.
-func (p *Piece) haveHash() bool {
+func (p Piece) haveHash() bool {
 	if p.v1Hash().Ok {
 		return true
 	}
@@ -505,13 +505,13 @@ func (p *Piece) haveHash() bool {
 	return p.state().hashV2 != nil
 }
 
-func (p *Piece) hasPieceLayer() bool {
+func (p Piece) hasPieceLayer() bool {
 	return p.numFiles() == 1 && p.mustGetOnlyFile().length > p.t.info.PieceLength
 }
 
 // TODO: This looks inefficient. It will rehash everytime it is called. The hashes should be
 // generated once.
-func (p *Piece) obtainHashV2() (hash [32]byte, err error) {
+func (p Piece) obtainHashV2() (hash [32]byte, err error) {
 	if hashV2 := p.state().hashV2; hashV2 != nil {
 		hash = *hashV2
 		return
@@ -534,7 +534,7 @@ func (p *Piece) obtainHashV2() (hash [32]byte, err error) {
 	return
 }
 
-func (p *Piece) files() iter.Seq2[int, *File] {
+func (p Piece) files() iter.Seq2[int, *File] {
 	return func(yield func(int, *File) bool) {
 		for i := p.beginFile(); i < p.endFile(); i++ {
 			if !yield(i, (*p.t.files)[i]) {
@@ -544,12 +544,12 @@ func (p *Piece) files() iter.Seq2[int, *File] {
 	}
 }
 
-func (p *Piece) numFiles() int {
+func (p Piece) numFiles() int {
 	return p.endFile() - p.beginFile()
 }
 
 // The value of numVerifies after the next hashing operation that hasn't yet begun.
-func (p *Piece) nextNovelHashCount() (ret pieceVerifyCount) {
+func (p Piece) nextNovelHashCount() (ret pieceVerifyCount) {
 	s := p.state()
 	ret = s.numVerifies + 1
 	if s.hashing {
@@ -560,7 +560,7 @@ func (p *Piece) nextNovelHashCount() (ret pieceVerifyCount) {
 }
 
 // Here so it's zero-arity and we can use it in DeferOnce.
-func (p *Piece) publishStateChange() {
+func (p Piece) publishStateChange() {
 	t := p.t
 	cur := t.pieceState(p.Index())
 	curHandle := unique.Make(cur)

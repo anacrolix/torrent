@@ -1,0 +1,36 @@
+name: Install via import path
+
+# Verifies that installing the command packages by their import path works
+# without git submodules or the Go workspace (go.work). See issue #1058: the
+# committed go.work references the possum submodule, which breaks `go build` in
+# a plain clone, but `go install <importpath>@<version>` runs in module-aware
+# mode and ignores go.work entirely, so it must keep working regardless.
+
+on:
+  # Only on push: the commit must exist on github.com/anacrolix/torrent for it
+  # to be installable by import path. pull_request head commits live on the
+  # contributor's fork under a different path and can't be installed this way.
+  push:
+  workflow_dispatch:
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      # Deliberately no checkout: running outside any working tree guarantees
+      # neither go.work nor the submodules can influence the install.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: go install from import path
+        env:
+          # Fetch the just-pushed commit directly from GitHub rather than
+          # waiting for the module proxy to observe it.
+          GOPROXY: direct
+        run: |
+          tmp=$(mktemp -d)
+          cd "$tmp"
+          # A throwaway module so the install can't pick up any local go.mod.
+          go mod init importpathtest
+          go install "github.com/anacrolix/torrent/cmd/torrent@${{ github.sha }}"
+          "$(go env GOPATH)/bin/torrent" version

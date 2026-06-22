@@ -100,6 +100,17 @@ func (p Piece) v1Hash() g.Option[metainfo.Hash] {
 	return p.Info().V1Hash()
 }
 
+// v1HashBytes returns the piece's expected v1 hash as a slice aliasing the info's stable Pieces data,
+// or nil if the info isn't v1 compatible. Unlike v1Hash it doesn't copy, so it doesn't force an
+// allocation when the result escapes (e.g. into a storage call).
+func (p Piece) v1HashBytes() []byte {
+	if !p.t.info.HasV1() {
+		return nil
+	}
+	i := int(p.index)
+	return p.t.info.Pieces[i*metainfo.HashSize : (i+1)*metainfo.HashSize]
+}
+
 // beginFile is the index of the first file this piece overlaps.
 func (p Piece) beginFile() int {
 	return int(p.state().beginFile)
@@ -131,8 +142,8 @@ func (p Piece) Info() metainfo.Piece {
 
 func (p Piece) Storage() storage.Piece {
 	var pieceHash g.Option[[]byte]
-	if h := p.v1Hash(); h.Ok {
-		pieceHash.Set(h.Value[:])
+	if h := p.v1HashBytes(); h != nil {
+		pieceHash.Set(h)
 	} else if !p.hasPieceLayer() {
 		pieceHash.Set(p.mustGetOnlyFile().piecesRoot.UnwrapPtr()[:])
 	} else if hashV2 := p.state().hashV2; hashV2 != nil {

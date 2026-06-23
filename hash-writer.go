@@ -16,10 +16,7 @@ func (w *hashWriter) Write(p []byte) (n int, err error) {
 	if !w.startedNonZeroes {
 		// Leading zeroes are accumulated rather than hashed, so skip past any zero prefix in this
 		// buffer to find where the real data starts.
-		i := 0
-		for i < len(p) && p[i] == 0 {
-			i++
-		}
+		i := firstNonZero(p)
 		w.leadingZeroes += int64(i)
 		if i == len(p) {
 			// Still all zeroes; keep deferring.

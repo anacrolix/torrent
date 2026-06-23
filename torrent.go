@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"hash"
 	"io"
 	"iter"
 	"log/slog"
@@ -1276,45 +1275,37 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 			// in finishHash regardless.
 			return
 		}
-		h := pieceHash.New()
-		differingPeers, err = t.hashPieceWithSpecificHash(piece, h)
+		hw := hashWriter{hashCache: sha1HashCache}
+		differingPeers, err = t.hashPieceWithSpecificHash(piece, &hw)
 		// For a hybrid torrent, we work with the v2 files, but if we use a v1 hash, we can assume
 		// that the pieces are padded with zeroes.
 		if t.info.FilesArePieceAligned() {
 			paddingLen := p.Info().V1Length() - p.Info().Length()
-			written, err := io.CopyN(h, zeroReader, paddingLen)
-			if written != paddingLen {
-				panic(fmt.Sprintf(
-					"piece %v: wrote %v bytes of padding, expected %v, error: %v",
-					piece,
-					written,
-					paddingLen,
-					err,
-				))
-			}
-			t.countBytesHashed(written)
+			panicif.Err(hw.writeZeroes(paddingLen))
+			t.countBytesHashed(paddingLen)
 		}
 		var sum [20]byte
-		sumExactly(sum[:], h.Sum)
+		sumExactly(sum[:], hw.materialize().Sum)
 		correct = sum == v1Hash.Value
 	} else if hashV2 := p.state().hashV2; hashV2 != nil {
-		h := merkle.NewHash()
-		differingPeers, err = t.hashPieceWithSpecificHash(piece, h)
+		hw := hashWriter{hashCache: v2HashCache}
+		differingPeers, err = t.hashPieceWithSpecificHash(piece, &hw)
 		var sum [32]byte
 		// What about the final piece in a torrent? From BEP 52: "The layer is chosen so that one
 		// hash covers piece length bytes". Note that if a piece doesn't have a hash in piece layers
 		// it's because it's not larger than the piece length.
+		mh := hw.materialize().(*merkle.Hash)
 		sumExactly(sum[:], func(b []byte) []byte {
-			return h.SumMinLength(b, int(t.info.PieceLength))
+			return mh.SumMinLength(b, int(t.info.PieceLength))
 		})
 		correct = sum == *hashV2
 	} else {
 		expected := p.mustGetOnlyFile().piecesRoot.Unwrap()
-		h := merkle.NewHash()
-		differingPeers, err = t.hashPieceWithSpecificHash(piece, h)
+		hw := &hashWriter{hashCache: v2HashCache}
+		differingPeers, err = t.hashPieceWithSpecificHash(piece, hw)
 		var sum [32]byte
 		// This is *not* padded to piece length.
-		sumExactly(sum[:], h.Sum)
+		sumExactly(sum[:], hw.materialize().Sum)
 		correct = sum == expected
 	}
 	return
@@ -1327,12 +1318,12 @@ func sumExactly(dst []byte, sum func(b []byte) []byte) {
 	}
 }
 
-func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash) (
+func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, hw *hashWriter) (
 	// These are peers that sent us blocks that differ from what we hash here.
 	differingPeers map[bannableAddr]struct{},
 	err error,
 ) {
-	var w io.Writer = h
+	var w io.Writer = hw
 	if t.hasSmartbanDataForPiece(piece) {
 		smartBanWriter := t.getBlockCheckingWriterForPiece(piece)
 		defer func() {
@@ -1350,12 +1341,14 @@ func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash) (
 			smartBanWriter.Flush()
 			differingPeers = smartBanWriter.badPeers
 		}()
-		w = io.MultiWriter(h, &smartBanWriter)
+		w = io.MultiWriter(hw, &smartBanWriter)
 	}
 	p := t.piece(piece)
 	storagePiece := p.Storage()
 	var written int64
 	written, err = storagePiece.WriteTo(w)
+	maxWritten := p.Info().Length()
+	panicif.GreaterThan(written, maxWritten)
 	t.countBytesHashed(written)
 	return
 }

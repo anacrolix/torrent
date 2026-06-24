@@ -1478,7 +1478,11 @@ type PieceStateChange struct {
 
 func (t *Torrent) deferPublishPieceStateChange(piece pieceIndex) {
 	p := t.piece(piece)
-	t.cl.unlockHandlers.changedPieceStates[p] = struct{}{}
+	if _, stale := p.stalePublicPieceState(); stale {
+		m := &t.cl.unlockHandlers.changedPieceStates
+		g.MakeMapIfNil(m)
+		(*m)[p] = struct{}{}
+	}
 }
 
 func (t *Torrent) pieceNumPendingChunks(piece pieceIndex) pp.Integer {

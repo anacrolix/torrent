@@ -20,7 +20,6 @@ type clientUnlockHandlers struct {
 
 func (me *clientUnlockHandlers) init() {
 	g.MakeMap(&me.torrentActions)
-	g.MakeMap(&me.changedPieceStates)
 }
 
 func (me *clientUnlockHandlers) addUpdateComplete(t *Torrent) {
@@ -44,7 +43,9 @@ func (me *clientUnlockHandlers) run(logger *slog.Logger) {
 	}
 	for p := range me.changedPieceStates {
 		p.publishStateChange()
-		delete(me.changedPieceStates, p)
 	}
+	// We reset the map because it balloons in size occasionally and causes very expensive iteration
+	// overhead.
+	me.changedPieceStates = nil
 	panicif.NotEq(len(me.torrentActions), 0)
 }

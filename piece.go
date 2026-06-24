@@ -572,14 +572,19 @@ func (p Piece) nextNovelHashCount() (ret pieceVerifyCount) {
 
 // Here so it's zero-arity and we can use it in DeferOnce.
 func (p Piece) publishStateChange() {
-	t := p.t
-	cur := t.pieceState(p.Index())
-	curHandle := unique.Make(cur)
-	if curHandle != p.state().publicPieceState {
-		p.state().publicPieceState = curHandle
-		t.pieceStateChanges.Publish(PieceStateChange{
+	cur, stale := p.stalePublicPieceState()
+	if stale {
+		p.state().publicPieceState = cur
+		p.t.pieceStateChanges.Publish(PieceStateChange{
 			p.Index(),
-			cur,
+			// Could yield unique.Handle here...
+			cur.Value(),
 		})
 	}
+}
+
+func (p Piece) stalePublicPieceState() (ret unique.Handle[PieceState], stale bool) {
+	ret = unique.Make(p.t.pieceState(p.Index()))
+	stale = ret != p.state().publicPieceState
+	return
 }

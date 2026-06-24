@@ -34,14 +34,20 @@ func (w *hashWriter) Write(p []byte) (n int, err error) {
 	return
 }
 
-func (w *hashWriter) writeZeroes(n int64) (err error) {
+// WriteZeroes implements zeroio.ZeroesWriter, so callers (e.g. storage writing piece holes) can hand
+// us a run of zeroes without materializing them: leading zeroes are accumulated, and once real data
+// has started they're written into the active hash.
+func (w *hashWriter) WriteZeroes(count int64) (written int64, err error) {
 	if !w.startedNonZeroes {
-		w.leadingZeroes += n
-		return nil
+		w.leadingZeroes += count
+		return count, nil
 	}
-	_, err = zeroio.WriteZeroes(w.activeHash, n)
-	return
+	// No fast path, not zeroio.WriteZeroes: activeHash is a plain hash, and going through the dispatch
+	// would risk re-entering this method.
+	return zeroio.WriteZeroesNoFastPath(w.activeHash, count)
 }
+
+var _ zeroio.ZeroesWriter = (*hashWriter)(nil)
 
 // materialize returns the underlying hash with everything written so far absorbed. If only zeroes
 // were written, the hash is obtained cheaply from the cache with the leading zeroes already absorbed.

@@ -9,12 +9,30 @@ import (
 	"math/bits"
 )
 
+// ZeroesWriter is implemented by writers that can absorb a run of zeroes without having them
+// materialized, e.g. by extending a sparse file or accumulating a count. WriteZeroes prefers it.
+type ZeroesWriter interface {
+	WriteZeroes(count int64) (written int64, err error)
+}
+
 // A shared, permanently-zero buffer for WriteZeroes and FirstNonZero.
 var zeroes [4 << 10]byte
 
-// WriteZeroes writes n zero bytes to w. It reuses a shared buffer, so unlike io.CopyN with a zero
-// reader it doesn't allocate or re-zero a buffer per call.
+// WriteZeroes writes n zero bytes to w. If w implements ZeroesWriter it's delegated to, letting w
+// absorb the run without the bytes being materialized; otherwise the zeroes are written from a shared
+// buffer, so unlike io.CopyN with a zero reader it doesn't allocate or re-zero a buffer per call.
 func WriteZeroes(w io.Writer, n int64) (written int64, err error) {
+	if zw, ok := w.(ZeroesWriter); ok {
+		return zw.WriteZeroes(n)
+	}
+	return WriteZeroesNoFastPath(w, n)
+}
+
+// WriteZeroesNoFastPath writes n zero bytes to w from the shared buffer, without consulting
+// ZeroesWriter (the fast path). A ZeroesWriter implementation that ultimately writes into an
+// underlying io.Writer should call this rather than WriteZeroes, so it can't re-enter the dispatch
+// and recurse.
+func WriteZeroesNoFastPath(w io.Writer, n int64) (written int64, err error) {
 	for written < n {
 		var w1 int
 		w1, err = w.Write(zeroes[:min(int64(len(zeroes)), n-written)])

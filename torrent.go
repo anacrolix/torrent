@@ -1281,7 +1281,8 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 		// that the pieces are padded with zeroes.
 		if t.info.FilesArePieceAligned() {
 			paddingLen := p.Info().V1Length() - p.Info().Length()
-			panicif.Err(hw.writeZeroes(paddingLen))
+			_, padErr := hw.WriteZeroes(paddingLen)
+			panicif.Err(padErr)
 			t.countBytesHashed(paddingLen)
 		}
 		var sum [20]byte

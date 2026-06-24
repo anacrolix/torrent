@@ -12,8 +12,11 @@ import (
 // This is a lazy union representing all the possible fields for messages. Go doesn't have ADTs, and
 // I didn't choose to use type-assertions. Fields are ordered to minimize struct size and padding.
 type Message struct {
-	PiecesRoot           [32]byte
-	Piece                []byte
+	PiecesRoot [32]byte
+	Piece      []byte
+	// When the decoder sourced Piece from its Pool, this is the *[]byte it took, so the consumer can
+	// return that exact pointer to the Pool without allocating a new slice header. nil otherwise.
+	PiecePtr             *[]byte
 	Bitfield             []bool
 	ExtendedPayload      []byte
 	Hashes               [][32]byte

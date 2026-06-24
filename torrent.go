@@ -38,6 +38,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
+	chunkpool "github.com/anacrolix/torrent/internal/chunk-pool"
 	"github.com/anacrolix/torrent/internal/check"
 	"github.com/anacrolix/torrent/internal/nestedmaps"
 	request_strategy "github.com/anacrolix/torrent/internal/request-strategy"
@@ -97,12 +98,12 @@ type Torrent struct {
 
 	// The order pieces are requested if there's no stronger reason like availability or priority.
 	pieceRequestOrder []int
-	// Values are the piece indices that changed.
+	// Values are the piece indices that changed.Ø
 	pieceStateChanges pubsub.PubSub[PieceStateChange]
 	// The size of chunks to request from peers over the wire. This is
 	// normally 16KiB by convention these days.
 	chunkSize pp.Integer
-	chunkPool sync.Pool
+	chunkPool chunkpool.Pool
 	// Total length of the torrent in bytes. Stored because it's not O(1) to
 	// get this from the info dict.
 	_length g.Option[int64]
@@ -325,13 +326,10 @@ func (t *Torrent) KnownSwarm() (ks []PeerInfo) {
 
 func (t *Torrent) setChunkSize(size pp.Integer) {
 	t.chunkSize = size
-	t.chunkPool = sync.Pool{
-		New: func() interface{} {
-			b := make([]byte, size)
-			return &b
-		},
-	}
+	t.chunkPool.SetSize(size.Int())
 }
+
+var _ pp.ChunkBufferPool = (*chunkpool.Pool)(nil)
 
 func (t *Torrent) pieceComplete(piece pieceIndex) bool {
 	return t._completedPieces.Contains(piece)
@@ -1233,10 +1231,12 @@ func (t *Torrent) pieceLength(piece pieceIndex) pp.Integer {
 }
 
 func (t *Torrent) getBlockCheckingWriterForPiece(piece pieceIndex) blockCheckingWriter {
+	bufPtr := t.chunkPool.Get()
 	return blockCheckingWriter{
-		cache:        &t.smartBanCache,
-		requestIndex: t.pieceRequestIndexBegin(piece),
-		chunkBuffer:  t.getChunkBuffer(),
+		cache:          &t.smartBanCache,
+		requestIndex:   t.pieceRequestIndexBegin(piece),
+		chunkBuffer:    (*bufPtr)[:t.chunkSize.Int()],
+		chunkBufferPtr: bufPtr,
 	}
 }
 
@@ -1328,7 +1328,7 @@ func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, hw *hashWriter) (
 	if t.hasSmartbanDataForPiece(piece) {
 		smartBanWriter := t.getBlockCheckingWriterForPiece(piece)
 		defer func() {
-			t.putChunkBuffer(smartBanWriter.chunkBuffer)
+			t.chunkPool.Put(smartBanWriter.chunkBufferPtr)
 			smartBanWriter.chunkBuffer = nil
 		}()
 		defer func() {
@@ -3693,17 +3693,6 @@ func (t *Torrent) slogGroup() slog.Attr {
 
 // Get a chunk buffer from the pool. It should be returned when it's no longer in use. Do we
 // waste an allocation if we throw away the pointer it was stored with?
-func (t *Torrent) getChunkBuffer() []byte {
-	b := *t.chunkPool.Get().(*[]byte)
-	b = b[:t.chunkSize.Int()]
-	return b
-}
-
-func (t *Torrent) putChunkBuffer(b []byte) {
-	panicif.NotEq(cap(b), t.chunkSize.Int())
-	// Does this allocate? Are we amortizing against the cost of a large buffer?
-	t.chunkPool.Put(&b)
-}
 
 func (t *Torrent) withSlogger(base *slog.Logger) *slog.Logger {
 	return base.With(slog.Group(

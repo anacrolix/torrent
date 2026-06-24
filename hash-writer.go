@@ -2,6 +2,8 @@ package torrent
 
 import (
 	"hash"
+
+	"github.com/anacrolix/torrent/internal/zeroio"
 )
 
 type hashWriter struct {
@@ -16,7 +18,7 @@ func (w *hashWriter) Write(p []byte) (n int, err error) {
 	if !w.startedNonZeroes {
 		// Leading zeroes are accumulated rather than hashed, so skip past any zero prefix in this
 		// buffer to find where the real data starts.
-		i := firstNonZero(p)
+		i := zeroio.FirstNonZero(p)
 		w.leadingZeroes += int64(i)
 		if i == len(p) {
 			// Still all zeroes; keep deferring.
@@ -37,7 +39,7 @@ func (w *hashWriter) writeZeroes(n int64) (err error) {
 		w.leadingZeroes += n
 		return nil
 	}
-	_, err = writeZeroes(w.activeHash, n)
+	_, err = zeroio.WriteZeroes(w.activeHash, n)
 	return
 }
 

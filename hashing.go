@@ -8,6 +8,7 @@ import (
 
 	"github.com/anacrolix/missinggo/v2/panicif"
 
+	"github.com/anacrolix/torrent/internal/zeroio"
 	"github.com/anacrolix/torrent/merkle"
 )
 
@@ -76,7 +77,7 @@ func (me *zeroPrefixHashCache) clonePrefix(prefixLen int64) zeroPrefixHasher {
 	// Extend a clone of the predecessor up to prefixLen by absorbing the missing zeroes.
 	extended := cloneHasher(pred.hash)
 	missing := prefixLen - pred.prefixLen
-	written, err := writeZeroes(extended, missing)
+	written, err := zeroio.WriteZeroes(extended, missing)
 	panicif.Err(err)
 	panicif.NotEq(written, missing)
 	// Memoize for next time, keeping entries sorted.

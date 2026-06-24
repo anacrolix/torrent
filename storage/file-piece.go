@@ -13,6 +13,7 @@ import (
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
 
+	"github.com/anacrolix/torrent/internal/zeroio"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/segments"
 )
@@ -367,7 +368,7 @@ func (me *filePieceImpl) writeFileTo(w io.Writer, fileIndex int, extent segments
 		// Write zeroes until the end of the hole we're in.
 		var n1 int64
 		n := min(dataOffset-extent.Start, extent.Length)
-		n1, err = writeZeroes(w, n)
+		n1, err = zeroio.WriteZeroes(w, n)
 		packageExpvarMap.Add("bytesReadSkippedHole", n1)
 		written += n1
 		if err != nil {

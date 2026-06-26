@@ -628,11 +628,17 @@ func (me *regularTrackerAnnounceDispatcher) singleAnnounce(
 	// A logger that includes the nice torrent group so we know what the announce is for.
 	logger = logger.With(t.slogGroup())
 	req := t.announceRequest(event, key.ShortInfohash)
+	// Capture the tracker client and announce options while the client lock is
+	// still held. trackerClients is mutated under the lock by initTrackerClient
+	// (via AddTrackers), so reading it after unlock is a data race and can trigger
+	// a fatal concurrent map read/write.
+	trackerClient := me.trackerClients[key.url].client
+	announceOpts := me.getAnnounceOpts()
 	me.torrentClient.unlock()
 	ctx, cancel := context.WithTimeout(context.TODO(), tracker.DefaultTrackerAnnounceTimeout)
 	defer cancel()
 	logger.Debug("announcing", "req", req)
-	resp, err := me.trackerClients[key.url].client.Announce(ctx, req, me.getAnnounceOpts())
+	resp, err := trackerClient.Announce(ctx, req, announceOpts)
 	now := time.Now()
 	{
 		level := slog.LevelDebug

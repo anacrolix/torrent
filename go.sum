@@ -106,8 +106,8 @@ github.com/anacrolix/missinggo/perf v1.0.0 h1:7ZOGYziGEBytW49+KmYGTaNfnwUqP1HBsy
 github.com/anacrolix/missinggo/perf v1.0.0/go.mod h1:ljAFWkBuzkO12MQclXzZrosP5urunoLS0Cbvb4V0uMQ=
 github.com/anacrolix/missinggo/v2 v2.2.0/go.mod h1:o0jgJoYOyaoYQ4E2ZMISVa9c88BbUBVQQW4QeRkNCGY=
 github.com/anacrolix/missinggo/v2 v2.5.1/go.mod h1:WEjqh2rmKECd0t1VhQkLGTdIWXO6f6NLjp5GlMZ+6FA=
-github.com/anacrolix/missinggo/v2 v2.10.0 h1:pg0iO4Z/UhP2MAnmGcaMtp5ZP9kyWsusENWN9aolrkY=
-github.com/anacrolix/missinggo/v2 v2.10.0/go.mod h1:nCRMW6bRCMOVcw5z9BnSYKF+kDbtenx+hQuphf4bK8Y=
+github.com/anacrolix/missinggo/v2 v2.11.0 h1:9vYHTNHa5q8tLeDbA6XWFyYeKrxrhfw7GZe9KpS2Wnw=
+github.com/anacrolix/missinggo/v2 v2.11.0/go.mod h1:gcZICf9xhHZEuLIaxXG1gRg4hpbL7lqgVrq5jsYtQU4=
 github.com/anacrolix/mmsg v1.0.1 h1:TxfpV7kX70m3f/O7ielL/2I3OFkMPjrRCPo7+4X5AWw=
 github.com/anacrolix/mmsg v1.0.1/go.mod h1:x8kRaJY/dCrY9Al0PEcj1mb/uFHwP6GCJ9fLl4thEPc=
 github.com/anacrolix/multiless v0.4.0 h1:lqSszHkliMsZd2hsyrDvHOw4AbYWa+ijQ66LzbjqWjM=

@@ -1478,6 +1478,9 @@ type PieceStateChange struct {
 }
 
 func (t *Torrent) deferPublishPieceStateChange(piece pieceIndex) {
+	if t.pieceStateChanges.NumSubs() == 0 {
+		return
+	}
 	p := t.piece(piece)
 	if _, stale := p.stalePublicPieceState(); stale {
 		m := &t.cl.unlockHandlers.changedPieceStates

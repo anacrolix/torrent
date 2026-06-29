@@ -12,7 +12,7 @@ import (
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
 	"github.com/pion/webrtc/v4"
 	"go.opentelemetry.io/otel/trace"
 
@@ -33,9 +33,10 @@ type TrackerClient struct {
 	PeerId             [20]byte
 	OnConn             onDataChannelOpen
 	// Deprecated: Use Slogger.
-	Logger  log.Logger
-	Slogger *slog.Logger
-	Dialer             *websocket.Dialer
+	Logger           log.Logger
+	Slogger          *slog.Logger
+	HttpClient       *http.Client
+	HandshakeTimeout time.Duration
 
 	mu             sync.Mutex
 	cond           sync.Cond
@@ -118,12 +119,24 @@ func (tc *TrackerClient) doWebsocket() error {
 		header = tc.WebsocketTrackerHttpHeader()
 	}
 
-	c, _, err := tc.Dialer.Dial(tc.Url, header)
+	dialCtx := context.Background()
+	if tc.HandshakeTimeout > 0 {
+		var cancel context.CancelFunc
+		dialCtx, cancel = context.WithTimeout(dialCtx, tc.HandshakeTimeout)
+		defer cancel()
+	}
+	c, _, err := websocket.Dial(dialCtx, tc.Url, &websocket.DialOptions{
+		HTTPClient: tc.HttpClient,
+		HTTPHeader: header,
+	})
 	if err != nil {
 		tc.OnDisconnected(err)
 		return fmt.Errorf("dialing tracker: %w", err)
 	}
-	defer c.Close()
+	// WebTorrent SDP offer/answer batches can exceed coder/websocket's 32 KiB
+	// default read limit; raise it so large announce responses aren't truncated.
+	c.SetReadLimit(1 << 20)
+	defer c.CloseNow()
 	tc.slogger().Debug("connected")
 	tc.mu.Lock()
 	tc.wsConn = c
@@ -135,24 +148,24 @@ func (tc *TrackerClient) doWebsocket() error {
 		for {
 			select {
 			case <-tc.pingTicker.C:
-				tc.mu.Lock()
-				err := c.WriteMessage(websocket.PingMessage, []byte{})
-				tc.mu.Unlock()
+				// coder/websocket's Ping sends a ping and waits for the pong; it is
+				// safe to call concurrently with Write. Bound it so a dead tracker
+				// stops the keepalive goroutine instead of blocking forever.
+				pingCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				err := c.Ping(pingCtx)
+				cancel()
 				if err != nil {
 					return
 				}
 			case <-closeChan:
 				return
-
 			}
 		}
 	}()
 	tc.OnConnected(nil)
-	err = tc.trackerReadLoop(tc.wsConn)
+	err = tc.trackerReadLoop(c)
 	close(closeChan)
-	tc.mu.Lock()
-	c.Close()
-	tc.mu.Unlock()
+	c.CloseNow()
 	return err
 }
 
@@ -184,7 +197,7 @@ func (tc *TrackerClient) Close() error {
 	tc.mu.Lock()
 	tc.closed = true
 	if tc.wsConn != nil {
-		tc.wsConn.Close()
+		tc.wsConn.CloseNow()
 	}
 	tc.closeUnusedOffers()
 	tc.pingTicker.Stop()
@@ -351,12 +364,12 @@ func (tc *TrackerClient) writeMessage(data []byte) error {
 		}
 		tc.cond.Wait()
 	}
-	return tc.wsConn.WriteMessage(websocket.TextMessage, data)
+	return tc.wsConn.Write(context.Background(), websocket.MessageText, data)
 }
 
 func (tc *TrackerClient) trackerReadLoop(tracker *websocket.Conn) error {
 	for {
-		_, message, err := tracker.ReadMessage()
+		_, message, err := tracker.Read(context.Background())
 		if err != nil {
 			return fmt.Errorf("read message error: %w", err)
 		}

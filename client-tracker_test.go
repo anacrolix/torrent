@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -9,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
 	qt "github.com/go-quicktest/qt"
-	"github.com/gorilla/websocket"
 
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/tracker"
@@ -57,23 +58,17 @@ func TestClientInvalidTracker(t *testing.T) {
 	to.Drop()
 }
 
-var upgrader = websocket.Upgrader{}
-
 func testtracker(w http.ResponseWriter, r *http.Request) {
-	c, err := upgrader.Upgrade(w, r, nil)
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 	if err != nil {
 		return
 	}
-	defer c.Close()
+	defer c.CloseNow()
 	for {
-		_, _, err := c.ReadMessage()
+		_, _, err := c.Read(context.Background())
 		if err != nil {
 			break
 		}
-		//err = c.WriteMessage(mt, message)
-		//if err != nil {
-		//	break
-		//}
 	}
 }
 

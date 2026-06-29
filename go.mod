@@ -27,6 +27,7 @@ require (
 	github.com/bahlo/generic-list-go v0.2.0
 	github.com/bradfitz/iter v0.0.0-20191230175014-e8f45d346db8
 	github.com/cespare/xxhash v1.1.0
+	github.com/coder/websocket v1.8.15
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edsrzf/mmap-go v1.1.0
@@ -36,7 +37,6 @@ require (
 	github.com/go-quicktest/qt v1.101.0
 	github.com/google/btree v1.1.2
 	github.com/google/go-cmp v0.7.0
-	github.com/gorilla/websocket v1.5.0
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/multiformats/go-multihash v0.2.3
 	github.com/pion/datachannel v1.5.9

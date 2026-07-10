@@ -69,8 +69,11 @@ type ClientConfig struct {
 	DataDir string `long:"data-dir" description:"directory to store downloaded torrent data"`
 	// The address to listen for new uTP and TCP BitTorrent protocol connections. DHT shares a UDP
 	// socket with uTP unless configured otherwise.
-	ListenHost              func(network string) string
-	ListenPort              int
+	ListenHost func(network string) string
+	ListenPort int
+	// Defines ListenPacket func to use for the uTP socket (which the DHT server shares). If set,
+	// uTP and DHT run over the returned net.PacketConn.
+	ListenPacket func(network, addr string) (net.PacketConn, error)
 	// cfg.NoDefaultPortForwarding aka cfg.DisableUpnp
 	NoDefaultPortForwarding bool
 	UpnpID                  string

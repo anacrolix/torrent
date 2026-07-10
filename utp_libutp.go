@@ -5,6 +5,7 @@ package torrent
 
 import (
 	"log/slog"
+	"net"
 
 	utp "github.com/anacrolix/go-libutp"
 	"github.com/anacrolix/log"
@@ -15,6 +16,23 @@ func NewUtpSocketSlogger(network, addr string, fc firewallCallback, slogger *slo
 	aLogger := log.NewLogger().WithDefaultLevel(log.Debug)
 	aLogger.SetHandlers(log.SlogHandlerAsHandler{SlogHandler: slogger.Handler()})
 	s, err := utp.NewSocket(network, addr, utp.WithLogger(aLogger))
+	if s == nil {
+		return nil, err
+	}
+	if err != nil {
+		return s, err
+	}
+	if fc != nil {
+		s.SetSyncFirewallCallback(utp.FirewallCallback(fc))
+	}
+	return s, err
+}
+
+func NewUtpSocketFromPacketConn(pc net.PacketConn, fc firewallCallback, slogger *slog.Logger) (utpSocket, error) {
+	// go-libutp requires an anacrolix/log.Logger, so create one bridged from the slog.Logger.
+	aLogger := log.NewLogger().WithDefaultLevel(log.Debug)
+	aLogger.SetHandlers(log.SlogHandlerAsHandler{SlogHandler: slogger.Handler()})
+	s, err := utp.NewSocketFromPacketConn(pc, utp.WithLogger(aLogger))
 	if s == nil {
 		return nil, err
 	}

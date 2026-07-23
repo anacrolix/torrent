@@ -1455,9 +1455,10 @@ file:
 			// Minimizing to the number of pieces in a file conflicts with the BEP.
 			length := merkle.RoundUpToPowerOfTwo(uint(min(512, fileNumPieces-index)))
 			if length < 2 {
-				// This should have been filtered out by baseLayer and pieces root as piece hash
-				// checks.
-				panic(length)
+				// A file with fileNumPieces % 512 == 1 leaves a single trailing hash. The hash
+				// layer is padded to a power of two, so request the pad sibling too, per the BEP 52
+				// minimum length of 2. The responder pads hashes past the end of the file.
+				length = 2
 			}
 			if length%2 != 0 {
 				pc.protocolLogger.Levelf(log.Warning, "requesting odd hashes length %d", length)

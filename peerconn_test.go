@@ -332,6 +332,59 @@ func TestPeerConnRejectsHashesForMissingRoot(t *testing.T) {
 	qt.Assert(t, qt.StringContains(err.Error(), "no file for pieces root"))
 }
 
+func TestRequestMissingHashesTrailingSingleHash(t *testing.T) {
+	// A v2 file with fileNumPieces % 512 == 1 leaves a single hash in the last
+	// request block. That used to round up to a request length of 1 and hit
+	// panic(length) in requestMissingHashes.
+	const numPieces = 513
+	const pieceLength = int64(1) << 14
+	var piecesRoot [32]byte
+	piecesRoot[0] = 1
+	cl := &Client{}
+	tor := &Torrent{
+		cl:        cl,
+		chunkSize: defaultChunkSize,
+		info: &metainfo.Info{
+			MetaVersion: 2,
+			Name:        "dummy",
+			PieceLength: pieceLength,
+			FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{
+					"dummy": {File: metainfo.FileTreeFile{
+						Length:     pieceLength * numPieces,
+						PiecesRoot: string(piecesRoot[:]),
+					}},
+				},
+			},
+		},
+		pieces: make([]Piece, numPieces),
+	}
+	for i := range tor.pieces {
+		tor.pieces[i].t = tor
+	}
+	c := &PeerConn{
+		Peer: Peer{
+			cl: cl,
+			t:  tor,
+		},
+	}
+	c.legacyPeerImpl = c
+	c.peerImpl = c
+	c.v2 = true
+	c.peerSentHaveAll = true
+	c.initMessageWriter()
+	c.requestMissingHashes()
+	// The trailing block must be requested with the BEP 52 minimum length of 2.
+	trailing := false
+	for hr := range c.sentHashRequests {
+		if hr.index == 512 {
+			qt.Assert(t, qt.Equals(hr.length, pp.Integer(2)))
+			trailing = true
+		}
+	}
+	qt.Assert(t, qt.IsTrue(trailing))
+}
+
 func TestConnPexPeerFlags(t *testing.T) {
 	var (
 		tcpAddr = &net.TCPAddr{IP: net.IPv6loopback, Port: 4848}

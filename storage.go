@@ -32,7 +32,7 @@ func (me *storagePieceReader) Close() (err error) {
 	return
 }
 
-func (me *storagePieceReader) getReaderAt(p *Piece) (err error) {
+func (me *storagePieceReader) getReaderAt(p Piece) (err error) {
 	if me.pr != nil {
 		if me.prIndex == p.Index() {
 			return

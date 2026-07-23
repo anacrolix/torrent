@@ -8,15 +8,15 @@ require (
 	github.com/anacrolix/bargle v1.0.0
 	github.com/anacrolix/bargle/v2 v2.0.0
 	github.com/anacrolix/btree v0.1.1
-	github.com/anacrolix/chansync v0.7.0
+	github.com/anacrolix/chansync v0.8.0
 	github.com/anacrolix/dht/v2 v2.23.1-0.20260525063928-ec3a9bd99456
 	github.com/anacrolix/envpprof v1.4.0
 	github.com/anacrolix/generics v0.2.0
-	github.com/anacrolix/go-libutp v1.3.2
+	github.com/anacrolix/go-libutp v1.4.1-0.20260723025107-4becdce8d6f2
 	github.com/anacrolix/gostdapp v0.2.1-0.20251125125325-fbac3f25c013
 	github.com/anacrolix/log v0.17.1-0.20251118025802-918f1157b7bb
 	github.com/anacrolix/missinggo v1.3.0
-	github.com/anacrolix/missinggo/v2 v2.10.0
+	github.com/anacrolix/missinggo/v2 v2.11.0
 	github.com/anacrolix/multiless v0.4.0
 	github.com/anacrolix/possum/go v0.4.1-0.20250821022006-9d91a37b5d3d
 	github.com/anacrolix/squirrel v0.6.4

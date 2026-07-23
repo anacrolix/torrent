@@ -3,6 +3,7 @@ package merkle
 import (
 	"crypto/sha256"
 	"hash"
+	"slices"
 )
 
 func NewHash() *Hash {
@@ -91,4 +92,16 @@ func (h *Hash) BlockSize() int {
 	return sha256.BlockSize
 }
 
-var _ hash.Hash = (*Hash)(nil)
+// Clone returns a copy of the hash with independent state.
+func (h *Hash) Clone() (hash.Cloner, error) {
+	clone := *h
+	// The other fields are arrays and an int, copied by value above. Only the blocks slice needs a
+	// deep copy (its elements are arrays, so cloning the slice copies them).
+	clone.blocks = slices.Clone(h.blocks)
+	return &clone, nil
+}
+
+var (
+	_ hash.Hash   = (*Hash)(nil)
+	_ hash.Cloner = (*Hash)(nil)
+)

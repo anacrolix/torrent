@@ -59,8 +59,14 @@ type requestStrategyTorrent struct {
 	t *Torrent
 }
 
-func (r requestStrategyTorrent) Piece(i int) requestStrategy.Piece {
-	return requestStrategyPiece{r.t.piece(i)}
+func (r requestStrategyTorrent) PieceRequest(i int) bool {
+	return r.t.piece(i).effectivePriority() > PiecePriorityNone
+}
+
+func (r requestStrategyTorrent) PieceCountUnverified(i int) bool {
+	p := r.t.piece(i)
+	s := p.state()
+	return s.hashing || s.marking || p.queuedForHash()
 }
 
 func (r requestStrategyTorrent) PieceLength() int64 {
@@ -68,17 +74,3 @@ func (r requestStrategyTorrent) PieceLength() int64 {
 }
 
 var _ requestStrategy.Torrent = requestStrategyTorrent{}
-
-type requestStrategyPiece struct {
-	p *Piece
-}
-
-func (r requestStrategyPiece) CountUnverified() bool {
-	return r.p.hashing || r.p.marking || r.p.queuedForHash()
-}
-
-func (r requestStrategyPiece) Request() bool {
-	return r.p.effectivePriority() > PiecePriorityNone
-}
-
-var _ requestStrategy.Piece = requestStrategyPiece{}

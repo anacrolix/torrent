@@ -1007,7 +1007,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.Piece:
 			c.doChunkReadStats(int64(len(msg.Piece)))
 			err = c.receiveChunk(&msg)
-			t.putChunkBuffer(msg.Piece)
+			t.chunkPool.Put(msg.PiecePtr)
 			msg.Piece = nil
 			if err != nil {
 				err = fmt.Errorf("receiving chunk: %w", err)
@@ -1442,7 +1442,7 @@ file:
 			if !pc.peerHasPiece(torrentPieceIndex) {
 				continue file
 			}
-			if pc.t.piece(torrentPieceIndex).hashV2 == nil {
+			if pc.t.pieces[torrentPieceIndex].hashV2 == nil {
 				haveAllHashes = false
 			}
 		}
@@ -1774,8 +1774,7 @@ func (cn *PeerConn) shouldRequest(r RequestIndex) error {
 	if cn.t.hashingPiece(pi) {
 		panic("piece is being hashed")
 	}
-	p := cn.t.piece(pi)
-	if p.marking {
+	if cn.t.pieces[pi].marking {
 		panic("piece is being marked")
 	}
 	if cn.t.pieceQueuedForHash(pi) {

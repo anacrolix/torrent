@@ -26,47 +26,47 @@ func NewIndexFromSegments(segments []Extent) Index {
 	return Index{segments}
 }
 
-// Yields segments as extents with Start relative to the previous segment's end.
-func (me Index) iterSegments(startIndex int) iter.Seq[Extent] {
-	return func(yield func(Extent) bool) {
-		var lastEnd g.Option[Int]
-		for _, cur := range me.segments[startIndex:] {
-			ret := Extent{
-				// Why ignore initial start on the first segment?
-				Start:  cur.Start - lastEnd.UnwrapOr(cur.Start),
-				Length: cur.Length,
-			}
-			lastEnd.Set(cur.End())
-			if !yield(ret) {
-				return
-			}
-		}
-	}
-}
-
 func (me Index) LocateIter(e Extent) iter.Seq2[int, Extent] {
 	return func(yield func(int, Extent) bool) {
 		// We find the first segment that ends after the start of the target extent.
-		first, eq := slices.BinarySearchFunc(me.segments, e.Start, func(elem Extent, target Int) int {
+		first, _ := slices.BinarySearchFunc(me.segments, e.Start, func(elem Extent, target Int) int {
 			return cmp.Compare(elem.End(), target+1)
 		})
-		//fmt.Printf("binary search for %v in %v returned %v\n", e.Start, me.segments, first)
 		if first == len(me.segments) {
 			return
 		}
-		_ = eq
 		e.Start -= me.segments[first].Start
 		// The extent is before the first segment.
 		if e.Start < 0 {
 			e.Length += e.Start
 			e.Start = 0
 		}
-		i := first
-		for cons := range scanConsecutive(me.iterSegments(first), e) {
-			if !yield(i, cons) {
+		// Inlined scanConsecutive over me.iterSegments(first): walk the segment slice directly to avoid
+		// iter.Pull's per-call coroutine allocation. needle, startedNeedle and the per-segment extent
+		// math come from scanConsecutive; lastEnd and the relative l.Start come from iterSegments.
+		needle := e
+		startedNeedle := false
+		var lastEnd g.Option[Int]
+		for i, cur := range me.segments[first:] {
+			if needle.Length == 0 {
 				return
 			}
-			i++
+			l := Extent{
+				Start:  cur.Start - lastEnd.UnwrapOr(cur.Start),
+				Length: cur.Length,
+			}
+			lastEnd.Set(cur.End())
+
+			e1 := Extent{Start: max(needle.Start-l.Start, 0)}
+			e1.Length = max(min(l.Length, needle.End()-l.Start)-e1.Start, 0)
+			needle.Start = max(0, needle.Start-l.End())
+			needle.Length -= e1.Length + l.Start
+			if e1.Length > 0 || (startedNeedle && needle.Length != 0) {
+				if !yield(first+i, e1) {
+					return
+				}
+				startedNeedle = true
+			}
 		}
 	}
 }

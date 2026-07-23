@@ -66,7 +66,6 @@ func GetRequestablePieces(
 	for item := range pro.tree.Scan {
 		ih := item.Key.InfoHash.Value()
 		t := input.Torrent(ih)
-		piece := t.Piece(item.Key.Index)
 		pieceLength := t.PieceLength()
 		// Storage limits will always apply against requestable pieces, since we need to keep the
 		// highest priority pieces, even if they're complete or in an undesirable state.
@@ -76,13 +75,13 @@ func GetRequestablePieces(
 			}
 			*storageLeft -= pieceLength
 		}
-		if piece.Request() {
+		if t.PieceRequest(item.Key.Index) {
 			if !requestPiece(ih, item.Key.Index, item.State) {
 				// No blocks are being considered from this piece, so it won't result in unverified
 				// bytes.
 				return false
 			}
-		} else if !piece.CountUnverified() {
+		} else if !t.PieceCountUnverified(item.Key.Index) {
 			// The piece is pristine, and we're not considering it for requests.
 			continue
 		}

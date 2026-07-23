@@ -343,8 +343,9 @@ func (ws *webseedPeer) wantedChunksInDiscardWindow(wr *webseedRequest) bool {
 
 func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 	t := ws.peer.t
-	buf := t.getChunkBuffer()
-	defer t.putChunkBuffer(buf)
+	bufPtr := t.chunkPool.Get()
+	defer t.chunkPool.Put(bufPtr)
+	buf := *bufPtr
 	msg := pp.Message{
 		Type: pp.Piece,
 	}

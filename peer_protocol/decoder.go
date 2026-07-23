@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"sync"
 
 	g "github.com/anacrolix/generics"
 	"github.com/pkg/errors"
@@ -13,11 +12,19 @@ import (
 
 type Decoder struct {
 	R *bufio.Reader
-	// This must return *[]byte where the slices can fit data for piece messages. I think we store
-	// *[]byte in the pool to avoid an extra allocation every time we put the slice back into the
-	// pool. The chunk size should not change for the life of the decoder.
-	Pool      *sync.Pool
+	// Provides reusable buffers for piece message data. Get must return a *[]byte whose slice can fit
+	// piece data (we store *[]byte to avoid an allocation when returning slices to the pool). The
+	// chunk size should not change for the life of the decoder. May be nil, in which case piece
+	// buffers are freshly allocated.
+	Pool      ChunkBufferPool
 	MaxLength Integer // TODO: Should this include the length header or not?
+}
+
+// ChunkBufferPool sources reusable buffers for piece message data. Buffers are *[]byte so they can
+// be returned to the pool without allocating a slice header.
+type ChunkBufferPool interface {
+	Get() *[]byte
+	Put(*[]byte)
 }
 
 // This limits reads to the length of a message, returning io.EOF when the end of the message bytes
@@ -120,7 +127,7 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 	return
 }
 
-func readMessageAfterType(msg *Message, r *expectReader, piecePool *sync.Pool) (err error) {
+func readMessageAfterType(msg *Message, r *expectReader, piecePool ChunkBufferPool) (err error) {
 	switch msg.Type {
 	case Choke, Unchoke, Interested, NotInterested, HaveAll, HaveNone:
 	case Have, AllowedFast, Suggest:
@@ -147,11 +154,15 @@ func readMessageAfterType(msg *Message, r *expectReader, piecePool *sync.Pool) (
 		if piecePool == nil {
 			msg.Piece = make([]byte, dataLen)
 		} else {
-			msg.Piece = *piecePool.Get().(*[]byte)
+			ptr := piecePool.Get()
+			msg.Piece = *ptr
 			if int64(cap(msg.Piece)) < dataLen {
+				piecePool.Put(ptr)
 				return errors.New("piece data longer than expected")
 			}
 			msg.Piece = msg.Piece[:dataLen]
+			// Hand the pooled pointer to the consumer so it can be returned without re-boxing.
+			msg.PiecePtr = ptr
 		}
 		_, err = io.ReadFull(r, msg.Piece)
 	case Extended:

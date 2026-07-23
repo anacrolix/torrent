@@ -230,8 +230,8 @@ func (f *File) PieceIndices() iter.Seq[int] {
 	}
 }
 
-func (f *File) Pieces() iter.Seq[*Piece] {
-	return func(yield func(*Piece) bool) {
+func (f *File) Pieces() iter.Seq[Piece] {
+	return func(yield func(Piece) bool) {
 		for i := range f.PieceIndices() {
 			p := f.t.piece(i)
 			if !yield(p) {

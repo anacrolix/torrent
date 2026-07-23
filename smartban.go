@@ -20,7 +20,9 @@ type blockCheckingWriter struct {
 	// Peers that didn't match blocks written now.
 	badPeers    map[bannableAddr]struct{}
 	chunkBuffer []byte
-	bufferUsed  int
+	// The pooled *[]byte backing chunkBuffer, so it can be returned to the pool without re-boxing.
+	chunkBufferPtr *[]byte
+	bufferUsed     int
 }
 
 func (me *blockCheckingWriter) chunkSize() int {

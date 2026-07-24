@@ -27,6 +27,10 @@ jobs:
           # Fetch the just-pushed commit directly from GitHub rather than
           # waiting for the module proxy to observe it.
           GOPROXY: direct
+          # Skip the sum.golang.org checksum database. The just-pushed commit
+          # often isn't in the database yet, and its lookups periodically return
+          # transient 500s that fail this job for reasons unrelated to the code.
+          GOSUMDB: off
         run: |
           tmp=$(mktemp -d)
           cd "$tmp"

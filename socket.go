@@ -231,6 +231,15 @@ func listenUtp(network, addr string, fc firewallCallback, logger *slog.Logger) (
 	return utpSocketSocket{us, network}, err
 }
 
+func listenUtpFromPacketConn(network, addr string, fc firewallCallback, logger *slog.Logger, lp func(network, addr string) (net.PacketConn, error)) (socket, error) {
+	pc, err := lp(network, addr)
+	if err != nil {
+		return nil, err
+	}
+	us, err := NewUtpSocketFromPacketConn(pc, fc, logger)
+	return utpSocketSocket{us, network}, err
+}
+
 // utpSocket wrapper, additionally wrapped for the torrent package's socket interface.
 type utpSocketSocket struct {
 	utpSocket

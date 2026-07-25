@@ -5,6 +5,7 @@ package torrent
 
 import (
 	"log/slog"
+	"net"
 
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/utp"
@@ -17,6 +18,14 @@ func NewUtpSocketSlogger(network, addr string, _ firewallCallback, _ *slog.Logge
 	} else {
 		return s, err
 	}
+}
+
+func NewUtpSocketFromPacketConn(pc net.PacketConn, _ firewallCallback, _ *slog.Logger) (utpSocket, error) {
+	s, err := utp.NewSocketFromPacketConn(pc)
+	if s == nil {
+		return nil, err
+	}
+	return s, err
 }
 
 // Deprecated: Use [NewUtpSocketSlogger].

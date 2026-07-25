@@ -434,12 +434,22 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		}
 	}()
 	builtinListenNetworks := cl.listenNetworks()
-	sockets, err := listenAll(
+	lf := listen
+	if lp := cl.config.ListenPacket; lp != nil {
+		lf = func(n network, addr string, f firewallCallback, logger *slog.Logger) (socket, error) {
+			if n.Udp {
+				return listenUtpFromPacketConn(n.String(), addr, f, logger, lp)
+			}
+			return listen(n, addr, f, logger)
+		}
+	}
+	sockets, err := listenAllWithListenFunc(
 		builtinListenNetworks,
 		cl.config.ListenHost,
 		cl.config.ListenPort,
 		cl.firewallCallback,
 		cl.slogger,
+		lf,
 	)
 	if err != nil {
 		return

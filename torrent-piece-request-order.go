@@ -29,9 +29,8 @@ func (t *Torrent) updatePieceRequestOrderPiece(pieceIndex int) (changed bool) {
 		newState := t.requestStrategyPieceOrderState(pieceIndex)
 		old := pro.pieces.Add(key, newState)
 		return old.Ok && old.Value != newState
-	} else {
-		return pro.pieces.Delete(key)
 	}
+	return pro.pieces.Delete(key)
 }
 
 func (t *Torrent) clientPieceRequestOrderKey() clientPieceRequestOrderKeySumType {
@@ -51,7 +50,6 @@ func (t *Torrent) deletePieceRequestOrder() {
 	for i := range t.numPieces() {
 		pro.pieces.Delete(t.pieceRequestOrderKey(i))
 	}
-	delete(pro.torrents, t)
 	if pro.pieces.Len() == 0 {
 		delete(cpro, key)
 	}
@@ -68,10 +66,8 @@ func (t *Torrent) initPieceRequestOrder() {
 		value := clientPieceRequestOrderValue{
 			pieces: requestStrategy.NewPieceOrder(requestStrategy.NewAjwernerBtree(), t.numPieces()),
 		}
-		g.MakeMap(&value.torrents)
 		cpro[key] = value
 	}
-	g.MapMustAssignNew(cpro[key].torrents, t, struct{}{})
 }
 
 func (t *Torrent) addRequestOrderPiece(i int) {

@@ -45,7 +45,5 @@ type clientPieceRequestOrderKeySumType interface {
 }
 
 type clientPieceRequestOrderValue struct {
-	// TODO: Check if we actually ended up needing this?
-	torrents map[*Torrent]struct{}
-	pieces   *requestStrategy.PieceRequestOrder
+	pieces *requestStrategy.PieceRequestOrder
 }

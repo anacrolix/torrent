@@ -96,6 +96,12 @@ func (t *Torrent) checkPendingPiecesMatchesRequestOrder() {
 	if !amortize.Try() {
 		return
 	}
+	if t.dataDownloadDisallowed.IsSet() {
+		// Pending pieces are tracked by priority, but dataDownloadDisallowed makes
+		// ignorePieceForRequests true for all of them, so they're dropped from the request
+		// order while staying pending. The two legitimately diverge here.
+		return
+	}
 	short := *t.canonicalShortInfohash()
 	var proBitmap roaring.Bitmap
 	for item := range t.getPieceRequestOrder().Iter {

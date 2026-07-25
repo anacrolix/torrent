@@ -88,6 +88,10 @@ func (me *PieceRequestOrder) Delete(key PieceRequestOrderKey) (deleted bool) {
 	}
 	me.tree.Delete(PieceRequestOrderItem{key, state})
 	delete(me.keys, key)
+	if len(me.keys) == 0 {
+		// Maps don't shrink, so drop it and let Add start over.
+		me.keys = nil
+	}
 	return true
 }
 

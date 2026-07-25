@@ -8,13 +8,14 @@ import (
 	"log/slog"
 	"runtime/pprof"
 	"time"
+	"unique"
 	"unsafe"
 
 	"github.com/RoaringBitmap/roaring/v2"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/generics/heap"
+	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/multiless"
-
 	requestStrategy "github.com/anacrolix/torrent/internal/request-strategy"
 	"github.com/anacrolix/torrent/metainfo"
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
@@ -77,10 +78,48 @@ type (
 type desiredPeerRequests struct {
 	requestIndexes []RequestIndex
 	peer           *PeerConn
-	pieceStates    []g.Option[requestStrategy.PieceRequestOrderState]
+	pieceStates    *peerRequestPieceStates
+	// The generation of pieceStates this was built against. The states are shared by all the
+	// Torrent's peers, so if someone else fills them while we're still sorting, our comparisons are
+	// against another peer's states.
+	pieceStatesGen uint64
+}
+
+type peerRequestPieceStates struct {
+	m map[pieceIndex]unique.Handle[requestStrategy.PieceRequestOrderState]
+	// Incremented whenever the states are discarded, so holders of a previous fill can detect it.
+	gen uint64
+}
+
+// Panics if the piece state wasn't set for this generation. Every request index that gets sorted
+// must have had its piece state set first.
+func (me *peerRequestPieceStates) Get(index pieceIndex) requestStrategy.PieceRequestOrderState {
+	h, ok := me.m[index]
+	panicif.False(ok)
+	return h.Value()
+}
+
+func (me *peerRequestPieceStates) Set(index pieceIndex, value requestStrategy.PieceRequestOrderState) {
+	// Nothing that reaches here should be zero: the peer has the piece, so its availability is at
+	// least one. If that changes, Get's presence check stops distinguishing unset from zero.
+	panicif.Zero(value)
+	g.MakeMapIfNil(&me.m)
+	me.m[index] = unique.Make(value)
+}
+
+// Reset all values without discarding allocation.
+func (me *peerRequestPieceStates) Clear() {
+	clear(me.m)
+	me.gen++
+}
+
+func (me *peerRequestPieceStates) Reset() {
+	me.m = nil
+	me.gen++
 }
 
 func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex) bool {
+	panicif.NotEq(p.pieceStatesGen, p.pieceStates.gen)
 	t := p.peer.t
 	leftPieceIndex := t.pieceIndexOfRequestIndex(leftRequest)
 	rightPieceIndex := t.pieceIndexOfRequestIndex(rightRequest)
@@ -94,8 +133,8 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 			!p.peer.peerAllowedFast.Contains(rightPieceIndex),
 		)
 	}
-	leftPiece := p.pieceStates[leftPieceIndex].UnwrapPtr()
-	rightPiece := p.pieceStates[rightPieceIndex].UnwrapPtr()
+	leftPiece := p.pieceStates.Get(leftPieceIndex)
+	rightPiece := p.pieceStates.Get(rightPieceIndex)
 	// Putting this first means we can steal requests from lesser-performing peers for our first few
 	// new requests.
 	priority := func() PiecePriority {
@@ -205,10 +244,11 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 	}
 	requestHeap := desiredPeerRequests{
 		peer:           p,
-		pieceStates:    t.requestPieceStates,
+		pieceStates:    &t.requestPieceStates,
 		requestIndexes: t.requestIndexes,
 	}
-	clear(requestHeap.pieceStates)
+	requestHeap.pieceStates.Clear()
+	requestHeap.pieceStatesGen = t.requestPieceStates.gen
 	t.logPieceRequestOrder()
 	// Caller-provided allocation for roaring bitmap iteration.
 	var it typedRoaring.Iterator[RequestIndex]
@@ -220,7 +260,7 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 			if !p.peerHasPiece(pieceIndex) {
 				return true
 			}
-			requestHeap.pieceStates[pieceIndex].Set(pieceExtra)
+			requestHeap.pieceStates.Set(pieceIndex, pieceExtra)
 			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
 			t.iterUndirtiedRequestIndexesInPiece(&it, pieceIndex, func(r requestStrategy.RequestIndex) {
 				if !allowedFast {

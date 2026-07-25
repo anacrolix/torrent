@@ -38,8 +38,8 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
-	chunkpool "github.com/anacrolix/torrent/internal/chunk-pool"
 	"github.com/anacrolix/torrent/internal/check"
+	chunkpool "github.com/anacrolix/torrent/internal/chunk-pool"
 	"github.com/anacrolix/torrent/internal/nestedmaps"
 	request_strategy "github.com/anacrolix/torrent/internal/request-strategy"
 	"github.com/anacrolix/torrent/merkle"
@@ -202,7 +202,7 @@ type Torrent struct {
 	smartBanCache smartBanCache
 
 	// Large allocations reused between request state updates.
-	requestPieceStates []g.Option[request_strategy.PieceRequestOrderState]
+	requestPieceStates peerRequestPieceStates
 	requestIndexes     []RequestIndex
 
 	// Disable actions after updating piece priorities, for benchmarking.
@@ -575,7 +575,7 @@ func (t *Torrent) pieceRequestOrderKey(i int) request_strategy.PieceRequestOrder
 func (t *Torrent) onSetInfo() {
 	t.pieceRequestOrder = rand.Perm(t.numPieces())
 	t.initPieceRequestOrder()
-	g.MakeSliceWithLength(&t.requestPieceStates, t.numPieces())
+	t.requestPieceStates.Reset()
 	for i := range t.pieces {
 		p := &t.pieces[i]
 		// Need to add relativeAvailability before updating piece completion, as that may result in

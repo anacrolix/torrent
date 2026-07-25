@@ -18,10 +18,13 @@ type Btree interface {
 }
 
 func NewPieceOrder(btree Btree, cap int) *PieceRequestOrder {
-	return &PieceRequestOrder{
+	ret := &PieceRequestOrder{
 		tree: btree,
-		keys: make(map[PieceRequestOrderKey]PieceRequestOrderState, cap),
 	}
+	if cap != 0 {
+		g.MakeMapWithCap(&ret.keys, cap)
+	}
+	return ret
 }
 
 type PieceRequestOrder struct {
@@ -62,6 +65,7 @@ func (me *PieceRequestOrder) Add(
 		me.tree.Delete(PieceRequestOrderItem{key, old.Value})
 	}
 	me.tree.Add(PieceRequestOrderItem{key, state})
+	g.MakeMapIfNil(&me.keys)
 	me.keys[key] = state
 	return
 }

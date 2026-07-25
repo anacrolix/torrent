@@ -62,9 +62,15 @@ func (t *Torrent) initPieceRequestOrder() {
 	g.MakeMapIfNil(&t.cl.pieceRequestOrder)
 	key := t.clientPieceRequestOrderKey()
 	cpro := t.cl.pieceRequestOrder
+	// Without a storage cap, only pending pieces are in the order, so don't reserve for all of
+	// them.
+	initialCap := 0
+	if t.hasStorageCap() {
+		initialCap = t.numPieces()
+	}
 	if _, ok := cpro[key]; !ok {
 		value := clientPieceRequestOrderValue{
-			pieces: requestStrategy.NewPieceOrder(requestStrategy.NewAjwernerBtree(), t.numPieces()),
+			pieces: requestStrategy.NewPieceOrder(requestStrategy.NewAjwernerBtree(), initialCap),
 		}
 		cpro[key] = value
 	}

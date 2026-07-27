@@ -2901,13 +2901,17 @@ func (t *Torrent) finishHash(index pieceIndex) {
 	t.cl.activePieceHashers--
 }
 
-// Return the connections that touched a piece, and clear the entries while doing it.
+// Forget the connections that touched a piece, on both the piece and the peers.
 func (t *Torrent) clearPieceTouchers(pi pieceIndex) {
-	dirtiers := t.pieces[pi].dirtiers
-	for c := range dirtiers {
+	ps := &t.pieces[pi]
+	for c := range ps.dirtiers {
 		delete(c.peerTouchedPieces, pi)
-		delete(dirtiers, c)
 	}
+	// Release the map instead of just emptying it. Go maps never shrink, so an emptied map retains
+	// its header and group table (192 bytes for the 1-8 dirtier case that covers almost every
+	// piece) for the life of the Torrent. Torrents here have millions of pieces and most of them
+	// get dirtied at some point, so that dominated the heap. onDirtiedPiece remakes it on demand.
+	ps.dirtiers = nil
 }
 
 // Queue a check if one hasn't occurred before for the piece, and the completion state is unknown.

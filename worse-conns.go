@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"time"
 	"unsafe"
-
-	"github.com/anacrolix/sync"
 )
 
 type worseConnInput struct {
@@ -16,18 +14,20 @@ type worseConnInput struct {
 	CompletedHandshake time.Time
 	GetPeerPriority    func() (peerPriority, error)
 	Pointer            uintptr
+
+	peerPriority     peerPriority
+	peerPriorityErr  error
+	peerPriorityDone bool
 }
 
-func memoizePeerPriority(f func() (peerPriority, error)) func() (peerPriority, error) {
-	var once sync.Once
-	var prio peerPriority
-	var err error
-	return func() (peerPriority, error) {
-		once.Do(func() {
-			prio, err = f()
-		})
-		return prio, err
+// getPeerPriority memoizes the peer priority lookup. Ranking runs single-threaded under the client
+// lock, so this doesn't need to synchronize.
+func (me *worseConnInput) getPeerPriority() (peerPriority, error) {
+	if !me.peerPriorityDone {
+		me.peerPriority, me.peerPriorityErr = me.GetPeerPriority()
+		me.peerPriorityDone = true
 	}
+	return me.peerPriority, me.peerPriorityErr
 }
 
 type worseConnLensOpts struct {
@@ -41,7 +41,10 @@ func worseConnInputFromPeer(dst *worseConnInput, p *PeerConn, opts worseConnLens
 	dst.Useful = p.useful()
 	dst.LastHelpful = p.lastHelpful()
 	dst.CompletedHandshake = p.completedHandshake
-	dst.GetPeerPriority = memoizePeerPriority(p.peerPriority)
+	dst.GetPeerPriority = p.peerPriority
+	dst.peerPriority = 0
+	dst.peerPriorityErr = nil
+	dst.peerPriorityDone = false
 	dst.Pointer = uintptr(unsafe.Pointer(p))
 	if opts.incomingIsBad && !p.outgoing {
 		dst.BadDirection = true
@@ -65,9 +68,9 @@ func (l *worseConnInput) Less(r *worseConnInput) bool {
 	if !l.CompletedHandshake.Equal(r.CompletedHandshake) {
 		return l.CompletedHandshake.Before(r.CompletedHandshake)
 	}
-	lPeerPriority, lPeerPriorityErr := l.GetPeerPriority()
+	lPeerPriority, lPeerPriorityErr := l.getPeerPriority()
 	if lPeerPriorityErr == nil {
-		rPeerPriority, rPeerPriorityErr := r.GetPeerPriority()
+		rPeerPriority, rPeerPriorityErr := r.getPeerPriority()
 		if rPeerPriorityErr == nil && lPeerPriority != rPeerPriority {
 			return lPeerPriority < rPeerPriority
 		}

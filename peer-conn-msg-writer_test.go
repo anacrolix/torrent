@@ -2,7 +2,9 @@ package torrent
 
 import (
 	"testing"
+	"time"
 
+	"github.com/anacrolix/chansync"
 	"github.com/dustin/go-humanize"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -63,5 +65,52 @@ func runBenchmarkMarshalBinaryWrite(b *testing.B, length int64) {
 		writer.writeBuffer.Reset()
 		//b.StartTimer()
 		writer.writeBuffer.Write(msg.MustMarshalBinary())
+	}
+}
+
+// BroadcastCond intentionally drops a broadcast when no Signaled channel is
+// armed. Force the refill/broadcast interleaving that used to strand the
+// writer: the first refill broadcasts while the buffer is empty, and only a
+// correctly pre-armed run loop can observe it and perform the second refill.
+func TestPeerConnMsgWriterArmsWakeupBeforeRefill(t *testing.T) {
+	closed := new(chansync.SetOnce)
+	secondRefill := make(chan struct{})
+	exited := make(chan struct{})
+	fillCalls := 0
+
+	var writer *peerConnMsgWriter
+	writer = &peerConnMsgWriter{
+		closed:      closed,
+		keepAlive:   func() bool { return false },
+		writeBuffer: new(peerConnMsgWriterBuffer),
+	}
+	writer.fillWriteBuffer = func() {
+		fillCalls++
+		switch fillCalls {
+		case 1:
+			writer.writeCond.Broadcast()
+		case 2:
+			close(secondRefill)
+			closed.Set()
+		}
+	}
+
+	go func() {
+		defer close(exited)
+		writer.run(time.Hour)
+	}()
+	t.Cleanup(func() {
+		closed.Set()
+		select {
+		case <-exited:
+		case <-time.After(time.Second):
+			t.Error("peer message writer did not exit after test cleanup")
+		}
+	})
+
+	select {
+	case <-secondRefill:
+	case <-time.After(time.Second):
+		t.Fatal("broadcast during refill was lost before the writer armed its condition")
 	}
 }

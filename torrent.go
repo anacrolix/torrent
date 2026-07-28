@@ -517,17 +517,6 @@ func pieceFirstFileIndex(pieceOffset int64, files []*File) int {
 	return 0
 }
 
-// Returns the index after the last file containing the piece. files must be
-// ordered by offset.
-func pieceEndFileIndex(pieceEndOffset int64, files []*File) int {
-	for i, f := range files {
-		if f.offset >= pieceEndOffset {
-			return i
-		}
-	}
-	return len(files)
-}
-
 func (t *Torrent) cacheLength() {
 	var l int64
 	for _, f := range t.info.UpvertedFiles() {

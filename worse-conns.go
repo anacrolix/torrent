@@ -10,17 +10,20 @@ import (
 	"github.com/anacrolix/sync"
 )
 
+// Fields are ordered widest first so the struct packs: there's one of these per peer in a
+// contiguous arena, so the padding is paid for every conn ranked.
 type worseConnInput struct {
-	BadDirection       bool
-	Useful             bool
 	LastHelpful        time.Time
 	CompletedHandshake time.Time
 	GetPeerPriority    func() (peerPriority, error)
 	Pointer            uintptr
 
-	peerPriority     peerPriority
 	peerPriorityErr  error
+	peerPriority     peerPriority
 	peerPriorityDone bool
+
+	BadDirection bool
+	Useful       bool
 }
 
 // getPeerPriority memoizes the peer priority lookup. Ranking runs single-threaded under the client

@@ -1419,7 +1419,11 @@ func getPeerConnSlice(cap int) []*PeerConn {
 // this is a frequent occurrence.
 func (t *Torrent) withUnclosedConns(f func([]*PeerConn)) {
 	sl := t.appendUnclosedConns(getPeerConnSlice(len(t.conns)))
+	defer putPeerConnSlice(sl)
 	f(sl)
+}
+
+func putPeerConnSlice(sl []*PeerConn) {
 	// Don't let the pooled backing array keep conns alive until the pool drains. The full capacity
 	// is cleared, not just the length, because a longer earlier use can have left conns beyond the
 	// current length.
@@ -1428,11 +1432,11 @@ func (t *Torrent) withUnclosedConns(f func([]*PeerConn)) {
 }
 
 func (t *Torrent) worstBadConnFromSlice(opts worseConnLensOpts, sl []*PeerConn) *PeerConn {
-	wcs := worseConnSlice{conns: sl}
-	wcs.initKeys(opts)
-	heap.Init(&wcs)
+	wcs := getWorseConnSlice(sl, opts)
+	defer wcs.release()
+	heap.Init(wcs)
 	for wcs.Len() != 0 {
-		c := heap.Pop(&wcs).(*PeerConn)
+		c := heap.Pop(wcs).(*PeerConn)
 		if opts.incomingIsBad && !c.outgoing {
 			return c
 		}
@@ -2596,15 +2600,15 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 	defer t.cl.unlock()
 	oldMax = t.maxEstablishedConns
 	t.maxEstablishedConns = max
-	wcs := worseConnSlice{
-		conns: t.appendConns(nil, func(*PeerConn) bool {
-			return true
-		}),
-	}
-	wcs.initKeys(worseConnLensOpts{})
-	heap.Init(&wcs)
+	conns := t.appendConns(getPeerConnSlice(len(t.conns)), func(*PeerConn) bool {
+		return true
+	})
+	defer putPeerConnSlice(conns)
+	wcs := getWorseConnSlice(conns, worseConnLensOpts{})
+	defer wcs.release()
+	heap.Init(wcs)
 	for len(t.conns) > t.maxEstablishedConns && wcs.Len() > 0 {
-		t.dropConnection(heap.Pop(&wcs).(*PeerConn))
+		t.dropConnection(heap.Pop(wcs).(*PeerConn))
 	}
 	t.openNewConns()
 	return oldMax

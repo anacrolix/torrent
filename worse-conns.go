@@ -112,7 +112,8 @@ func (me *worseConnSlice) Pop() interface{} {
 	me.keys[i] = nil
 	me.conns = me.conns[:i]
 	me.keys = me.keys[:i]
-	me.keyStorage = me.keyStorage[:i]
+	// keyStorage is only the arena the key pointers refer into. Swap permutes keys, not keyStorage,
+	// so keyStorage[i] doesn't correspond to keys[i] and trimming it would drop an arbitrary entry.
 	return ret
 }
 

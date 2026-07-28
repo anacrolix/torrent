@@ -3,6 +3,7 @@ package torrent
 import (
 	"container/heap"
 	"fmt"
+	"slices"
 	"time"
 	"unsafe"
 
@@ -16,18 +17,20 @@ type worseConnInput struct {
 	CompletedHandshake time.Time
 	GetPeerPriority    func() (peerPriority, error)
 	Pointer            uintptr
+
+	peerPriority     peerPriority
+	peerPriorityErr  error
+	peerPriorityDone bool
 }
 
-func memoizePeerPriority(f func() (peerPriority, error)) func() (peerPriority, error) {
-	var once sync.Once
-	var prio peerPriority
-	var err error
-	return func() (peerPriority, error) {
-		once.Do(func() {
-			prio, err = f()
-		})
-		return prio, err
+// getPeerPriority memoizes the peer priority lookup. Ranking runs single-threaded under the client
+// lock, so this doesn't need to synchronize.
+func (me *worseConnInput) getPeerPriority() (peerPriority, error) {
+	if !me.peerPriorityDone {
+		me.peerPriority, me.peerPriorityErr = me.GetPeerPriority()
+		me.peerPriorityDone = true
 	}
+	return me.peerPriority, me.peerPriorityErr
 }
 
 type worseConnLensOpts struct {
@@ -41,7 +44,10 @@ func worseConnInputFromPeer(dst *worseConnInput, p *PeerConn, opts worseConnLens
 	dst.Useful = p.useful()
 	dst.LastHelpful = p.lastHelpful()
 	dst.CompletedHandshake = p.completedHandshake
-	dst.GetPeerPriority = memoizePeerPriority(p.peerPriority)
+	dst.GetPeerPriority = p.peerPriority
+	dst.peerPriority = 0
+	dst.peerPriorityErr = nil
+	dst.peerPriorityDone = false
 	dst.Pointer = uintptr(unsafe.Pointer(p))
 	if opts.incomingIsBad && !p.outgoing {
 		dst.BadDirection = true
@@ -65,9 +71,9 @@ func (l *worseConnInput) Less(r *worseConnInput) bool {
 	if !l.CompletedHandshake.Equal(r.CompletedHandshake) {
 		return l.CompletedHandshake.Before(r.CompletedHandshake)
 	}
-	lPeerPriority, lPeerPriorityErr := l.GetPeerPriority()
+	lPeerPriority, lPeerPriorityErr := l.getPeerPriority()
 	if lPeerPriorityErr == nil {
-		rPeerPriority, rPeerPriorityErr := r.GetPeerPriority()
+		rPeerPriority, rPeerPriorityErr := r.getPeerPriority()
 		if rPeerPriorityErr == nil && lPeerPriority != rPeerPriority {
 			return lPeerPriority < rPeerPriority
 		}
@@ -84,12 +90,45 @@ type worseConnSlice struct {
 	keyStorage []worseConnInput
 }
 
+// A pool of worseConnSlice, to reuse the ranking key arenas. Ranking runs on every attempt to open
+// or accept a connection while a Torrent is at its established conn limit, and the arena is the bulk
+// of the memory it touches.
+var worseConnSlices sync.Pool
+
+// getWorseConnSlice returns a heap of the given conns, ranked with opts. Release it when done.
+func getWorseConnSlice(conns []*PeerConn, opts worseConnLensOpts) *worseConnSlice {
+	me, _ := worseConnSlices.Get().(*worseConnSlice)
+	if me == nil {
+		me = new(worseConnSlice)
+	}
+	me.conns = conns
+	me.initKeys(opts)
+	return me
+}
+
+// release returns the key arenas to the pool. The conns aren't owned by the worseConnSlice, so
+// they're only dropped, not returned anywhere.
+func (me *worseConnSlice) release() {
+	me.dropPeerRefs()
+	worseConnSlices.Put(me)
+}
+
+// dropPeerRefs discards everything that refers to a peer, so pooling a worseConnSlice doesn't keep
+// dead conns alive until the pool drains.
+func (me *worseConnSlice) dropPeerRefs() {
+	// The keys refer to peers through GetPeerPriority, so clear the full capacity rather than just
+	// the length: Pop trims the length, and an earlier longer use can have left keys beyond it.
+	clear(me.keyStorage[:cap(me.keyStorage)])
+	clear(me.keys[:cap(me.keys)])
+	me.conns = nil
+}
+
 // initKeys builds contiguous ranking keys for the heap so comparisons can reuse precomputed peer
 // metadata without one allocation per entry.
 func (me *worseConnSlice) initKeys(opts worseConnLensOpts) {
 	// Keep the key structs contiguous so heap comparisons don't allocate one object per peer.
-	me.keyStorage = make([]worseConnInput, len(me.conns))
-	me.keys = make([]*worseConnInput, len(me.conns))
+	me.keyStorage = slices.Grow(me.keyStorage[:0], len(me.conns))[:len(me.conns)]
+	me.keys = slices.Grow(me.keys[:0], len(me.conns))[:len(me.conns)]
 	for i, c := range me.conns {
 		worseConnInputFromPeer(&me.keyStorage[i], c, opts)
 		me.keys[i] = &me.keyStorage[i]
@@ -112,7 +151,8 @@ func (me *worseConnSlice) Pop() interface{} {
 	me.keys[i] = nil
 	me.conns = me.conns[:i]
 	me.keys = me.keys[:i]
-	me.keyStorage = me.keyStorage[:i]
+	// keyStorage is only the arena the key pointers refer into. Swap permutes keys, not keyStorage,
+	// so keyStorage[i] doesn't correspond to keys[i] and trimming it would drop an arbitrary entry.
 	return ret
 }
 

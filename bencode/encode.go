@@ -83,7 +83,7 @@ func (e *Encoder) reflectByteSlice(s []byte) {
 // done successfully.
 func (e *Encoder) reflectMarshaler(v reflect.Value) bool {
 	if !v.Type().Implements(marshalerType) {
-		if v.Kind() != reflect.Ptr && v.CanAddr() && v.Addr().Type().Implements(marshalerType) {
+		if v.Kind() != reflect.Pointer && v.CanAddr() && v.Addr().Type().Implements(marshalerType) {
 			v = v.Addr()
 		} else {
 			return false
@@ -166,7 +166,7 @@ func (e *Encoder) reflectValue(v reflect.Value) {
 		e.reflectSequence(v)
 	case reflect.Interface:
 		e.reflectValue(v.Elem())
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if v.IsNil() {
 			v = reflect.Zero(v.Type().Elem())
 		} else {
@@ -249,7 +249,7 @@ func makeEncodeFields(t reflect.Type) (fs []encodeField) {
 		}
 		if f.Anonymous {
 			t := f.Type
-			if t.Kind() == reflect.Ptr {
+			if t.Kind() == reflect.Pointer {
 				t = t.Elem()
 			}
 			anonEFs := makeEncodeFields(t)
@@ -258,7 +258,7 @@ func makeEncodeFields(t reflect.Type) (fs []encodeField) {
 				bottomField := anonEF
 				bottomField.i = func(v reflect.Value) reflect.Value {
 					v = v.Field(i)
-					if v.Kind() == reflect.Ptr {
+					if v.Kind() == reflect.Pointer {
 						if v.IsNil() {
 							// This will skip serializing this value.
 							return reflect.Value{}

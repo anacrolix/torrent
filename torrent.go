@@ -517,17 +517,6 @@ func pieceFirstFileIndex(pieceOffset int64, files []*File) int {
 	return 0
 }
 
-// Returns the index after the last file containing the piece. files must be
-// ordered by offset.
-func pieceEndFileIndex(pieceEndOffset int64, files []*File) int {
-	for i, f := range files {
-		if f.offset >= pieceEndOffset {
-			return i
-		}
-	}
-	return len(files)
-}
-
 func (t *Torrent) cacheLength() {
 	var l int64
 	for _, f := range t.info.UpvertedFiles() {
@@ -1430,16 +1419,24 @@ func getPeerConnSlice(cap int) []*PeerConn {
 // this is a frequent occurrence.
 func (t *Torrent) withUnclosedConns(f func([]*PeerConn)) {
 	sl := t.appendUnclosedConns(getPeerConnSlice(len(t.conns)))
+	defer putPeerConnSlice(sl)
 	f(sl)
+}
+
+func putPeerConnSlice(sl []*PeerConn) {
+	// Don't let the pooled backing array keep conns alive until the pool drains. The full capacity
+	// is cleared, not just the length, because a longer earlier use can have left conns beyond the
+	// current length.
+	clear(sl[:cap(sl)])
 	peerConnSlices.Put(&sl)
 }
 
 func (t *Torrent) worstBadConnFromSlice(opts worseConnLensOpts, sl []*PeerConn) *PeerConn {
-	wcs := worseConnSlice{conns: sl}
-	wcs.initKeys(opts)
-	heap.Init(&wcs)
+	wcs := getWorseConnSlice(sl, opts)
+	defer wcs.release()
+	heap.Init(wcs)
 	for wcs.Len() != 0 {
-		c := heap.Pop(&wcs).(*PeerConn)
+		c := heap.Pop(wcs).(*PeerConn)
 		if opts.incomingIsBad && !c.outgoing {
 			return c
 		}
@@ -2603,15 +2600,15 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 	defer t.cl.unlock()
 	oldMax = t.maxEstablishedConns
 	t.maxEstablishedConns = max
-	wcs := worseConnSlice{
-		conns: t.appendConns(nil, func(*PeerConn) bool {
-			return true
-		}),
-	}
-	wcs.initKeys(worseConnLensOpts{})
-	heap.Init(&wcs)
+	conns := t.appendConns(getPeerConnSlice(len(t.conns)), func(*PeerConn) bool {
+		return true
+	})
+	defer putPeerConnSlice(conns)
+	wcs := getWorseConnSlice(conns, worseConnLensOpts{})
+	defer wcs.release()
+	heap.Init(wcs)
 	for len(t.conns) > t.maxEstablishedConns && wcs.Len() > 0 {
-		t.dropConnection(heap.Pop(&wcs).(*PeerConn))
+		t.dropConnection(heap.Pop(wcs).(*PeerConn))
 	}
 	t.openNewConns()
 	return oldMax
@@ -2901,13 +2898,17 @@ func (t *Torrent) finishHash(index pieceIndex) {
 	t.cl.activePieceHashers--
 }
 
-// Return the connections that touched a piece, and clear the entries while doing it.
+// Forget the connections that touched a piece, on both the piece and the peers.
 func (t *Torrent) clearPieceTouchers(pi pieceIndex) {
-	dirtiers := t.pieces[pi].dirtiers
-	for c := range dirtiers {
+	ps := &t.pieces[pi]
+	for c := range ps.dirtiers {
 		delete(c.peerTouchedPieces, pi)
-		delete(dirtiers, c)
 	}
+	// Release the map instead of just emptying it. Go maps never shrink, so an emptied map retains
+	// its header and group table (192 bytes for the 1-8 dirtier case that covers almost every
+	// piece) for the life of the Torrent. Torrents here have millions of pieces and most of them
+	// get dirtied at some point, so that dominated the heap. onDirtiedPiece remakes it on demand.
+	ps.dirtiers = nil
 }
 
 // Queue a check if one hasn't occurred before for the piece, and the completion state is unknown.

@@ -1431,6 +1431,10 @@ func getPeerConnSlice(cap int) []*PeerConn {
 func (t *Torrent) withUnclosedConns(f func([]*PeerConn)) {
 	sl := t.appendUnclosedConns(getPeerConnSlice(len(t.conns)))
 	f(sl)
+	// Don't let the pooled backing array keep conns alive until the pool drains. The full capacity
+	// is cleared, not just the length, because a longer earlier use can have left conns beyond the
+	// current length.
+	clear(sl[:cap(sl)])
 	peerConnSlices.Put(&sl)
 }
 

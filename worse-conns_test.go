@@ -149,6 +149,28 @@ func TestWorseConnSliceInitKeys(t *testing.T) {
 	qt.Check(t, qt.HasLen(remaining, 0))
 }
 
+// TestWorseConnSliceDropPeerRefs checks a worseConnSlice that has been through a partial drain
+// doesn't retain peers, since it's pooled for reuse.
+func TestWorseConnSliceDropPeerRefs(t *testing.T) {
+	cl := newTestingClient(t)
+	tor := cl.newTorrentForTesting()
+	wcs := worseConnSlice{conns: newTestingPeerConns(cl, tor, 8)}
+	wcs.initKeys(worseConnLensOpts{})
+	heap.Init(&wcs)
+	heap.Pop(&wcs)
+	heap.Pop(&wcs)
+	wcs.dropPeerRefs()
+	qt.Check(t, qt.IsNil(wcs.conns))
+	// The trimmed tails have to be cleared too, not just the live prefixes.
+	for _, key := range wcs.keys[:cap(wcs.keys)] {
+		qt.Check(t, qt.IsNil(key))
+	}
+	for _, key := range wcs.keyStorage[:cap(wcs.keyStorage)] {
+		qt.Check(t, qt.IsNil(key.GetPeerPriority))
+		qt.Check(t, qt.Equals(key.Pointer, 0))
+	}
+}
+
 // newTestingPeerConns adds distinct incoming conns to the Torrent and returns them.
 func newTestingPeerConns(cl *Client, tor *Torrent, num int) (ret []*PeerConn) {
 	ret = make([]*PeerConn, 0, num)

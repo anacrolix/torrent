@@ -3,8 +3,11 @@ package torrent
 import (
 	"container/heap"
 	"fmt"
+	"slices"
 	"time"
 	"unsafe"
+
+	"github.com/anacrolix/sync"
 )
 
 type worseConnInput struct {
@@ -87,12 +90,45 @@ type worseConnSlice struct {
 	keyStorage []worseConnInput
 }
 
+// A pool of worseConnSlice, to reuse the ranking key arenas. Ranking runs on every attempt to open
+// or accept a connection while a Torrent is at its established conn limit, and the arena is the bulk
+// of the memory it touches.
+var worseConnSlices sync.Pool
+
+// getWorseConnSlice returns a heap of the given conns, ranked with opts. Release it when done.
+func getWorseConnSlice(conns []*PeerConn, opts worseConnLensOpts) *worseConnSlice {
+	me, _ := worseConnSlices.Get().(*worseConnSlice)
+	if me == nil {
+		me = new(worseConnSlice)
+	}
+	me.conns = conns
+	me.initKeys(opts)
+	return me
+}
+
+// release returns the key arenas to the pool. The conns aren't owned by the worseConnSlice, so
+// they're only dropped, not returned anywhere.
+func (me *worseConnSlice) release() {
+	me.dropPeerRefs()
+	worseConnSlices.Put(me)
+}
+
+// dropPeerRefs discards everything that refers to a peer, so pooling a worseConnSlice doesn't keep
+// dead conns alive until the pool drains.
+func (me *worseConnSlice) dropPeerRefs() {
+	// The keys refer to peers through GetPeerPriority, so clear the full capacity rather than just
+	// the length: Pop trims the length, and an earlier longer use can have left keys beyond it.
+	clear(me.keyStorage[:cap(me.keyStorage)])
+	clear(me.keys[:cap(me.keys)])
+	me.conns = nil
+}
+
 // initKeys builds contiguous ranking keys for the heap so comparisons can reuse precomputed peer
 // metadata without one allocation per entry.
 func (me *worseConnSlice) initKeys(opts worseConnLensOpts) {
 	// Keep the key structs contiguous so heap comparisons don't allocate one object per peer.
-	me.keyStorage = make([]worseConnInput, len(me.conns))
-	me.keys = make([]*worseConnInput, len(me.conns))
+	me.keyStorage = slices.Grow(me.keyStorage[:0], len(me.conns))[:len(me.conns)]
+	me.keys = slices.Grow(me.keys[:0], len(me.conns))[:len(me.conns)]
 	for i, c := range me.conns {
 		worseConnInputFromPeer(&me.keyStorage[i], c, opts)
 		me.keys[i] = &me.keyStorage[i]

@@ -55,7 +55,7 @@ func (d *Decoder) Decode(v interface{}) (err error) {
 	}()
 
 	pv := reflect.ValueOf(v)
-	if pv.Kind() != reflect.Ptr || pv.IsNil() {
+	if pv.Kind() != reflect.Pointer || pv.IsNil() {
 		return &UnmarshalInvalidArgError{reflect.TypeOf(v)}
 	}
 
@@ -346,14 +346,14 @@ func parseStructFields(struct_ reflect.Type, each func(key string, df dictField)
 		f := struct_.Field(i)
 		if f.Anonymous {
 			t := f.Type
-			if t.Kind() == reflect.Ptr {
+			if t.Kind() == reflect.Pointer {
 				t = t.Elem()
 			}
 			parseStructFields(t, func(key string, df dictField) {
 				innerGet := df.Get
 				df.Get = func(value reflect.Value) func(reflect.Value) {
 					anonPtr := value.Field(i)
-					if anonPtr.Kind() == reflect.Ptr && anonPtr.IsNil() {
+					if anonPtr.Kind() == reflect.Pointer && anonPtr.IsNil() {
 						anonPtr.Set(reflect.New(f.Type.Elem()))
 						anonPtr = anonPtr.Elem()
 					}
@@ -603,7 +603,7 @@ func (d *Decoder) parseUnmarshaler(v reflect.Value) bool {
 // ("e") and no value was stored.
 func (d *Decoder) parseValue(v reflect.Value) (bool, error) {
 	// we support one level of indirection at the moment
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		// if the pointer is nil, allocate a new element of the type it
 		// points to
 		if v.IsNil() {

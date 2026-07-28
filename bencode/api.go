@@ -33,7 +33,7 @@ func (e *UnmarshalInvalidArgError) Error() string {
 		return "bencode: Unmarshal(nil)"
 	}
 
-	if e.Type.Kind() != reflect.Ptr {
+	if e.Type.Kind() != reflect.Pointer {
 		return "bencode: Unmarshal(non-pointer " + e.Type.String() + ")"
 	}
 	return "bencode: Unmarshal(nil " + e.Type.String() + ")"

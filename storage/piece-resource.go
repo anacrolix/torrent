@@ -131,7 +131,14 @@ func (s piecePerResourcePiece) WriteTo(w io.Writer) (int64, error) {
 	if ccr, ok := s.rp.(ConsecutiveChunkReader); ok {
 		return s.writeConsecutiveChunks(ccr, s.incompleteDirPath(), w)
 	}
-	return io.Copy(w, io.NewSectionReader(s, 0, s.mp.Length()))
+	// Read chunks directly under the held RLock. SectionReader(s) would call
+	// ReadAt → NewReader and RLock again; sync.RWMutex is not recursive.
+	r, err := s.getChunksReader(s.incompleteDirPath())
+	if err != nil {
+		return 0, err
+	}
+	defer r.Close()
+	return io.Copy(w, io.NewSectionReader(r, 0, s.mp.Length()))
 }
 
 func (s piecePerResourcePiece) writeConsecutiveChunks(

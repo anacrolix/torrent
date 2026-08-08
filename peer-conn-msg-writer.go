@@ -84,6 +84,10 @@ func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 		if cn.closed.IsSet() {
 			return
 		}
+		// Arm the condition before evaluating the predicate. BroadcastCond does
+		// not retain a broadcast when no channel is armed, and fillWriteBuffer
+		// runs without cn.mu while it observes peer state under another lock.
+		writeCond := cn.writeCond.Signaled()
 		cn.fillWriteBuffer()
 		keepAlive := cn.keepAlive()
 		cn.mu.Lock()
@@ -92,7 +96,6 @@ func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 			torrent.Add("written keepalives", 1)
 		}
 		if cn.writeBuffer.Len() == 0 {
-			writeCond := cn.writeCond.Signaled()
 			cn.mu.Unlock()
 			select {
 			case <-cn.closed.Done():

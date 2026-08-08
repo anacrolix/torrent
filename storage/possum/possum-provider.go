@@ -70,8 +70,7 @@ type ChunkReader interface {
 // trying to read discontinuous or incomplete sequences of chunks?
 func (p Provider) ChunksReader(dir string) (ret storage.PieceReader, err error) {
 	prefix := dir + "/"
-	p.slogger().Error("ChunkReader", "prefix", prefix)
-	//debug.PrintStack()
+	p.slogger().Debug("ChunkReader", "prefix", prefix)
 	pr, err := p.Handle.NewReader()
 	if err != nil {
 		return

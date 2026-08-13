@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo/v2/panicif"
+	"github.com/anacrolix/sync"
 	"github.com/go-quicktest/qt"
 )
 
@@ -51,4 +52,45 @@ func TestUpdateOverdueRecursion(t *testing.T) {
 		// updateOverdue we can test for thrashing, but it's non-trivial.
 		d.updateOverdue()
 	})
+}
+
+func TestDropTorrentClearsPendingTrackerInputUpdate(t *testing.T) {
+	cfg := TestingConfig(t)
+	qt.Assert(t, qt.IsTrue(cfg.DisableTrackers))
+	cl, err := NewClient(cfg)
+	qt.Assert(t, qt.IsNil(err))
+	t.Cleanup(func() {
+		qt.Check(t, qt.HasLen(cl.Close(), 0))
+	})
+
+	trackerURL := "http://tracker.invalid/announce"
+	u, err := url.Parse(trackerURL)
+	qt.Assert(t, qt.IsNil(err))
+
+	var opts AddTorrentOpts
+	opts.InfoHash[0] = 1
+	tt, new := cl.AddTorrentOpt(opts)
+	qt.Assert(t, qt.IsTrue(new))
+
+	d := &cl.regularTrackerAnnounceDispatcher
+	key := torrentTrackerAnnouncerKey{
+		ShortInfohash: *tt.canonicalShortInfohash(),
+		url:           trackerAnnouncerKey(trackerURL),
+	}
+
+	var wg sync.WaitGroup
+	cl.lock()
+	defer func() {
+		cl.unlock()
+		wg.Wait()
+	}()
+
+	d.initTrackerClient(u, key.url, cl.config, slog.Default())
+	tt.initRegularTrackerAnnounceState(key)
+	_, ok := d.pendingTorrentInputUpdates[tt]
+	qt.Assert(t, qt.IsTrue(ok))
+
+	tt.close(&wg)
+	_, ok = d.pendingTorrentInputUpdates[tt]
+	qt.Check(t, qt.IsFalse(ok))
 }

@@ -2061,7 +2061,13 @@ func (t *Torrent) updateWantPeersEvent() {
 // Regular tracker announcing is dispatched as a single "actor". Probably needs to incorporate all
 // tracker types at some point.
 func (t *Torrent) deferUpdateRegularTrackerAnnouncing() {
-	t.cl.regularTrackerAnnounceDispatcher.pendTorrentInputUpdate(t)
+	d := &t.cl.regularTrackerAnnounceDispatcher
+	if t.closed.IsSet() {
+		d.updateTorrentInput(t)
+		delete(d.pendingTorrentInputUpdates, t)
+		return
+	}
+	d.pendTorrentInputUpdate(t)
 }
 
 // Returns whether the client should make effort to seed the torrent.

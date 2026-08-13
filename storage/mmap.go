@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/edsrzf/mmap-go"
 
@@ -98,7 +99,7 @@ func (sp mmapStoragePiece) Completion() Completion {
 }
 
 func (sp mmapStoragePiece) MarkComplete() error {
-	err := sp.t.pc.Set(sp.pieceKey(), true)
+	err := sp.t.pc.Set(sp.pieceKey(), g.Some(true))
 	if err == nil {
 		err = sp.Flush()
 	}
@@ -106,7 +107,7 @@ func (sp mmapStoragePiece) MarkComplete() error {
 }
 
 func (sp mmapStoragePiece) MarkNotComplete() error {
-	return sp.t.pc.Set(sp.pieceKey(), false)
+	return sp.t.pc.Set(sp.pieceKey(), g.Some(false))
 }
 
 func mMapTorrent(md *metainfo.Info, location string) (mms *mmapSpan.MMapSpan, err error) {

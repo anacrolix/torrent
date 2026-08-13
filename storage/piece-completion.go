@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"os"
 
+	g "github.com/anacrolix/generics"
+
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/types/infohash"
 )
@@ -14,7 +16,11 @@ type PieceCompletionGetSetter interface {
 	// I think the extra error parameter is vestigial. Looks like you should put your error in
 	// Completion.Err.
 	Get(metainfo.PieceKey) (Completion, error)
-	Set(_ metainfo.PieceKey, complete bool) error
+	// Sets the completion state for a piece. None means the state is unknown: any stored state is
+	// forgotten, and Get will return a Completion with Ok false until it's set again. Use this
+	// rather than Some(false) when we can't tell whether the data is still there, so the data we do
+	// have gets verified naturally instead of being discarded.
+	Set(_ metainfo.PieceKey, complete g.Option[bool]) error
 }
 
 // Implementations track the completion of pieces. It must be concurrent-safe.

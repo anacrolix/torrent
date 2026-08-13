@@ -8,9 +8,11 @@ package storage
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sync"
 
+	g "github.com/anacrolix/generics"
 	sqlite "github.com/go-llsqlite/adapter"
 	"github.com/go-llsqlite/adapter/sqlitex"
 
@@ -67,17 +69,33 @@ func (me *sqlitePieceCompletion) Get(pk metainfo.PieceKey) (c Completion, err er
 	return
 }
 
-func (me *sqlitePieceCompletion) Set(pk metainfo.PieceKey, b bool) error {
+func (me *sqlitePieceCompletion) Set(pk metainfo.PieceKey, complete g.Option[bool]) error {
 	me.mu.Lock()
 	defer me.mu.Unlock()
 	if me.closed {
 		return errors.New("closed")
 	}
-	return sqlitex.Exec(
+	if !complete.Ok {
+		// Drop the row so the state reads back as unknown.
+		err := sqlitex.Exec(
+			me.db,
+			`delete from piece_completion where infohash=? and "index"=?`,
+			nil,
+			pk.InfoHash.HexString(), pk.Index)
+		if err != nil {
+			return fmt.Errorf("deleting completion for %v: %w", pk, err)
+		}
+		return nil
+	}
+	err := sqlitex.Exec(
 		me.db,
 		`insert or replace into piece_completion(infohash, "index", complete) values(?, ?, ?)`,
 		nil,
-		pk.InfoHash.HexString(), pk.Index, b)
+		pk.InfoHash.HexString(), pk.Index, complete.Value)
+	if err != nil {
+		return fmt.Errorf("setting completion for %v: %w", pk, err)
+	}
+	return nil
 }
 
 func (me *sqlitePieceCompletion) Close() (err error) {

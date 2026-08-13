@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"os"
 
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/missinggo/v2/panicif"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/segments"
@@ -41,7 +41,7 @@ func (me *fileTorrentImpl) pieceCompletionKey(p int) metainfo.PieceKey {
 	}
 }
 
-func (me *fileTorrentImpl) setPieceCompletion(p int, complete bool) error {
+func (me *fileTorrentImpl) setPieceCompletion(p int, complete g.Option[bool]) error {
 	return me.pieceCompletion().Set(me.pieceCompletionKey(p), complete)
 }
 
@@ -68,12 +68,16 @@ func (me *fileTorrentImpl) setCompletionFromPartFiles() error {
 		if nc {
 			c := me.getCompletion(i)
 			if c.Complete {
-				// TODO: We need to set unknown so that verification of the data we do have could
-				// occur naturally but that'll be a big change.
-				panicif.Err(me.setPieceCompletion(i, false))
+				// The data might still be there, we just can't tell from the file names alone. Set
+				// unknown rather than not-complete, so that verification of the data we do have
+				// occurs naturally instead of it being discarded.
+				err := me.setPieceCompletion(i, g.None[bool]())
+				if err != nil {
+					return fmt.Errorf("setting piece %v completion unknown: %w", i, err)
+				}
 			}
 		} else {
-			err := me.setPieceCompletion(i, true)
+			err := me.setPieceCompletion(i, g.Some(true))
 			if err != nil {
 				return fmt.Errorf("setting piece %v completion: %w", i, err)
 			}

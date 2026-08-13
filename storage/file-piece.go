@@ -159,7 +159,7 @@ func (me *filePieceImpl) markIncompletePieces(file *file, size int64) {
 			InfoHash: me.t.infoHash,
 			Index:    p,
 		}
-		err := me.pieceCompletion().Set(key, false)
+		err := me.pieceCompletion().Set(key, g.Some(false))
 		if err != nil {
 			me.logger().Error("error marking piece not complete", "piece", p, "err", err)
 			return
@@ -168,7 +168,7 @@ func (me *filePieceImpl) markIncompletePieces(file *file, size int64) {
 }
 
 func (me *filePieceImpl) MarkComplete() (err error) {
-	err = me.pieceCompletion().Set(me.pieceKey(), true)
+	err = me.pieceCompletion().Set(me.pieceKey(), g.Some(true))
 	if err != nil {
 		return
 	}
@@ -222,7 +222,7 @@ func (me *filePieceImpl) allFilePiecesComplete(f file) (ret g.Result[bool]) {
 }
 
 func (me *filePieceImpl) MarkNotComplete() (err error) {
-	err = me.pieceCompletion().Set(me.pieceKey(), false)
+	err = me.pieceCompletion().Set(me.pieceKey(), g.Some(false))
 	if err != nil {
 		return
 	}

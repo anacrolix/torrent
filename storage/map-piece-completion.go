@@ -40,13 +40,13 @@ func (me *memoryTorrentJustComplete) getLocked(i int) justComplete {
 	return me.state[i]
 }
 
-func (me *memoryTorrentJustComplete) Set(i int, complete bool) {
+func (me *memoryTorrentJustComplete) Set(i int, complete justComplete) {
 	me.mu.Lock()
 	defer me.mu.Unlock()
 	for i >= len(me.state) {
 		me.state = append(me.state, g.None[bool]())
 	}
-	me.state[i].Set(complete)
+	me.state[i] = complete
 }
 
 func (me *memoryTorrentJustComplete) GetRange(begin, end int) iter.Seq[justComplete] {
@@ -85,7 +85,7 @@ func (me *mapPieceCompletion) Get(pk metainfo.PieceKey) (c Completion, err error
 	return
 }
 
-func (me *mapPieceCompletion) Set(pk metainfo.PieceKey, complete bool) error {
+func (me *mapPieceCompletion) Set(pk metainfo.PieceKey, complete g.Option[bool]) error {
 	v, ok := me.m.Load(pk.InfoHash)
 	if !ok {
 		v, _ = me.m.LoadOrStore(pk.InfoHash, &memoryTorrentJustComplete{})

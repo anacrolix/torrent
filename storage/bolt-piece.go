@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"io"
 
+	g "github.com/anacrolix/generics"
 	"go.etcd.io/bbolt"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -45,11 +46,11 @@ func (me *boltPiece) Completion() Completion {
 }
 
 func (me *boltPiece) MarkComplete() error {
-	return me.pc().Set(me.pk(), true)
+	return me.pc().Set(me.pk(), g.Some(true))
 }
 
 func (me *boltPiece) MarkNotComplete() error {
-	return me.pc().Set(me.pk(), false)
+	return me.pc().Set(me.pk(), g.Some(false))
 }
 
 func (me *boltPiece) ReadAt(b []byte, off int64) (n int, err error) {

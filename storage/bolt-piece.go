@@ -25,7 +25,7 @@ var (
 )
 
 func (me *boltPiece) pc() PieceCompletionGetSetter {
-	return boltPieceCompletion{me.db}
+	return &boltPieceCompletion{me.db}
 }
 
 func (me *boltPiece) pk() metainfo.PieceKey {

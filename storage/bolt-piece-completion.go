@@ -25,7 +25,7 @@ type boltPieceCompletion struct {
 	db *bbolt.DB
 }
 
-func (me boltPieceCompletion) Persistent() bool {
+func (me *boltPieceCompletion) Persistent() bool {
 	return true
 }
 
@@ -45,7 +45,7 @@ func NewBoltPieceCompletion(dir string) (ret PieceCompletion, err error) {
 	return
 }
 
-func (me boltPieceCompletion) Get(pk metainfo.PieceKey) (cn Completion, err error) {
+func (me *boltPieceCompletion) Get(pk metainfo.PieceKey) (cn Completion, err error) {
 	err = me.db.View(func(tx *bbolt.Tx) error {
 		cb := tx.Bucket(completionBucketKey)
 		if cb == nil {
@@ -71,7 +71,7 @@ func (me boltPieceCompletion) Get(pk metainfo.PieceKey) (cn Completion, err erro
 	return
 }
 
-func (me boltPieceCompletion) Set(pk metainfo.PieceKey, b bool) error {
+func (me *boltPieceCompletion) Set(pk metainfo.PieceKey, b bool) error {
 	if c, err := me.Get(pk); err == nil && c.Ok && c.Complete == b {
 		return nil
 	}

@@ -43,10 +43,12 @@ There are some small [examples](https://pkg.go.dev/github.com/anacrolix/torrent#
 
 ### Routing peer connections through a SOCKS5 proxy
 
-To dial peers through a SOCKS5 proxy, add the [dialer.Socks5](https://pkg.go.dev/github.com/anacrolix/torrent/dialer#NewSocks5) dialer to the client:
+To dial peers through a SOCKS5 proxy, add the [dialer.Socks5](https://pkg.go.dev/github.com/anacrolix/torrent/dialer#NewSocks5) dialer to the client. Start from the default config and set `DialForPeerConns` to false so the SOCKS5 dialer is the only one used for outgoing peer connections:
 
 ```go
-cl, _ := torrent.NewClient(&torrent.ClientConfig{})
+cfg := torrent.NewDefaultClientConfig()
+cfg.DialForPeerConns = false
+cl, _ := torrent.NewClient(cfg)
 cl.AddDialer(dialer.NewSocks5("localhost:1080", nil))
 ```
 

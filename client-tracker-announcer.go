@@ -439,14 +439,16 @@ func (me *regularTrackerAnnounceDispatcher) step() mytimer.TimeValue {
 	return me.nextTimerDelay()
 }
 
-func (me *regularTrackerAnnounceDispatcher) addKey(key torrentTrackerAnnouncerKey) {
+func (me *regularTrackerAnnounceDispatcher) addKey(key torrentTrackerAnnouncerKey) bool {
 	if me.announceData.ContainsKey(key) {
-		return
+		return true
 	}
 	t := me.torrentFromShortInfohash(key.ShortInfohash)
 	if t == nil {
-		// Crude, but the torrent was already dropped. We probably called AddTrackers late.
-		return
+		// Crude, but the torrent was already dropped. We probably called AddTrackers late. The
+		// caller must not record the key in that case, or updateTorrentInput will panic on the
+		// missing announceData entry.
+		return false
 	}
 	g.MakeMapIfNil(&me.torrentForAnnounceRequests)
 	// This can be duplicated when there's multiple trackers for a short infohash. That's fine.
@@ -462,6 +464,7 @@ func (me *regularTrackerAnnounceDispatcher) addKey(key torrentTrackerAnnouncerKe
 		infohashActive:         g.OptionFromTuple(me.infohashAnnouncing.Get(key.ShortInfohash)).Value.count,
 	})
 	me.updateTimer()
+	return true
 }
 
 // Returns nil if the torrent was dropped.

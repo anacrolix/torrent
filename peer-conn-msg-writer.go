@@ -97,6 +97,13 @@ func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 		}
 		if cn.writeBuffer.Len() == 0 {
 			cn.mu.Unlock()
+			// Wake at the keepalive deadline. If it has already passed (a keepalive wasn't wanted
+			// above), poll again in a full interval.
+			wait := keepAliveTimeout - time.Since(lastWrite)
+			if wait <= 0 {
+				wait = keepAliveTimeout
+			}
+			keepAliveTimer.Reset(wait)
 			select {
 			case <-cn.closed.Done():
 			case <-writeCond:
@@ -139,7 +146,6 @@ func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 		cn.mu.Unlock()
 		frontBuf.pieceDataBytes = 0
 		lastWrite = time.Now()
-		keepAliveTimer.Reset(keepAliveTimeout)
 	}
 }
 

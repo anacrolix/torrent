@@ -9,9 +9,38 @@ import (
 	"testing/synctest"
 	"time"
 
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/go-quicktest/qt"
+
+	"github.com/anacrolix/torrent/metainfo"
+	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 )
+
+// Adding a torrent with a v2 infohash but no info bytes used to panic in
+// updateTorrentInput: addKey can't find the torrent by its v2 short hash
+// (not yet in torrentsByShortHash), returns early, but
+// initRegularTrackerAnnounceState still records the key and defers an
+// update. The subsequent updateTorrentInput then hits a key missing from
+// announceData. See #1068.
+func TestV2InfohashUpdateTorrentInputNoPanic(t *testing.T) {
+	cfg := TestingConfig(t)
+	cfg.DisableTrackers = false
+	cl, err := NewClient(cfg)
+	qt.Assert(t, qt.IsNil(err))
+	t.Cleanup(func() { cl.Close() })
+	infoBytes := []byte("d6:lengthi1e4:name1:x12:piece lengthi16384e6:pieces20:aaaaaaaaaaaaaaaaaaaae")
+	v2 := infohash_v2.HashBytes(infoBytes)
+	torr, new_ := cl.AddTorrentOpt(AddTorrentOpts{
+		InfoHash:   metainfo.HashBytes(infoBytes),
+		InfoHashV2: g.Some(v2),
+	})
+	qt.Assert(t, qt.IsTrue(new_))
+	torr.addTrackers([][]string{{"http://tracker.example.com:6969/announce"}})
+	cl.lock()
+	defer cl.unlock()
+	cl.regularTrackerAnnounceDispatcher.updateTorrentInput(torr)
+}
 
 // This test doesn't really do much useful anymore. It is useful to break apart the dispatcher a bit
 // for testing. It's good to have something that hits up the triggers a bit.

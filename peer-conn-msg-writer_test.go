@@ -1,8 +1,13 @@
 package torrent
 
 import (
+	"io"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/anacrolix/chansync"
+	"github.com/anacrolix/log"
 	"github.com/dustin/go-humanize"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -47,6 +52,48 @@ func BenchmarkWritePieceMsg(b *testing.B) {
 				runBenchmarkMarshalBinaryWrite(b, int64(length))
 			})
 		})
+	}
+}
+
+// A broadcast that lands while fillWriteBuffer is running must not be
+// lost. The writer has to install its wakeup channel before filling, so
+// that a concurrent Broadcast closes a channel the subsequent select
+// observes. See #1070.
+func TestMsgWriterBroadcastDuringFillWakesWriter(t *testing.T) {
+	var w *peerConnMsgWriter
+	var fills atomic.Int32
+	w = &peerConnMsgWriter{
+		fillWriteBuffer: func() {
+			if fills.Add(1) == 1 {
+				w.writeCond.Broadcast()
+			}
+		},
+		closed:      new(chansync.SetOnce),
+		logger:      log.Default,
+		w:           io.Discard,
+		keepAlive:   func() bool { return false },
+		writeBuffer: new(peerConnMsgWriterBuffer),
+	}
+	done := make(chan struct{})
+	go func() {
+		w.run(time.Hour)
+		close(done)
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for fills.Load() < 2 {
+		if time.Now().After(deadline) {
+			w.closed.Set()
+			w.writeCond.Broadcast()
+			t.Fatal("writer never woke after a broadcast during fill: wakeup lost")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	w.closed.Set()
+	w.writeCond.Broadcast()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("writer run did not return after close")
 	}
 }
 

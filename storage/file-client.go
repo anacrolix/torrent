@@ -103,7 +103,11 @@ func (fs *fileClientImpl) OpenTorrent(
 		info.FileSegmentsIndex(),
 		infoHash,
 		defaultFileIo(),
+		nil,
 		fs,
+	}
+	if checkpointer, ok := fs.opts.PieceCompletion.(PieceCompletionCheckpointer); ok {
+		t.checkpoint = newTorrentCheckpointBuffer(t, checkpointer)
 	}
 	if t.partFiles() {
 		err = t.setCompletionFromPartFiles()

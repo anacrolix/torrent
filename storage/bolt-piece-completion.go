@@ -43,7 +43,7 @@ func NewBoltPieceCompletion(dir string) (ret PieceCompletion, err error) {
 		return
 	}
 	db.NoSync = true
-	ret = &boltPieceCompletion{db}
+	ret = newBufferedPieceCompletion(&boltPieceCompletion{db})
 	return
 }
 

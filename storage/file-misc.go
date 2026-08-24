@@ -88,6 +88,9 @@ type fileExtra struct {
 	mu sync.RWMutex
 	// The safe, OS-local file path.
 	safeOsPath string
+	// Remaining pieces touching this file that are not yet complete.
+	remainingPieces int
+	remainingKnown  bool
 	// Utility value to help the race detector find issues for us.
 	race byte
 }

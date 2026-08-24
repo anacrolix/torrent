@@ -168,6 +168,7 @@ func (me *filePieceImpl) markIncompletePieces(file *file, size int64) {
 }
 
 func (me *filePieceImpl) MarkComplete() (err error) {
+	prevCompletion := me.t.getCompletion(me.p.Index())
 	err = me.pieceCompletion().Set(me.pieceKey(), g.Some(true))
 	if err != nil {
 		return
@@ -178,8 +179,18 @@ func (me *filePieceImpl) MarkComplete() (err error) {
 			me.logger().Warn("error flushing completed piece", "piece", me.p.Index(), "err", err)
 		}
 	}
-	for f := range me.pieceFiles() {
-		res := me.allFilePiecesComplete(f)
+	for fileIndex := range me.fileExtents() {
+		f := me.t.file(fileIndex)
+		res := g.Result[bool]{}
+		if !(prevCompletion.Ok && prevCompletion.Complete) {
+			if allComplete, tracked := me.t.markFilePieceComplete(fileIndex); tracked {
+				res.SetOk(allComplete)
+			} else {
+				res = me.allFilePiecesComplete(f)
+			}
+		} else {
+			res = me.allFilePiecesComplete(f)
+		}
 		if res.Err != nil {
 			err = res.Err
 			return
@@ -222,11 +233,16 @@ func (me *filePieceImpl) allFilePiecesComplete(f file) (ret g.Result[bool]) {
 }
 
 func (me *filePieceImpl) MarkNotComplete() (err error) {
+	prevCompletion := me.t.getCompletion(me.p.Index())
 	err = me.pieceCompletion().Set(me.pieceKey(), g.Some(false))
 	if err != nil {
 		return
 	}
-	for f := range me.pieceFiles() {
+	for fileIndex := range me.fileExtents() {
+		if prevCompletion.Ok && prevCompletion.Complete {
+			me.t.markFilePieceIncomplete(fileIndex)
+		}
+		f := me.t.file(fileIndex)
 		err = me.onFileNotComplete(f)
 		if err != nil {
 			err = fmt.Errorf("preparing incomplete file %q: %w", f.safeOsPath, err)

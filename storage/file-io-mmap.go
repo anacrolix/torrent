@@ -36,7 +36,7 @@ func init() {
 		}
 	case "classic":
 		defaultFileIo = func() fileIo {
-			return classicFileIo{}
+			return newClassicFileIo()
 		}
 	default:
 		panic(s)

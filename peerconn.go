@@ -115,7 +115,7 @@ type PeerConn struct {
 	// Requests from the peer that haven't yet been read from storage for upload.
 	unreadPeerRequests map[Request]struct{}
 	// Peer request data that's ready to be uploaded.
-	readyPeerRequests map[Request][]byte
+	readyPeerRequests map[Request]peerRequestData
 	// Total peer request data buffered has decreased, so the server can read more.
 	peerRequestDataAllocDecreased chansync.BroadcastCond
 	// A routine is handling buffering peer request data.
@@ -257,6 +257,7 @@ func (cn *PeerConn) utp() bool {
 }
 
 func (cn *PeerConn) onClose() {
+	cn.deleteAllPeerRequests()
 	if cn.pex.IsEnabled() {
 		cn.pex.Close()
 	}
@@ -340,6 +341,9 @@ func (cn *PeerConn) choke(msg messageWriter) (more bool) {
 
 func (cn *PeerConn) deleteAllPeerRequests() {
 	clear(cn.unreadPeerRequests)
+	for _, prd := range cn.readyPeerRequests {
+		cn.releasePeerRequestData(prd)
+	}
 	clear(cn.readyPeerRequests)
 }
 
@@ -778,14 +782,24 @@ func (c *PeerConn) waitForDataAlloc(size int) bool {
 	}
 }
 
-func (me *PeerConn) deleteReadyPeerRequest(r Request) {
-	v, ok := me.readyPeerRequests[r]
+// Removes the ready peer request, handing its data to the caller, who becomes responsible for
+// releasing it.
+func (me *PeerConn) takeReadyPeerRequest(r Request) (prd peerRequestData, ok bool) {
+	prd, ok = me.readyPeerRequests[r]
 	if !ok {
 		return
 	}
 	delete(me.readyPeerRequests, r)
-	if len(v) > 0 {
+	if len(prd.buf) > 0 {
 		me.peerRequestDataAllocDecreased.Broadcast()
+	}
+	return
+}
+
+func (me *PeerConn) deleteReadyPeerRequest(r Request) {
+	prd, ok := me.takeReadyPeerRequest(r)
+	if ok {
+		me.releasePeerRequestData(prd)
 	}
 }
 
@@ -803,7 +817,7 @@ func (c *PeerConn) servePeerRequest(r Request) {
 		return
 	}
 	c.locker().Unlock()
-	b, err := c.readPeerRequestData(r)
+	prd, err := c.readPeerRequestData(r)
 	c.locker().Lock()
 	if err != nil {
 		c.peerRequestDataReadFailed(err, r)
@@ -811,11 +825,12 @@ func (c *PeerConn) servePeerRequest(r Request) {
 	}
 	if !g.MapContains(c.unreadPeerRequests, r) {
 		c.slogger.Debug("read data for peer request but no longer wanted", "request", r)
+		c.releasePeerRequestData(prd)
 		return
 	}
 	g.MustDelete(c.unreadPeerRequests, r)
 	g.MakeMapIfNil(&c.readyPeerRequests)
-	c.readyPeerRequests[r] = b
+	c.readyPeerRequests[r] = prd
 	c.tickleWriter()
 }
 
@@ -868,8 +883,33 @@ func (c *PeerConn) useBestReject(r Request) {
 	}
 }
 
-func (c *PeerConn) readPeerRequestData(r Request) ([]byte, error) {
-	b := make([]byte, r.Length)
+// Data read from storage for a peer request. Buffers big enough to be worth reusing come from the
+// Torrent chunk pool, and must be passed back to PeerConn.releasePeerRequestData when done.
+type peerRequestData struct {
+	buf []byte
+	// Set if buf belongs to the Torrent chunk pool.
+	poolPtr *[]byte
+}
+
+func (c *PeerConn) getPeerRequestData(n int) (prd peerRequestData) {
+	if n <= c.t.chunkSize.Int() {
+		prd.poolPtr = c.t.chunkPool.Get()
+		prd.buf = (*prd.poolPtr)[:n]
+	} else {
+		prd.buf = make([]byte, n)
+	}
+	return
+}
+
+func (c *PeerConn) releasePeerRequestData(prd peerRequestData) {
+	if prd.poolPtr != nil {
+		c.t.chunkPool.Put(prd.poolPtr)
+	}
+}
+
+func (c *PeerConn) readPeerRequestData(r Request) (prd peerRequestData, err error) {
+	prd = c.getPeerRequestData(r.Length.Int())
+	b := prd.buf
 	p := c.t.info.Piece(int(r.Index))
 	n, err := c.t.readAt(b, p.Offset()+int64(r.Begin))
 	if n == len(b) {
@@ -881,7 +921,11 @@ func (c *PeerConn) readPeerRequestData(r Request) ([]byte, error) {
 			panic("expected error")
 		}
 	}
-	return b, err
+	if err != nil {
+		c.releasePeerRequestData(prd)
+		prd = peerRequestData{}
+	}
+	return prd, err
 }
 
 func (c *PeerConn) logProtocolBehaviour(level log.Level, format string, arg ...interface{}) {
@@ -1263,16 +1307,19 @@ func (c *PeerConn) tickleWriter() {
 }
 
 func (c *PeerConn) sendChunk(r Request, msg func(pp.Message) bool) (more bool) {
-	b := g.MapMustGet(c.readyPeerRequests, r)
-	panicif.NotEq(len(b), r.Length.Int())
-	c.deleteReadyPeerRequest(r)
+	prd, ok := c.takeReadyPeerRequest(r)
+	panicif.False(ok)
+	panicif.NotEq(len(prd.buf), r.Length.Int())
 	c.lastChunkSent = time.Now()
-	return msg(pp.Message{
+	more = msg(pp.Message{
 		Type:  pp.Piece,
 		Index: r.Index,
 		Begin: r.Begin,
-		Piece: b,
+		Piece: prd.buf,
 	})
+	// msg copies the piece data into the write buffer, so the buffer is reusable now.
+	c.releasePeerRequestData(prd)
+	return
 }
 
 func (c *PeerConn) setTorrent(t *Torrent) {

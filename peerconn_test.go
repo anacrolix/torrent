@@ -618,3 +618,68 @@ func TestServePeerRequestTorrentClosedStorageReadFails(t *testing.T) {
 
 	qt.Check(t, qt.IsFalse(g.MapContains(pc.unreadPeerRequests, req)))
 }
+
+// Storage that serves piece data without touching the filesystem, for upload benchmarking.
+type benchmarkUploadStorage struct{}
+
+func (me benchmarkUploadStorage) OpenTorrent(
+	context.Context, *metainfo.Info, metainfo.Hash,
+) (storage.TorrentImpl, error) {
+	return storage.TorrentImpl{
+		Piece:     func(metainfo.Piece) storage.PieceImpl { return me },
+		NewReader: func() storage.TorrentReader { return me },
+		Close:     func() error { return nil },
+	}, nil
+}
+
+func (benchmarkUploadStorage) ReadAt(b []byte, _ int64) (int, error)  { return len(b), nil }
+func (benchmarkUploadStorage) WriteAt(b []byte, _ int64) (int, error) { return len(b), nil }
+func (benchmarkUploadStorage) Close() error                           { return nil }
+func (benchmarkUploadStorage) MarkComplete() error                    { return nil }
+func (benchmarkUploadStorage) MarkNotComplete() error                 { return nil }
+
+func (benchmarkUploadStorage) Completion() storage.Completion {
+	return storage.Completion{Complete: true, Ok: true}
+}
+
+// Serves peer requests the way the peer request server and the writer do.
+func BenchmarkServePeerRequests(b *testing.B) {
+	var cl Client
+	cfg := TestingConfig(b)
+	cfg.MaxAllocPeerRequestDataPerConn = 1 << 20
+	cl.init(cfg)
+	t, _ := cl.AddTorrentOpt(AddTorrentOpts{
+		InfoHash:                 testingTorrentInfoHash,
+		Storage:                  benchmarkUploadStorage{},
+		DisableInitialPieceCheck: true,
+	})
+	qt.Assert(b, qt.IsNil(t.setInfoUnlocked(&metainfo.Info{
+		Pieces:      make([]byte, 20),
+		Length:      1 << 20,
+		PieceLength: 1 << 20,
+	})))
+	cn := cl.newConnection(nil, newConnectionOpts{network: "test"})
+	cn.setTorrent(t)
+	cn.PeerExtensionBytes.SetBit(pp.ExtensionBitFast, true)
+	cn.choking = false
+	cn.initMessageWriter()
+	// Marshals the message like the real writer, then drops it so the buffer doesn't grow.
+	writeAndDiscard := func(msg pp.Message) bool {
+		mw := &cn.messageWriter
+		qt.Assert(b, qt.IsNil(mw.writeToBuffer(msg)))
+		mw.writeBuffer.Reset()
+		return true
+	}
+	req := Request{ChunkSpec: ChunkSpec{Length: defaultChunkSize}}
+	b.SetBytes(int64(req.Length))
+	b.ReportAllocs()
+	cl.lock()
+	defer cl.unlock()
+	for i := range b.N {
+		req.Begin = pp.Integer(i%64) * defaultChunkSize
+		qt.Assert(b, qt.IsNil(cn.onReadRequest(req, false)))
+		cn.servePeerRequest(req)
+		qt.Assert(b, qt.IsTrue(g.MapContains(cn.readyPeerRequests, req)))
+		cn.sendChunk(req, writeAndDiscard)
+	}
+}

@@ -1586,10 +1586,13 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	infoHash := opts.InfoHash
 	panicif.True(infoHash.IsZero() && !opts.InfoHashV2.Ok)
 	cl.lock()
-	t, ok := cl.torrentsByShortHash[infoHash]
-	if ok {
-		cl.unlock()
-		return
+	var ok bool
+	if !infoHash.IsZero() {
+		t, ok = cl.torrentsByShortHash[infoHash]
+		if ok {
+			cl.unlock()
+			return
+		}
 	}
 	if opts.InfoHashV2.Ok {
 		t, ok = cl.torrentsByShortHash[*opts.InfoHashV2.Value.ToShort()]
@@ -1606,7 +1609,9 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 			go t.dhtAnnouncer(s)
 		}
 	})
-	cl.torrentsByShortHash[infoHash] = t
+	t.eachShortInfohash(func(short [20]byte) {
+		cl.torrentsByShortHash[short] = t
+	})
 	t.setInfoBytesLocked(opts.InfoBytes)
 	cl.clearAcceptLimits()
 	t.updateWantPeersEvent()

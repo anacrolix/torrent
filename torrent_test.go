@@ -149,7 +149,7 @@ func TestPieceHashFailed(t *testing.T) {
 	tt := cl.newTorrent(mi.HashInfoBytes(), badStorage{})
 	tt.setChunkSize(2)
 	tt.cl.lock()
-	qt.Assert(t, qt.IsNil(tt.setInfoBytesLocked(mi.InfoBytes)))
+	qt.Assert(t, qt.IsNil(tt.setInfoBytesLocked(mi.InfoBytes, nil)))
 	tt.cl.unlock()
 	tt.cl.lock()
 	tt.dirtyChunks.AddRange(

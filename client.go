@@ -1584,7 +1584,7 @@ func (cl *Client) AddTorrentInfoHashWithStorage(
 // then this Storage is ignored and the existing torrent returned with `new` set to `false`.
 func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	infoHash := opts.InfoHash
-	panicif.Zero(infoHash)
+	panicif.True(infoHash.IsZero() && !opts.InfoHashV2.Ok)
 	cl.lock()
 	t, ok := cl.torrentsByShortHash[infoHash]
 	if ok {

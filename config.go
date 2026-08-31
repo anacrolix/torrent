@@ -92,6 +92,26 @@ type ClientConfig struct {
 	DownloadRateLimiter *rate.Limiter
 	// Maximum unverified bytes across all torrents. Not used if zero.
 	MaxUnverifiedBytes int64
+	// Minimum age an outstanding request must reach before another peer is allowed to steal it.
+	// Zero or negative disables the check, which is the historical behaviour.
+	//
+	// Stealing (see PeerConn.applyRequestState) hands a request to a peer that looks better, and
+	// its trigger is a one-request difference in queue depth. Across a large peer set that
+	// difference is noise: queue depths move by one every time a chunk lands, so without a floor
+	// the same request can migrate several times inside a single round-trip. Each migration is a
+	// Cancel on the wire, and a Cancel only prevents a transfer if it reaches the peer before the
+	// peer has served the request. Otherwise the block arrives regardless and is thrown away as
+	// ConnStats.ChunksReadWasted, while the stealer requests the same block again.
+	//
+	// A request younger than a round-trip has not yet had the opportunity to be answered, so its
+	// holder has not been shown to be failing and there is no information in moving it. Requiring
+	// an age gives each holder one uninterrupted attempt, and because the age is reset every time
+	// the request is issued (PeerConn.request), it also caps how often a single request can move.
+	//
+	// Latency is what makes this matter: the data already committed to the wire when a Cancel is
+	// sent scales with round-trip time, so on a LAN the cost of a steal is near zero and on a
+	// tunnelled path it is not.
+	StealRequestGrace time.Duration
 
 	// User-provided Client peer ID. If not present, one is generated automatically.
 	PeerID string
@@ -255,6 +275,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		DialForPeerConns:       true,
 		AcceptPeerConnections:  true,
 		MaxUnverifiedBytes:     64 << 20,
+		StealRequestGrace:      initDurationFromEnv(stealRequestGraceEnvKey, defaultStealRequestGrace),
 		DialRateLimiter:        rate.NewLimiter(10, 10),
 		PieceHashersPerTorrent: 2,
 	}

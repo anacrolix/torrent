@@ -391,6 +391,12 @@ func (p *PeerConn) applyRequestState(next desiredRequestState) {
 			if diff > 1 || (diff == 1 && !p.lastUsefulChunkReceived.After(existing.lastUsefulChunkReceived)) {
 				continue
 			}
+			// Don't steal a request the current holder has not had time to answer. The tests
+			// above compare queue depths, which say nothing about whether the block is already
+			// on the wire; see ClientConfig.StealRequestGrace.
+			if !t.stealRequestGraceElapsed(req) {
+				continue
+			}
 			t.cancelRequest(req)
 		}
 		more = p.mustRequest(req)
@@ -411,6 +417,21 @@ func (p *PeerConn) applyRequestState(next desiredRequestState) {
 	// 	"requests %v->%v (peak %v->%v) reason %q (peer %v)",
 	// 	originalRequestCount, current.Requests.GetCardinality(), p.peakRequests, newPeakRequests, p.needRequestUpdate, p)
 	p.peakRequests = newPeakRequests
+}
+
+// stealRequestGraceElapsed reports whether req has been outstanding with its current holder
+// long enough for another peer to be allowed to take it. Always true when
+// ClientConfig.StealRequestGrace is unset, which is the historical behaviour.
+//
+// The clock is requestState.when, which PeerConn.request rewrites on every issue, so the
+// grace is measured against the current holder rather than the request's total lifetime.
+func (t *Torrent) stealRequestGraceElapsed(req RequestIndex) bool {
+	grace := t.cl.config.StealRequestGrace
+	if grace <= 0 {
+		return true
+	}
+	// The caller has already resolved a requesting peer for req, so the state is present.
+	return time.Since(t.requestState[req].when) >= grace
 }
 
 // This could be set to 10s to match the unchoke/request update interval recommended by some

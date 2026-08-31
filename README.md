@@ -41,6 +41,20 @@ Alternatively, disable the workspace by setting `GOWORK=off`, though the `possum
 
 There are some small [examples](https://pkg.go.dev/github.com/anacrolix/torrent#pkg-examples) in the package documentation.
 
+### Routing peer connections through a SOCKS5 proxy
+
+To dial peers through a SOCKS5 proxy, add the [dialer.Socks5](https://pkg.go.dev/github.com/anacrolix/torrent/dialer#NewSocks5) dialer to the client. Start from the default config and set `DialForPeerConns` to false so the SOCKS5 dialer is the only one used for outgoing peer connections:
+
+```go
+cfg := torrent.NewDefaultClientConfig()
+cfg.DialForPeerConns = false
+cl, _ := torrent.NewClient(cfg)
+cl.AddDialer(dialer.NewSocks5("localhost:1080", nil))
+```
+
+The proxy is used for outgoing peer connections; listening for incoming
+connections is unaffected.
+
 ## Mentions
 
  * [@anacrolix](https://github.com/anacrolix) is interviewed about this repo in [Console 32](https://console.substack.com/p/console-32).

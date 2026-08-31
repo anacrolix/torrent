@@ -95,7 +95,7 @@ func TestTorrentInitialState(t *testing.T) {
 	)
 	tor.setChunkSize(2)
 	tor.cl.lock()
-	err := tor.setInfoBytesLocked(mi.InfoBytes)
+	err := tor.setInfoBytesLocked(mi.InfoBytes, nil)
 	tor.cl.unlock()
 	qt.Assert(t, qt.IsNil(err))
 	qt.Assert(t, qt.HasLen(tor.pieces, 3))
@@ -198,6 +198,19 @@ func TestCompletedPieceWrongSize(t *testing.T) {
 	defer r.Close()
 	r.SetContext(t.Context())
 	qt.Check(t, qt.IsNil(iotest.TestReader(r, []byte(testutil.GreetingFileContents))))
+}
+
+// https://github.com/anacrolix/torrent/issues/1089
+func TestAddPureV2Torrent(t *testing.T) {
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	tt, err := cl.AddTorrentFromFile("testdata/bittorrent-v2-test.torrent")
+	qt.Assert(t, qt.IsNil(err))
+	defer tt.Drop()
+	qt.Check(t, qt.IsFalse(tt.infoHash.Ok))
+	qt.Check(t, qt.IsTrue(tt.infoHashV2.Ok))
+	qt.Check(t, qt.Not(qt.DeepEquals(tt.InfoHash(), metainfo.Hash{})))
 }
 
 func BenchmarkAddLargeTorrent(b *testing.B) {

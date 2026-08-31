@@ -38,9 +38,9 @@ func TestV2InfohashUpdateTorrentInputNoPanic(t *testing.T) {
 		InfoHashV2: g.Some(v2),
 	})
 	qt.Assert(t, qt.IsTrue(new_))
-	torr.addTrackers([][]string{{"http://tracker.example.com:6969/announce"}})
 	cl.lock()
 	defer cl.unlock()
+	torr.addTrackers([][]string{{"http://tracker.example.com:6969/announce"}})
 	cl.regularTrackerAnnounceDispatcher.updateTorrentInput(torr)
 }
 

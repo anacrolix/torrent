@@ -633,7 +633,7 @@ func (t *Torrent) hashInfoBytes(b []byte, info *metainfo.Info) error {
 }
 
 // Called when metadata for a torrent becomes available.
-func (t *Torrent) setInfoBytesLocked(b []byte) (err error) {
+func (t *Torrent) setInfoBytesLocked(b []byte, pieceLayers map[string]string) (err error) {
 	var info metainfo.Info
 	err = bencode.Unmarshal(b, &info)
 	if err != nil {
@@ -650,6 +650,13 @@ func (t *Torrent) setInfoBytesLocked(b []byte) (err error) {
 		return nil
 	}
 	err = t.setInfo(&info)
+	if err != nil {
+		return
+	}
+	// Apply any known piece hashes before onSetInfo computes initial piece priorities and
+	// pending state, so pieces aren't briefly treated as pending-but-unhashed (which for v2
+	// torrents disagrees with the piece request order until the hashes are applied).
+	err = errors.Join(t.addPieceLayersLocked(pieceLayers)...)
 	if err != nil {
 		return
 	}
@@ -1864,7 +1871,7 @@ func (t *Torrent) maybeCompleteMetadata() error {
 		// Don't have enough metadata pieces.
 		return nil
 	}
-	err := t.setInfoBytesLocked(t.metadataBytes)
+	err := t.setInfoBytesLocked(t.metadataBytes, nil)
 	if err != nil {
 		t.invalidateMetadata()
 		return fmt.Errorf("error setting info bytes: %w", err)
@@ -1962,7 +1969,7 @@ func (t *Torrent) SetInfoBytes(b []byte) (err error) {
 	if err != nil {
 		return
 	}
-	return t.setInfoBytesLocked(b)
+	return t.setInfoBytesLocked(b, nil)
 }
 
 // Returns true if connection is removed from torrent.Conns.
@@ -2648,9 +2655,12 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	if passed {
 		t.incrementPiecesDirtiedStats(p, (*ConnStats).incrementPiecesDirtiedGood)
 		t.clearPieceTouchers(piece)
+		// Piece.Storage reads piece state (notably the v2 hash, which Piece.setV2Hash can write
+		// while we don't hold the Client lock), so obtain it before unlocking.
+		storagePiece := p.Storage()
 		t.cl.unlock()
 		s.race++
-		err := p.Storage().MarkComplete()
+		err := storagePiece.MarkComplete()
 		if err != nil {
 			t.slogger().Error("error marking piece complete", "piece", piece, "err", err)
 		}
@@ -2709,9 +2719,10 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		}
 
 		// This pattern is copied from MarkComplete above. Note the pattern.
+		storagePiece := p.Storage()
 		t.cl.unlock()
 		s.race++
-		err := p.Storage().MarkNotComplete()
+		err := storagePiece.MarkNotComplete()
 		if err != nil {
 			t.slogger().Error("error marking piece not complete", "piece", piece, "err", err)
 		}

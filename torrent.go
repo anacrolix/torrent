@@ -2655,9 +2655,12 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	if passed {
 		t.incrementPiecesDirtiedStats(p, (*ConnStats).incrementPiecesDirtiedGood)
 		t.clearPieceTouchers(piece)
+		// Piece.Storage reads piece state (notably the v2 hash, which Piece.setV2Hash can write
+		// while we don't hold the Client lock), so obtain it before unlocking.
+		storagePiece := p.Storage()
 		t.cl.unlock()
 		s.race++
-		err := p.Storage().MarkComplete()
+		err := storagePiece.MarkComplete()
 		if err != nil {
 			t.slogger().Error("error marking piece complete", "piece", piece, "err", err)
 		}
@@ -2716,9 +2719,10 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		}
 
 		// This pattern is copied from MarkComplete above. Note the pattern.
+		storagePiece := p.Storage()
 		t.cl.unlock()
 		s.race++
-		err := p.Storage().MarkNotComplete()
+		err := storagePiece.MarkNotComplete()
 		if err != nil {
 			t.slogger().Error("error marking piece not complete", "piece", piece, "err", err)
 		}

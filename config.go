@@ -199,7 +199,12 @@ type ClientConfig struct {
 	// bit of a special case, since a peer could also be useless if they're just not interested, or
 	// we don't intend to obtain all of a torrent's data.
 	DropMutuallyCompletePeers bool
-	// Use dialers to obtain connections to regular peers.
+	// Whether to use the Client's own listen sockets (the "default dialers") to make outgoing
+	// connections to regular peers. This is enabled by default. Setting it to false disables
+	// these default dialers, so that outgoing peer connections are only made through any
+	// additional Dialer added by other means (see Client.AddDialer), such as a SOCKS5 proxy
+	// dialer. This has no effect on incoming connections, which are controlled separately by
+	// AcceptPeerConnections.
 	DialForPeerConns bool
 	// Whether to accept peer connections at all.
 	AcceptPeerConnections bool

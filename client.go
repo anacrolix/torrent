@@ -1584,12 +1584,15 @@ func (cl *Client) AddTorrentInfoHashWithStorage(
 // then this Storage is ignored and the existing torrent returned with `new` set to `false`.
 func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	infoHash := opts.InfoHash
-	panicif.Zero(infoHash)
+	panicif.True(infoHash.IsZero() && !opts.InfoHashV2.Ok)
 	cl.lock()
-	t, ok := cl.torrentsByShortHash[infoHash]
-	if ok {
-		cl.unlock()
-		return
+	var ok bool
+	if !infoHash.IsZero() {
+		t, ok = cl.torrentsByShortHash[infoHash]
+		if ok {
+			cl.unlock()
+			return
+		}
 	}
 	if opts.InfoHashV2.Ok {
 		t, ok = cl.torrentsByShortHash[*opts.InfoHashV2.Value.ToShort()]
@@ -1606,8 +1609,10 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 			go t.dhtAnnouncer(s)
 		}
 	})
-	cl.torrentsByShortHash[infoHash] = t
-	t.setInfoBytesLocked(opts.InfoBytes)
+	t.eachShortInfohash(func(short [20]byte) {
+		cl.torrentsByShortHash[short] = t
+	})
+	t.setInfoBytesLocked(opts.InfoBytes, opts.PieceLayers)
 	cl.clearAcceptLimits()
 	t.updateWantPeersEvent()
 	// Tickle Client.waitAccept, new torrent may want conns.
@@ -1632,6 +1637,9 @@ type AddTorrentOpts struct {
 	// default chunk size is used (16 KiB in current modern BitTorrent clients).
 	ChunkSize pp.Integer
 	InfoBytes []byte
+	// BEP 52 "piece layers" from metainfo, applied before the initial piece priorities are
+	// computed so v2 piece hashes are available from the start, same as v1.
+	PieceLayers map[string]string
 	// Don't hash data if piece completion is missing. This is useful for very large torrents that
 	// are dropped in place from an external source and trigger a lot of initial piece checks.
 	DisableInitialPieceCheck bool
@@ -1646,7 +1654,9 @@ type AddTorrentOpts struct {
 // Add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also
 // Torrent.MergeSpec.
 func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
-	t, new = cl.AddTorrentOpt(spec.AddTorrentOpts)
+	opts := spec.AddTorrentOpts
+	opts.PieceLayers = spec.PieceLayers
+	t, new = cl.AddTorrentOpt(opts)
 	modSpec := *spec
 	// ChunkSize was already applied by adding a new Torrent, and MergeSpec disallows changing it.
 	modSpec.ChunkSize = 0

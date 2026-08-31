@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"context"
-	"runtime"
 	"testing"
 
 	g "github.com/anacrolix/generics"
@@ -24,11 +23,10 @@ func TestRequestStrategyPieceDoesntAlloc(t *testing.T) {
 	// Query through the interface, as the request strategy does. Piece is now an index-based call
 	// returning a bool, so no per-piece value is boxed and nothing is allocated.
 	var input requestStrategy.Torrent = requestStrategyTorrent{akshalTorrent}
-	var before, after runtime.MemStats
-	runtime.ReadMemStats(&before)
-	requestStrategyResultSink = input.PieceRequest(0)
-	runtime.ReadMemStats(&after)
-	qt.Assert(t, qt.Equals(before.HeapAlloc, after.HeapAlloc))
+	allocs := testing.AllocsPerRun(10, func() {
+		requestStrategyResultSink = input.PieceRequest(0)
+	})
+	qt.Assert(t, qt.Equals(allocs, 0.0))
 }
 
 type storagePiece struct {

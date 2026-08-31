@@ -79,13 +79,13 @@ func TestDiscovery(t *testing.T) {
 	qt.Assert(t, qt.IsNil(err))
 	t.Cleanup(func() { client1.Close() })
 	setupTestLPD(client1)
-	testutil.ExportStatusWriter(client1, "1", t)
+	defer testutil.ExportStatusWriter(client1, "1", t)()
 
 	client2, err := NewClient(config)
 	qt.Assert(t, qt.IsNil(err))
 	t.Cleanup(func() { client2.Close() })
 	setupTestLPD(client2)
-	testutil.ExportStatusWriter(client2, "2", t)
+	defer testutil.ExportStatusWriter(client2, "2", t)()
 
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)

@@ -41,42 +41,42 @@ func mainErr(ctx context.Context) error {
 	p := bargle.NewParser()
 	defer p.DoHelpIfHelping()
 	var debug bool
-	bargle.ParseAll(p, desc("enable debug logging", boolFlag("debug", &debug)))
+	bargle.ParseAll(p, desc("enable debug logging", bargle.Flag("debug", &debug)))
 	if debug {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
 	}
-	run := parseSubcommand(p,
+	run := bargle.ParseSubcommand(p,
 		subcommand{
-			name:  "metainfo",
-			desc:  "inspect a torrent file",
-			parse: metainfoCmd,
+			Name:  "metainfo",
+			Desc:  "inspect a torrent file",
+			Parse: metainfoCmd,
 		},
 		subcommand{
-			name:  "announce",
-			desc:  "announce to a tracker",
-			parse: announceCmd,
+			Name:  "announce",
+			Desc:  "announce to a tracker",
+			Parse: announceCmd,
 		},
 		subcommand{
-			name:  "scrape",
-			desc:  "fetch swarm metrics for info-hashes from tracker",
-			parse: scrapeCmd,
+			Name:  "scrape",
+			Desc:  "fetch swarm metrics for info-hashes from tracker",
+			Parse: scrapeCmd,
 		},
 		subcommand{
-			name: "download",
-			desc: "download torrents",
-			parse: func(p *bargle.Parser) action {
+			Name: "download",
+			Desc: "download torrents",
+			Parse: func(p *bargle.Parser) action {
 				return downloadCmd(ctx, p, debug)
 			},
 		},
 		subcommand{
-			name:  "bencode",
-			desc:  "reads bencoding from stdin into Go native types and spews the result",
-			parse: bencodeCmd,
+			Name:  "bencode",
+			Desc:  "reads bencoding from stdin into Go native types and spews the result",
+			Parse: bencodeCmd,
 		},
 		subcommand{
-			name: "version",
-			desc: "prints various protocol default version strings",
-			parse: func(p *bargle.Parser) action {
+			Name: "version",
+			Desc: "prints various protocol default version strings",
+			Parse: func(p *bargle.Parser) action {
 				return func() error {
 					fmt.Printf("HTTP User-Agent: %q\n", version.DefaultHttpUserAgent)
 					fmt.Printf("Torrent client version: %q\n", version.DefaultExtendedHandshakeClientVersion)
@@ -86,19 +86,19 @@ func mainErr(ctx context.Context) error {
 			},
 		},
 		subcommand{
-			name:  "serve",
-			desc:  "creates and seeds a torrent from a filepath",
-			parse: serveCmd,
+			Name:  "serve",
+			Desc:  "creates and seeds a torrent from a filepath",
+			Parse: serveCmd,
 		},
 		subcommand{
-			name:  "create",
-			desc:  "creates a torrent metainfo for the file system rooted at ROOT, and outputs it to stdout",
-			parse: createCmd,
+			Name:  "create",
+			Desc:  "creates a torrent metainfo for the file system rooted at ROOT, and outputs it to stdout",
+			Parse: createCmd,
 		},
 		subcommand{
-			name:  "lpd",
-			desc:  "Local Peer Discovery (BEP-14) tools — listen for or send LPD announcements without a full client",
-			parse: lpdCmd,
+			Name:  "lpd",
+			Desc:  "Local Peer Discovery (BEP-14) tools — listen for or send LPD announcements without a full client",
+			Parse: lpdCmd,
 		},
 	)
 	p.FailIfArgsRemain()
@@ -109,11 +109,11 @@ func mainErr(ctx context.Context) error {
 }
 
 func bencodeCmd(p *bargle.Parser) action {
-	return parseSubcommand(p,
+	return bargle.ParseSubcommand(p,
 		subcommand{
-			name: "json",
-			desc: "print the decoded values as indented JSON",
-			parse: func(p *bargle.Parser) action {
+			Name: "json",
+			Desc: "print the decoded values as indented JSON",
+			Parse: func(p *bargle.Parser) action {
 				return func() error {
 					je := json.NewEncoder(os.Stdout)
 					je.SetIndent("", "  ")
@@ -122,9 +122,9 @@ func bencodeCmd(p *bargle.Parser) action {
 			},
 		},
 		subcommand{
-			name: "spew",
-			desc: "print the decoded values with go-spew",
-			parse: func(p *bargle.Parser) action {
+			Name: "spew",
+			Desc: "print the decoded values with go-spew",
+			Parse: func(p *bargle.Parser) action {
 				return func() error {
 					config := spew.NewDefaultConfig()
 					config.DisableCapacities = true

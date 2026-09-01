@@ -16,8 +16,11 @@ import (
 
 func serveCmd(p *bargle.Parser) action {
 	var filePaths []string
-	bargle.ParseAll(p, positionals("file path", &filePaths, bargle.BuiltinUnmarshaler[string]))
-	requireArg(p, "file path", len(filePaths) != 0)
+	paths := bargle.Positionals(
+		"file path",
+		bargle.AppendSlice(&filePaths, bargle.BuiltinUnmarshaler[string]))
+	bargle.ParseAll(p, paths)
+	p.Require(paths)
 	return func() error {
 		cfg := torrent.NewDefaultClientConfig()
 		cfg.Seed = true

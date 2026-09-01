@@ -17,23 +17,17 @@ type scrapeCfg struct {
 }
 
 func scrapeCmd(p *bargle.Parser) action {
-	var (
-		cfg         scrapeCfg
-		haveTracker bool
-	)
-	bargle.ParseAll(p,
-		positional("tracker", &haveTracker, bargle.BuiltinUnmarshaler(&cfg.Tracker)),
-		positionals("info-hashes", &cfg.InfoHashes, infoHashUnmarshaler),
-	)
-	requireArg(p, "tracker", haveTracker)
-	requireArg(p, "info-hashes", len(cfg.InfoHashes) != 0)
+	var cfg scrapeCfg
+	trackerArg := bargle.Positional("tracker", bargle.BuiltinUnmarshaler(&cfg.Tracker))
+	infoHashes := bargle.Positionals(
+		"info-hashes",
+		bargle.AppendSlice(&cfg.InfoHashes, infoHashUnmarshaler))
+	bargle.ParseAll(p, trackerArg, infoHashes)
+	p.Require(trackerArg)
+	p.Require(infoHashes)
 	return func() error {
 		return scrape(cfg)
 	}
-}
-
-func infoHashUnmarshaler(target *infohash.T) bargle.Unmarshaler {
-	return bargle.TextUnmarshaler(target)
 }
 
 func scrape(flags scrapeCfg) error {

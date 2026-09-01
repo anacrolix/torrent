@@ -33,14 +33,14 @@ const (
 )
 
 func lpdCmd(p *bargle.Parser) action {
-	return parseSubcommand(p,
+	return bargle.ParseSubcommand(p,
 		subcommand{
-			name: "listen",
-			desc: "join the LPD multicast group and print incoming BT-SEARCH announcements",
-			parse: func(p *bargle.Parser) action {
+			Name: "listen",
+			Desc: "join the LPD multicast group and print incoming BT-SEARCH announcements",
+			Parse: func(p *bargle.Parser) action {
 				var ip6 bool
 				bargle.ParseAll(p,
-					desc("also listen on the IPv6 multicast group", boolFlag("ip6", &ip6)),
+					desc("also listen on the IPv6 multicast group", bargle.Flag("ip6", &ip6)),
 				)
 				return func() error {
 					return lpdListen(ip6)
@@ -48,22 +48,24 @@ func lpdCmd(p *bargle.Parser) action {
 			},
 		},
 		subcommand{
-			name: "announce",
-			desc: "send a BT-SEARCH announcement for the given infohashes and exit",
-			parse: func(p *bargle.Parser) action {
+			Name: "announce",
+			Desc: "send a BT-SEARCH announcement for the given infohashes and exit",
+			Parse: func(p *bargle.Parser) action {
 				var args struct {
 					Port       int
 					Ip6        bool
 					Infohashes []string
 				}
+				infohashes := bargle.Positionals(
+					"infohashes",
+					bargle.AppendSlice(&args.Infohashes, bargle.BuiltinUnmarshaler[string]))
 				bargle.ParseAll(p,
 					desc("BitTorrent listen port to include in the announcement",
-						builtinLong("port", &args.Port)),
-					desc("also send to the IPv6 multicast group", boolFlag("ip6", &args.Ip6)),
-					desc("infohash hex strings to announce",
-						positionals("infohashes", &args.Infohashes, bargle.BuiltinUnmarshaler[string])),
+						bargle.Long("port", bargle.BuiltinUnmarshaler(&args.Port))),
+					desc("also send to the IPv6 multicast group", bargle.Flag("ip6", &args.Ip6)),
+					desc("infohash hex strings to announce", infohashes),
 				)
-				requireArg(p, "infohashes", len(args.Infohashes) != 0)
+				p.Require(infohashes)
 				return func() error {
 					return lpdAnnounce(args.Port, args.Ip6, args.Infohashes)
 				}

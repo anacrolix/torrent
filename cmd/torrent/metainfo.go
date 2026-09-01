@@ -21,17 +21,15 @@ type pprintMetainfoFlags struct {
 }
 
 func metainfoCmd(p *bargle.Parser) action {
-	var (
-		metainfoPath string
-		havePath     bool
-	)
-	bargle.ParseAll(p, positional("torrent file", &havePath, bargle.BuiltinUnmarshaler(&metainfoPath)))
-	requireArg(p, "torrent file", havePath)
-	return parseSubcommand(p,
+	var metainfoPath string
+	path := bargle.Positional("torrent file", bargle.BuiltinUnmarshaler(&metainfoPath))
+	bargle.ParseAll(p, path)
+	p.Require(path)
+	return bargle.ParseSubcommand(p,
 		subcommand{
-			name: "magnet",
-			desc: "print a v2 magnet link for the torrent",
-			parse: func(p *bargle.Parser) action {
+			Name: "magnet",
+			Desc: "print a v2 magnet link for the torrent",
+			Parse: func(p *bargle.Parser) action {
 				return func() error {
 					mi, err := loadMetainfo(metainfoPath)
 					if err != nil {
@@ -47,14 +45,14 @@ func metainfoCmd(p *bargle.Parser) action {
 			},
 		},
 		subcommand{
-			name: "pprint",
-			desc: "pretty print the torrent's metainfo as JSON",
-			parse: func(p *bargle.Parser) action {
+			Name: "pprint",
+			Desc: "pretty print the torrent's metainfo as JSON",
+			Parse: func(p *bargle.Parser) action {
 				var flags pprintMetainfoFlags
 				bargle.ParseAll(p,
-					desc("only print the torrent name", boolFlag("just-name", &flags.JustName)),
-					desc("include piece hashes", boolFlag("piece-hashes", &flags.PieceHashes)),
-					desc("include files", boolFlag("files", &flags.Files)),
+					desc("only print the torrent name", bargle.Flag("just-name", &flags.JustName)),
+					desc("include piece hashes", bargle.Flag("piece-hashes", &flags.PieceHashes)),
+					desc("include files", bargle.Flag("files", &flags.Files)),
 				)
 				return func() (err error) {
 					mi, err := loadMetainfo(metainfoPath)

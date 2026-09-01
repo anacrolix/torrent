@@ -605,6 +605,7 @@ func TestServePeerRequestTorrentClosedStorageReadFails(t *testing.T) {
 
 	pc := cl.newConnection(nil, newConnectionOpts{network: "test"})
 	pc.setTorrent(tor)
+	pc.t.chunkSize = 1
 
 	req := Request{Index: 0, ChunkSpec: ChunkSpec{Begin: 0, Length: 1}}
 	g.MakeMapIfNil(&pc.unreadPeerRequests)

@@ -748,26 +748,34 @@ again:
 	c.locker().Unlock()
 }
 
+func (c *PeerConn) peerRequestDataAllocSize(size int) int {
+	if size <= c.t.chunkSize.Int() {
+		return c.t.chunkSize.Int()
+	}
+	return size
+}
+
 func (c *PeerConn) peerRequestDataBuffered() (n int) {
 	// TODO: Should we include a limit to the number of individual requests to keep N small, or keep
 	// a counter elsewhere?
 	for r := range c.readyPeerRequests {
-		n += r.Length.Int()
+		n += c.peerRequestDataAllocSize(r.Length.Int())
 	}
 	return
 }
 
 func (c *PeerConn) waitForDataAlloc(size int) bool {
+	allocSize := c.peerRequestDataAllocSize(size)
 	maxAlloc := c.t.cl.config.MaxAllocPeerRequestDataPerConn
 	locker := c.locker()
 	for {
-		if size > maxAlloc {
+		if allocSize > maxAlloc {
 			c.slogger.Warn("peer request length exceeds MaxAllocPeerRequestDataPerConn",
 				"requested", size,
 				"max", maxAlloc)
 			return false
 		}
-		if c.peerRequestDataBuffered()+size <= maxAlloc {
+		if c.peerRequestDataBuffered()+allocSize <= maxAlloc {
 			return true
 		}
 		allocDecreased := c.peerRequestDataAllocDecreased.Signaled()

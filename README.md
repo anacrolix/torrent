@@ -21,6 +21,8 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes by version.
 
 Install the library package with `go get github.com/anacrolix/torrent`, or the provided cmds with `go install github.com/anacrolix/torrent/cmd/...@latest`. Installing by import path like this runs in Go's module-aware mode and ignores the repository's `go.work` file, so it works without checking out any git submodules.
 
+With Nix, `nix profile install github:anacrolix/torrent` installs the same commands. See [With Nix](#with-nix).
+
 ## Building from a checkout
 
 The repository includes a Go workspace (`go.work`) that adds the [`possum`](https://github.com/anacrolix/possum) storage backend. `possum` is vendored as a git submodule at `storage/possum/lib`, and the workspace references the Go module inside it (`storage/possum/lib/go`). Building from a clone of this repository (for example `go build ./...`) therefore requires the submodule to be checked out, otherwise Go fails with an error like:
@@ -36,6 +38,17 @@ or, in an existing clone:
     git submodule update --init --recursive
 
 Alternatively, disable the workspace by setting `GOWORK=off`, though the `possum` storage backend won't be available in that case.
+
+### With Nix
+
+A flake is provided. It builds the command packages with the Go workspace disabled, so neither the git submodules nor a Rust toolchain are required:
+
+    nix build github:anacrolix/torrent
+    nix run github:anacrolix/torrent -- download <magnet>
+
+`nix develop` (or `nix-shell`, for setups without flakes) gives a shell with everything `just test` needs from a checkout: Go, `just`, `golangci-lint`, Rust for building `possum`, and FUSE for the `torrentfs` tests.
+
+When the dependencies change, `vendorHash` in [nix/package.nix](nix/package.nix) has to be updated: set it to `lib.fakeHash`, run `nix build .#torrent`, and copy the hash Nix reports back into the file.
 
 ## Library examples
 

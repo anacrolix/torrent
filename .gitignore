@@ -3,3 +3,5 @@
 .envrc*
 .DS_Store
 /vendor
+/result
+/result-*

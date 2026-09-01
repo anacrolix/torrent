@@ -12,6 +12,7 @@ All notable changes to [anacrolix/torrent](https://github.com/anacrolix/torrent)
 - Batch torrent input updates by doing them in the dispatcher
 - Close shared readers when storage is closed
 - Use `InsteadOf` and various other indexed improvements to manage announce overdue
+- Add Nix support: a flake with a package for the `cmd` packages and a development shell
 
 ## [v1.61.0] - 2025-12-17
 

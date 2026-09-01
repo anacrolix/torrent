@@ -1,0 +1,22 @@
+name: Nix
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      # No submodules: the flake builds the command packages with the Go
+      # workspace disabled, so possum isn't needed.
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Build the command packages
+        run: nix build --print-build-logs .#torrent
+      - name: Check the built binary runs
+        run: ./result/bin/torrent version
+      - name: Check the dev shell
+        run: nix develop --command go version

@@ -12,7 +12,7 @@ import (
 	"os"
 
 	"github.com/anacrolix/bargle/v2"
-	_ "github.com/anacrolix/envpprof"
+	"github.com/anacrolix/envpprof"
 	app "github.com/anacrolix/gostdapp"
 	"github.com/anacrolix/log"
 	expvar_prometheus "github.com/anacrolix/missinggo/v2/expvar-prometheus"
@@ -39,7 +39,6 @@ func main() {
 
 func mainErr(ctx context.Context) error {
 	p := bargle.NewParser()
-	defer p.DoHelpIfHelping()
 	var debug bool
 	bargle.ParseAll(p, desc("enable debug logging", bargle.Flag("debug", &debug)))
 	if debug {
@@ -102,8 +101,19 @@ func mainErr(ctx context.Context) error {
 		},
 	)
 	p.FailIfArgsRemain()
+	p.DoHelpIfHelping()
 	if !p.Ok() || run == nil {
-		return p.Err()
+		// Getting the arguments wrong is the user's mistake, not a failure of the program. Report
+		// it the way a command line is expected to, rather than returning it to be logged with a
+		// timestamp, a level and a source location. Nothing has been started yet except what
+		// envpprof does for itself, so there's nothing else to unwind.
+		if err := p.Err(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			envpprof.Stop()
+			os.Exit(2)
+		}
+		// Help was requested and printed.
+		return nil
 	}
 	return run()
 }

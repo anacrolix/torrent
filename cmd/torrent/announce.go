@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/anacrolix/bargle/v2"
 	"github.com/davecgh/go-spew/spew"
 
 	"github.com/anacrolix/torrent"
@@ -14,8 +15,27 @@ import (
 type AnnounceCmd struct {
 	Event    udp.AnnounceEvent
 	Port     *uint16
-	Tracker  string     `arg:"positional"`
-	InfoHash infohash.T `arg:"positional"`
+	Tracker  string
+	InfoHash infohash.T
+}
+
+func announceCmd(p *bargle.Parser) action {
+	var (
+		args                      AnnounceCmd
+		haveTracker, haveInfoHash bool
+	)
+	bargle.ParseAll(p,
+		desc("announce event (completed, started, or stopped)", textLong("event", &args.Event)),
+		desc("port to announce, defaults to the client's listen port",
+			bargle.Long("port", pointerUnmarshaler(&args.Port, uint16Unmarshaler))),
+		positional("tracker", &haveTracker, bargle.BuiltinUnmarshaler(&args.Tracker)),
+		positional("info-hash", &haveInfoHash, bargle.TextUnmarshaler(&args.InfoHash)),
+	)
+	requireArg(p, "tracker", haveTracker)
+	requireArg(p, "info-hash", haveInfoHash)
+	return func() error {
+		return announceErr(args)
+	}
 }
 
 func announceErr(flags AnnounceCmd) error {

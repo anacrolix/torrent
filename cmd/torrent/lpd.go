@@ -22,7 +22,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/anacrolix/bargle"
+	"github.com/anacrolix/bargle/v2"
 )
 
 const (
@@ -32,35 +32,44 @@ const (
 	lpdInfohashLine = "Infohash: %s\r\n"
 )
 
-func lpdCmd() bargle.Command {
-	cmd := bargle.Command{Desc: "Local Peer Discovery (BEP-14) tools — listen for or send LPD announcements without a full client"}
-	cmd.Positionals = append(cmd.Positionals,
-		bargle.Subcommand{Name: "listen", Command: func() bargle.Command {
-			var args struct {
-				Ip6 bool `help:"also listen on the IPv6 multicast group"`
-			}
-			cmd := bargle.FromStruct(&args)
-			cmd.Desc = "join the LPD multicast group and print incoming BT-SEARCH announcements"
-			cmd.DefaultAction = func() error {
-				return lpdListen(args.Ip6)
-			}
-			return cmd
-		}()},
-		bargle.Subcommand{Name: "announce", Command: func() bargle.Command {
-			var args struct {
-				Port       int      `help:"BitTorrent listen port to include in the announcement"`
-				Ip6        bool     `help:"also send to the IPv6 multicast group"`
-				Infohashes []string `arity:"+" arg:"positional" help:"infohash hex strings to announce"`
-			}
-			cmd := bargle.FromStruct(&args)
-			cmd.Desc = "send a BT-SEARCH announcement for the given infohashes and exit"
-			cmd.DefaultAction = func() error {
-				return lpdAnnounce(args.Port, args.Ip6, args.Infohashes)
-			}
-			return cmd
-		}()},
+func lpdCmd(p *bargle.Parser) action {
+	return parseSubcommand(p,
+		subcommand{
+			name: "listen",
+			desc: "join the LPD multicast group and print incoming BT-SEARCH announcements",
+			parse: func(p *bargle.Parser) action {
+				var ip6 bool
+				bargle.ParseAll(p,
+					desc("also listen on the IPv6 multicast group", boolFlag("ip6", &ip6)),
+				)
+				return func() error {
+					return lpdListen(ip6)
+				}
+			},
+		},
+		subcommand{
+			name: "announce",
+			desc: "send a BT-SEARCH announcement for the given infohashes and exit",
+			parse: func(p *bargle.Parser) action {
+				var args struct {
+					Port       int
+					Ip6        bool
+					Infohashes []string
+				}
+				bargle.ParseAll(p,
+					desc("BitTorrent listen port to include in the announcement",
+						builtinLong("port", &args.Port)),
+					desc("also send to the IPv6 multicast group", boolFlag("ip6", &args.Ip6)),
+					desc("infohash hex strings to announce",
+						positionals("infohashes", &args.Infohashes, bargle.BuiltinUnmarshaler[string])),
+				)
+				requireArg(p, "infohashes", len(args.Infohashes) != 0)
+				return func() error {
+					return lpdAnnounce(args.Port, args.Ip6, args.Infohashes)
+				}
+			},
+		},
 	)
-	return cmd
 }
 
 func lpdListen(ip6 bool) error {

@@ -65,8 +65,6 @@ github.com/alexflint/go-scalar v1.1.0 h1:aaAouLLzI9TChcPXotr6gUhq+Scr8rl0P9P4Pnl
 github.com/alexflint/go-scalar v1.1.0/go.mod h1:LoFvNMqS1CPrMVltza4LvnGKhaSpc3oyLEBUZVhhS2o=
 github.com/anacrolix/backtrace v0.0.0-20221205112523-22a61db8f82e h1:A0Ty9UeyBDIo29ZMnk0AvPqWDIa4HVvCaJqWNlCrMXA=
 github.com/anacrolix/backtrace v0.0.0-20221205112523-22a61db8f82e/go.mod h1:4YFqy+788tLJWtin2jNliYVJi+8aDejG9zcu/2/pONw=
-github.com/anacrolix/bargle v1.0.0 h1:jc4EKULEJx4GV10rpERpQp1jsiJWWOEGplsqssc4sAQ=
-github.com/anacrolix/bargle v1.0.0/go.mod h1:9xUiZbkh+94FbiIAL1HXpAIBa832f3Mp07rRPl5c5RQ=
 github.com/anacrolix/bargle/v2 v2.0.0 h1:jeKsKOCiAWKMi0HJdlrux/+V12I7PVX5dny/HxQ3xZw=
 github.com/anacrolix/bargle/v2 v2.0.0/go.mod h1:rKvwnOHgcXKPJTINj5RmkifgpxgEGC9bkJiv5kM4ctM=
 github.com/anacrolix/btree v0.1.1 h1:igdFPLrt82L6qovzbEGSMkTeiwcU3EFIGl2K8XWocAc=

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anacrolix/bargle/v2"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/tagflag"
 	"github.com/davecgh/go-spew/spew"
@@ -270,41 +271,112 @@ type downloadFlags struct {
 }
 
 type DownloadCmd struct {
-	SaveMetainfos                  bool           `help:"save metainfo files when info is obtained"`
-	Mmap                           bool           `help:"memory-map torrent data"`
-	Seed                           bool           `help:"seed after download is complete"`
-	Addr                           string         `help:"network listen addr"`
-	MaxUnverifiedBytes             *tagflag.Bytes `help:"maximum number bytes to have pending verification"`
-	UploadRate                     *tagflag.Bytes `help:"max piece bytes to send per second"`
-	MaxAllocPeerRequestDataPerConn *tagflag.Bytes `help:"max bytes to allocate for peer request data per connection"`
-	DownloadRate                   *tagflag.Bytes `help:"max bytes per second down from peers"`
+	SaveMetainfos                  bool
+	Mmap                           bool
+	Seed                           bool
+	Addr                           string
+	MaxUnverifiedBytes             *tagflag.Bytes
+	UploadRate                     *tagflag.Bytes
+	MaxAllocPeerRequestDataPerConn *tagflag.Bytes
+	DownloadRate                   *tagflag.Bytes
 	PackedBlocklist                string
 	PublicIP                       net.IP
-	Progress                       bool `default:"true"`
-	PieceStates                    bool `help:"Output piece state runs at progress intervals."`
-	Quiet                          bool `help:"discard client logging"`
-	Stats                          bool `help:"print stats at termination"`
-	Dht                            bool `default:"true"`
-	PortForward                    bool `default:"true"`
-	Verify                         bool `help:"verify data after adding torrent"`
+	Progress                       bool
+	PieceStates                    bool
+	Quiet                          bool
+	Stats                          bool
+	Dht                            bool
+	PortForward                    bool
+	Verify                         bool
 
-	TcpPeers        bool `default:"true"`
-	UtpPeers        bool `default:"true"`
-	Webtorrent      bool `default:"true"`
+	TcpPeers        bool
+	UtpPeers        bool
+	Webtorrent      bool
 	DisableWebseeds bool
 	// Don't progress past handshake for peer connections where the peer doesn't offer the fast
 	// extension.
 	RequireFastExtension bool
 
-	Ipv4 bool `default:"true"`
-	Ipv6 bool `default:"true"`
-	Pex  bool `default:"true"`
+	Ipv4 bool
+	Ipv6 bool
+	Pex  bool
 
-	LinearDiscard bool     `help:"Read and discard selected regions from start to finish. Useful for testing simultaneous Reader and static file prioritization."`
-	TestPeer      []string `help:"addresses of some starting peers"`
+	LinearDiscard bool
+	TestPeer      []string
 
 	File    []string
-	Torrent []string `arity:"+" help:"torrent file path or magnet uri" arg:"positional"`
+	Torrent []string
+}
+
+// The flags that default to enabled. Switches can be turned off with their "--no-" form.
+func newDownloadCmd() DownloadCmd {
+	return DownloadCmd{
+		Progress:    true,
+		Dht:         true,
+		PortForward: true,
+		TcpPeers:    true,
+		UtpPeers:    true,
+		Webtorrent:  true,
+		Ipv4:        true,
+		Ipv6:        true,
+		Pex:         true,
+	}
+}
+
+func downloadCmd(ctx context.Context, p *bargle.Parser, debug bool) action {
+	flags := downloadFlags{
+		Debug:       debug,
+		DownloadCmd: newDownloadCmd(),
+	}
+	args := &flags.DownloadCmd
+	bargle.ParseAll(p,
+		desc("save metainfo files when info is obtained", boolFlag("save-metainfos", &args.SaveMetainfos)),
+		desc("memory-map torrent data", boolFlag("mmap", &args.Mmap)),
+		desc("seed after download is complete", boolFlag("seed", &args.Seed)),
+		desc("network listen addr", builtinLong("addr", &args.Addr)),
+		desc("maximum number bytes to have pending verification",
+			bargle.Long("max-unverified-bytes", pointerUnmarshaler(&args.MaxUnverifiedBytes, bytesUnmarshaler))),
+		desc("max piece bytes to send per second",
+			bargle.Long("upload-rate", pointerUnmarshaler(&args.UploadRate, bytesUnmarshaler))),
+		desc("max bytes to allocate for peer request data per connection",
+			bargle.Long(
+				"max-alloc-peer-request-data-per-conn",
+				pointerUnmarshaler(&args.MaxAllocPeerRequestDataPerConn, bytesUnmarshaler))),
+		desc("max bytes per second down from peers",
+			bargle.Long("download-rate", pointerUnmarshaler(&args.DownloadRate, bytesUnmarshaler))),
+		desc("path to a packed IP blocklist", builtinLong("packed-blocklist", &args.PackedBlocklist)),
+		desc("public IP to advertise", builtinLong("public-ip", &args.PublicIP)),
+		desc("print download progress", boolFlag("progress", &args.Progress)),
+		desc("output piece state runs at progress intervals", boolFlag("piece-states", &args.PieceStates)),
+		desc("discard client logging", boolFlag("quiet", &args.Quiet)),
+		desc("print stats at termination", boolFlag("stats", &args.Stats)),
+		desc("use the DHT", boolFlag("dht", &args.Dht)),
+		desc("forward the listen port with UPnP/NAT-PMP", boolFlag("port-forward", &args.PortForward)),
+		desc("verify data after adding torrent", boolFlag("verify", &args.Verify)),
+		desc("connect to peers over TCP", boolFlag("tcp-peers", &args.TcpPeers)),
+		desc("connect to peers over uTP", boolFlag("utp-peers", &args.UtpPeers)),
+		desc("connect to WebTorrent peers", boolFlag("webtorrent", &args.Webtorrent)),
+		desc("don't use webseeds", boolFlag("disable-webseeds", &args.DisableWebseeds)),
+		desc("only use peers that offer the fast extension",
+			boolFlag("require-fast-extension", &args.RequireFastExtension)),
+		desc("use IPv4", boolFlag("ipv4", &args.Ipv4)),
+		desc("use IPv6", boolFlag("ipv6", &args.Ipv6)),
+		desc("use peer exchange", boolFlag("pex", &args.Pex)),
+		desc(
+			"read and discard selected regions from start to finish. Useful for testing"+
+				" simultaneous Reader and static file prioritization.",
+			boolFlag("linear-discard", &args.LinearDiscard)),
+		desc("addresses of some starting peers",
+			sliceLong("test-peer", &args.TestPeer, bargle.BuiltinUnmarshaler[string])),
+		desc("only download this file (by display path)",
+			sliceLong("file", &args.File, bargle.BuiltinUnmarshaler[string])),
+		desc("torrent file path or magnet uri",
+			positionals("torrent", &args.Torrent, bargle.BuiltinUnmarshaler[string])),
+	)
+	requireArg(p, "torrent", len(args.Torrent) != 0)
+	return func() error {
+		return downloadErr(ctx, flags, slog.Default())
+	}
 }
 
 func statsEnabled(flags downloadFlags) bool {

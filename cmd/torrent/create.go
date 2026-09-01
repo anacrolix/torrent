@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/anacrolix/bargle"
+	"github.com/anacrolix/bargle/v2"
 	"github.com/anacrolix/tagflag"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -16,21 +16,34 @@ var builtinAnnounceList = [][]string{
 	{"udp://tracker.openbittorrent.com:6969/announce"},
 }
 
-func create() (cmd bargle.Command) {
+func createCmd(p *bargle.Parser) action {
 	var args struct {
-		AnnounceList      []string `name:"a" help:"extra announce-list tier entry"`
-		EmptyAnnounceList bool     `name:"n" help:"exclude default announce-list entries"`
-		Comment           string   `name:"t" help:"comment"`
-		CreatedBy         string   `name:"c" help:"created by"`
-		InfoName          *string  `name:"i" help:"override info name (defaults to ROOT)"`
+		AnnounceList      []string
+		EmptyAnnounceList bool
+		Comment           string
+		CreatedBy         string
+		InfoName          *string
 		PieceLength       tagflag.Bytes
-		Url               []string `name:"u" help:"add webseed url"`
+		Url               []string
 		Private           *bool
-		Root              string `arg:"positional"`
+		Root              string
 	}
-	cmd = bargle.FromStruct(&args)
-	cmd.Desc = "Creates a torrent metainfo for the file system rooted at ROOT, and outputs it to stdout"
-	cmd.DefaultAction = func() (err error) {
+	var haveRoot bool
+	bargle.ParseAll(p,
+		desc("extra announce-list tier entry",
+			sliceLong("announce-list", &args.AnnounceList, bargle.BuiltinUnmarshaler[string])),
+		desc("exclude default announce-list entries", boolFlag("empty-announce-list", &args.EmptyAnnounceList)),
+		desc("comment", builtinLong("comment", &args.Comment)),
+		desc("created by", builtinLong("created-by", &args.CreatedBy)),
+		desc("override info name (defaults to ROOT)",
+			bargle.Long("info-name", pointerUnmarshaler(&args.InfoName, bargle.BuiltinUnmarshaler[string]))),
+		desc("piece length", bargle.Long("piece-length", bytesUnmarshaler(&args.PieceLength))),
+		desc("add webseed url", sliceLong("url", &args.Url, bargle.BuiltinUnmarshaler[string])),
+		desc("set the private flag in the info", boolPtrFlag("private", &args.Private)),
+		positional("root", &haveRoot, bargle.BuiltinUnmarshaler(&args.Root)),
+	)
+	requireArg(p, "root", haveRoot)
+	return func() (err error) {
 		mi := metainfo.MetaInfo{
 			AnnounceList: builtinAnnounceList,
 		}
@@ -66,5 +79,4 @@ func create() (cmd bargle.Command) {
 		err = mi.Write(os.Stdout)
 		return
 	}
-	return
 }

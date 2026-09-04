@@ -12,7 +12,7 @@ require (
 	github.com/anacrolix/dht/v2 v2.23.1-0.20260525063928-ec3a9bd99456
 	github.com/anacrolix/envpprof v1.4.0
 	github.com/anacrolix/generics v0.2.0
-	github.com/anacrolix/go-libutp v1.5.0
+	github.com/anacrolix/go-libutp v1.5.2-0.20260904083039-aaba75968f23
 	github.com/anacrolix/gostdapp v0.2.1-0.20251125125325-fbac3f25c013
 	github.com/anacrolix/log v0.17.1-0.20251118025802-918f1157b7bb
 	github.com/anacrolix/missinggo v1.3.0
@@ -23,7 +23,6 @@ require (
 	github.com/anacrolix/sync v0.5.5-0.20251119100342-d78dd1f686f1
 	github.com/anacrolix/tagflag v1.3.0
 	github.com/anacrolix/upnp v0.1.4
-	github.com/anacrolix/utp v0.1.0
 	github.com/bahlo/generic-list-go v0.2.0
 	github.com/bradfitz/iter v0.0.0-20191230175014-e8f45d346db8
 	github.com/cespare/xxhash v1.1.0
@@ -33,7 +32,7 @@ require (
 	github.com/elliotchance/orderedmap v1.4.0
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/go-llsqlite/adapter v0.0.0-20230927005056-7f5ce7f0c916
-	github.com/go-quicktest/qt v1.101.0
+	github.com/go-quicktest/qt v1.102.0
 	github.com/google/btree v1.1.2
 	github.com/google/go-cmp v0.7.0
 	github.com/gorilla/websocket v1.5.0

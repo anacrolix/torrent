@@ -1908,7 +1908,7 @@ func appendMissingStrings(old, new []string) (ret []string) {
 	ret = old
 new:
 	for _, n := range new {
-		for _, o := range old {
+		for _, o := range ret {
 			if o == n {
 				continue new
 			}

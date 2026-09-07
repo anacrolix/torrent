@@ -11,9 +11,10 @@ import (
 )
 
 type recordingPieceCompletion struct {
-	mu    sync.Mutex
-	state map[metainfo.PieceKey]bool
-	batch []PieceCompletionChange
+	mu         sync.Mutex
+	state      map[metainfo.PieceKey]bool
+	batch      []PieceCompletionChange
+	persistent bool
 }
 
 func (me *recordingPieceCompletion) Get(pk metainfo.PieceKey) (c Completion, err error) {
@@ -61,6 +62,10 @@ func (me *recordingPieceCompletion) Close() error {
 	return nil
 }
 
+func (me *recordingPieceCompletion) Persistent() bool {
+	return me.persistent
+}
+
 func TestBufferedPieceCompletionDefersTrueUntilCheckpoint(t *testing.T) {
 	underlying := &recordingPieceCompletion{}
 	pc := newBufferedPieceCompletion(underlying)
@@ -88,6 +93,14 @@ func TestBufferedPieceCompletionDefersTrueUntilCheckpoint(t *testing.T) {
 	qt.Assert(t, qt.IsNil(err))
 	qt.Assert(t, qt.IsTrue(persistedValue.Ok))
 	qt.Assert(t, qt.IsTrue(persistedValue.Complete))
+
+	underlying.mu.Lock()
+	defer underlying.mu.Unlock()
+	qt.Assert(t, qt.HasLen(underlying.batch, 1))
+	qt.Assert(t, qt.DeepEquals(underlying.batch[0], PieceCompletionChange{
+		Key:      key,
+		Complete: true,
+	}))
 }
 
 func TestBufferedPieceCompletionPersistsFalseImmediately(t *testing.T) {
@@ -114,4 +127,57 @@ func TestBufferedPieceCompletionPersistsFalseImmediately(t *testing.T) {
 	defer underlying.mu.Unlock()
 	qt.Assert(t, qt.HasLen(underlying.batch, 1))
 	qt.Assert(t, qt.IsFalse(underlying.batch[0].Complete))
+}
+
+func TestBufferedPieceCompletionPersistsUnknownImmediately(t *testing.T) {
+	underlying := &recordingPieceCompletion{}
+	pc := newBufferedPieceCompletion(underlying)
+	key := metainfo.PieceKey{
+		InfoHash: metainfo.HashBytes([]byte("c")),
+		Index:    3,
+	}
+
+	qt.Assert(t, qt.IsNil(underlying.Set(key, g.Some(true))))
+	qt.Assert(t, qt.IsNil(pc.Set(key, g.Some(true))))
+	qt.Assert(t, qt.IsNil(pc.Set(key, g.Option[bool]{})))
+
+	runtimeValue, err := pc.Get(key)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.IsFalse(runtimeValue.Ok))
+
+	persistedValue, err := underlying.Get(key)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.IsFalse(persistedValue.Ok))
+
+	checkpointer, ok := pc.(PieceCompletionCheckpointer)
+	qt.Assert(t, qt.IsTrue(ok))
+	qt.Assert(t, qt.IsNil(checkpointer.Checkpoint([]metainfo.PieceKey{key})))
+}
+
+func TestBufferedPieceCompletionCloseFlushesDirtyCompletions(t *testing.T) {
+	underlying := &recordingPieceCompletion{}
+	pc := newBufferedPieceCompletion(underlying)
+	key := metainfo.PieceKey{
+		InfoHash: metainfo.HashBytes([]byte("d")),
+		Index:    4,
+	}
+
+	qt.Assert(t, qt.IsNil(pc.Set(key, g.Some(true))))
+	qt.Assert(t, qt.IsNil(pc.Close()))
+
+	persistedValue, err := underlying.Get(key)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.IsTrue(persistedValue.Ok))
+	qt.Assert(t, qt.IsTrue(persistedValue.Complete))
+}
+
+func TestBufferedPieceCompletionPersistentForwardsUnderlyingState(t *testing.T) {
+	underlying := &recordingPieceCompletion{persistent: true}
+	pc := newBufferedPieceCompletion(underlying)
+	persistenter, ok := pc.(PieceCompletionPersistenter)
+	qt.Assert(t, qt.IsTrue(ok))
+	qt.Assert(t, qt.IsTrue(persistenter.Persistent()))
+
+	underlying.persistent = false
+	qt.Assert(t, qt.IsFalse(persistenter.Persistent()))
 }

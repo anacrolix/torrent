@@ -4,6 +4,7 @@ All notable changes to [anacrolix/torrent](https://github.com/anacrolix/torrent)
 
 ## [Unreleased]
 
+- Fix panic in `Client.AddTorrentOpt` when adding a v2-only (no v1 infohash) torrent or magnet (#1089, #1090, #1091)
 - Add retry limit to `listenAll` to prevent infinite loops
 - Retry any subsequent listen failure on dynamic port
 - Error trying to open `mmapFileIo` after close

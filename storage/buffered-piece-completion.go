@@ -30,9 +30,11 @@ func newBufferedPieceCompletion(underlying PieceCompletion) PieceCompletion {
 }
 
 func (me *bufferedPieceCompletion) Persistent() bool {
-	// Runtime updates are checkpointed in batches instead of requiring synchronous durability for
-	// every piece completion event.
-	return false
+	// This wrapper defers writes, but the underlying store may still be persistent between runs.
+	if p, ok := me.underlying.(PieceCompletionPersistenter); ok {
+		return p.Persistent()
+	}
+	return true
 }
 
 func (me *bufferedPieceCompletion) Get(pk metainfo.PieceKey) (c Completion, err error) {

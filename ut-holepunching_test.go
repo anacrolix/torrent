@@ -342,7 +342,6 @@ func TestUtpSimultaneousOpen(t *testing.T) {
 		if errors.Is(err, errMsgNotReceived) {
 			return
 		}
-		skipGoUtpDialIssue(t, err)
 		t.Log(err)
 		time.Sleep(time.Second)
 	}
@@ -352,12 +351,6 @@ func TestUtpSimultaneousOpen(t *testing.T) {
 func writeAndReadMsg(r, w net.Conn) error {
 	go writeMsg(w)
 	return readMsg(r)
-}
-
-func skipGoUtpDialIssue(t *testing.T, err error) {
-	if err.Error() == "timed out waiting for ack" {
-		t.Skip("anacrolix go utp implementation has issues. Use anacrolix/go-libutp by enabling CGO.")
-	}
 }
 
 // Show that dialling one socket and accepting from the other results in them having ends of the
@@ -392,7 +385,6 @@ func TestUtpDirectDialMsg(t *testing.T) {
 		if err == nil {
 			return
 		}
-		skipGoUtpDialIssue(t, err)
 		t.Log(err)
 		time.Sleep(time.Second)
 	}

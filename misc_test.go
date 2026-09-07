@@ -118,3 +118,53 @@ func TestAddTorrentSpecBadV2Root(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// Regression test for a panic when adding a v2-only magnet (no v1 infohash). See
+// https://github.com/anacrolix/torrent/issues/1089.
+func TestAddV2OnlyMagnet(t *testing.T) {
+	cl, err := NewClient(TestingConfig(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+
+	uri := "magnet:?xt=urn:btmh:1220" + strings.Repeat("11", 32)
+
+	tor, err := cl.AddMagnet(uri)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.IsFalse(tor.infoHash.Ok))
+	qt.Assert(t, qt.IsTrue(tor.infoHashV2.Ok))
+
+	// Adding the same v2-only magnet again must be deduplicated and not panic.
+	tor2, err := cl.AddMagnet(uri)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.Equals(tor, tor2))
+
+	// Dropping and re-adding must work too.
+	tor.Drop()
+	tor3, err := cl.AddMagnet(uri)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.IsTrue(tor3.infoHashV2.Ok))
+}
+
+// Ensure hybrid (v1+v2) and pure v1 magnets are unaffected by v1-hash-optional handling.
+func TestAddHybridAndV1OnlyMagnetsStillWork(t *testing.T) {
+	cl, err := NewClient(TestingConfig(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+
+	v1Only := "magnet:?xt=urn:btih:" + strings.Repeat("11", 20)
+	tor, err := cl.AddMagnet(v1Only)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.IsTrue(tor.infoHash.Ok))
+	qt.Assert(t, qt.IsFalse(tor.infoHashV2.Ok))
+
+	hybrid := "magnet:?xt=urn:btih:" + strings.Repeat("22", 20) +
+		"&xt=urn:btmh:1220" + strings.Repeat("33", 32)
+	torHybrid, err := cl.AddMagnet(hybrid)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.IsTrue(torHybrid.infoHash.Ok))
+	qt.Assert(t, qt.IsTrue(torHybrid.infoHashV2.Ok))
+}

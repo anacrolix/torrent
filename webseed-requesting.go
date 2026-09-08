@@ -477,6 +477,14 @@ func (cl *Client) yieldKeyAndValue(
 func (cl *Client) iterCurrentWebseedRequestsFromClient() iter.Seq2[webseedUniqueRequestKey, webseedRequestOrderValue] {
 	return func(yield func(webseedUniqueRequestKey, webseedRequestOrderValue) bool) {
 		for key, ar := range cl.activeWebseedRequests {
+			// A dropped torrent leaves cl.torrents synchronously, but its
+			// in-flight requests only leave this map when each one closes
+			// (deleteActiveRequest). Until then they are nobody's to schedule
+			// or cancel — the drop already did that — and counting them would
+			// make this view disagree with the per-torrent one.
+			if _, live := cl.torrents[key.t]; !live {
+				continue
+			}
 			if !cl.yieldKeyAndValue(yield, key, ar) {
 				return
 			}

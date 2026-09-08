@@ -4,6 +4,9 @@ All notable changes to [anacrolix/torrent](https://github.com/anacrolix/torrent)
 
 ## [Unreleased]
 
+- Get uTP from `anacrolix/go-utp`, where the implementation-selecting `utp` package moved from
+  `go-libutp`. The pure Go implementation can be selected with the `purego_utp` build tag, as well
+  as with `purego` or `CGO_ENABLED=0` as before
 - Add retry limit to `listenAll` to prevent infinite loops
 - Retry any subsequent listen failure on dynamic port
 - Error trying to open `mmapFileIo` after close

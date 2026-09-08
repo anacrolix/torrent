@@ -11,7 +11,7 @@ import (
 	"syscall"
 
 	g "github.com/anacrolix/generics"
-	"github.com/anacrolix/go-libutp/utp"
+	utp "github.com/anacrolix/go-utp"
 	"github.com/anacrolix/missinggo/v2"
 )
 

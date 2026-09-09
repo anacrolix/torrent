@@ -111,6 +111,11 @@ func (fs *fileClientImpl) OpenTorrent(
 			err = fmt.Errorf("setting completion from part files: %w", err)
 			return
 		}
+		err = t.initFileCompletionTracking()
+		if err != nil {
+			err = fmt.Errorf("initializing file completion tracking: %w", err)
+			return
+		}
 	}
 	return TorrentImpl{
 		Piece: t.Piece,

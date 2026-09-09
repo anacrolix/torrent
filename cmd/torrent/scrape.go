@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/anacrolix/bargle/v2"
 	"github.com/davecgh/go-spew/spew"
 
 	"github.com/anacrolix/torrent/tracker"
@@ -11,8 +12,22 @@ import (
 )
 
 type scrapeCfg struct {
-	Tracker    string       `arg:"positional"`
-	InfoHashes []infohash.T `arity:"+" arg:"positional"`
+	Tracker    string
+	InfoHashes []infohash.T
+}
+
+func scrapeCmd(p *bargle.Parser) action {
+	var cfg scrapeCfg
+	trackerArg := bargle.Positional("tracker", bargle.BuiltinUnmarshaler(&cfg.Tracker))
+	infoHashes := bargle.Positionals(
+		"info-hashes",
+		bargle.AppendSlice(&cfg.InfoHashes, infoHashUnmarshaler))
+	bargle.ParseAll(p, trackerArg, infoHashes)
+	p.Require(trackerArg)
+	p.Require(infoHashes)
+	return func() error {
+		return scrape(cfg)
+	}
 }
 
 func scrape(flags scrapeCfg) error {

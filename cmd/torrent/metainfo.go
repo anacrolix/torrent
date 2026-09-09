@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/anacrolix/bargle"
+	"github.com/anacrolix/bargle/v2"
 	"github.com/bradfitz/iter"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -20,75 +20,78 @@ type pprintMetainfoFlags struct {
 	Files       bool
 }
 
-func metainfoCmd() (cmd bargle.Command) {
+func metainfoCmd(p *bargle.Parser) action {
 	var metainfoPath string
-	var mi *metainfo.MetaInfo
-	// TODO: Test if bargle treats no subcommand as a failure.
-	cmd.Positionals = append(cmd.Positionals,
-		&bargle.Positional{
-			Name:  "torrent file",
-			Value: &bargle.String{Target: &metainfoPath},
-			AfterParseFunc: func(ctx bargle.Context) error {
-				ctx.AfterParse(func() (err error) {
-					if strings.HasPrefix(metainfoPath, "http://") || strings.HasPrefix(metainfoPath, "https://") {
-						response, err := http.Get(metainfoPath)
-						if err != nil {
-							return nil
-						}
-						mi, err = metainfo.Load(response.Body)
-						if err != nil {
-							return nil
-						}
-					} else {
-						mi, err = metainfo.LoadFromFile(metainfoPath)
+	path := bargle.Positional("torrent file", bargle.BuiltinUnmarshaler(&metainfoPath))
+	bargle.ParseAll(p, path)
+	p.Require(path)
+	return bargle.ParseSubcommand(p,
+		subcommand{
+			Name: "magnet",
+			Desc: "print a v2 magnet link for the torrent",
+			Parse: func(p *bargle.Parser) action {
+				return func() error {
+					mi, err := loadMetainfo(metainfoPath)
+					if err != nil {
+						return err
 					}
-					return
-				})
-				return nil
+					m, err := mi.MagnetV2()
+					if err != nil {
+						return err
+					}
+					fmt.Fprintf(os.Stdout, "%v\n", m.String())
+					return nil
+				}
 			},
 		},
-		bargle.Subcommand{Name: "magnet", Command: func() (cmd bargle.Command) {
-			cmd.DefaultAction = func() (err error) {
-				m, err := mi.MagnetV2()
-				if err != nil {
+		subcommand{
+			Name: "pprint",
+			Desc: "pretty print the torrent's metainfo as JSON",
+			Parse: func(p *bargle.Parser) action {
+				var flags pprintMetainfoFlags
+				bargle.ParseAll(p,
+					desc("only print the torrent name", bargle.Flag("just-name", &flags.JustName)),
+					desc("include piece hashes", bargle.Flag("piece-hashes", &flags.PieceHashes)),
+					desc("include files", bargle.Flag("files", &flags.Files)),
+				)
+				return func() (err error) {
+					mi, err := loadMetainfo(metainfoPath)
+					if err != nil {
+						return
+					}
+					err = pprintMetainfo(mi, flags)
+					if err != nil {
+						return
+					}
+					if !flags.JustName {
+						os.Stdout.WriteString("\n")
+					}
 					return
 				}
-				fmt.Fprintf(os.Stdout, "%v\n", m.String())
-				return nil
-			}
-			return
-		}()},
-		bargle.Subcommand{Name: "pprint", Command: func() (cmd bargle.Command) {
-			var flags pprintMetainfoFlags
-			cmd = bargle.FromStruct(&flags)
-			cmd.DefaultAction = func() (err error) {
-				err = pprintMetainfo(mi, flags)
-				if err != nil {
-					return
-				}
-				if !flags.JustName {
-					os.Stdout.WriteString("\n")
-				}
-				return
-			}
-			return
-		}()},
-		//bargle.Subcommand{Name: "infohash", Command: func(ctx args.SubCmdCtx) (err error) {
-		//	fmt.Printf("%s: %s\n", mi.HashInfoBytes().HexString(), metainfoPath)
-		//	return nil
-		//}},
-		//bargle.Subcommand{Name: "list-files", Command: func(ctx args.SubCmdCtx) (err error) {
-		//	info, err := mi.UnmarshalInfo()
-		//	if err != nil {
-		//		return fmt.Errorf("unmarshalling info from metainfo at %q: %v", metainfoPath, err)
-		//	}
-		//	for _, f := range info.UpvertedFiles() {
-		//		fmt.Println(f.DisplayPath(&info))
-		//	}
-		//	return nil
-		//}},
+			},
+		},
 	)
-	return
+}
+
+// Loads a metainfo from a local file path, or an HTTP(S) URL.
+func loadMetainfo(path string) (_ *metainfo.MetaInfo, err error) {
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		response, err := http.Get(path)
+		if err != nil {
+			return nil, fmt.Errorf("getting %q: %w", path, err)
+		}
+		defer response.Body.Close()
+		mi, err := metainfo.Load(response.Body)
+		if err != nil {
+			return nil, fmt.Errorf("loading metainfo from %q: %w", path, err)
+		}
+		return mi, nil
+	}
+	mi, err := metainfo.LoadFromFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("loading metainfo from file %q: %w", path, err)
+	}
+	return mi, nil
 }
 
 func pprintMetainfo(metainfo *metainfo.MetaInfo, flags pprintMetainfoFlags) error {

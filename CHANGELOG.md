@@ -4,6 +4,10 @@ All notable changes to [anacrolix/torrent](https://github.com/anacrolix/torrent)
 
 ## [Unreleased]
 
+- `bencode`: Limit dict/list nesting depth to `Decoder.MaxDepth` (default 64). Deeper input is
+  rejected with a `SyntaxError` instead of recursing unboundedly, which previously could crash the
+  process with a fatal stack overflow and made deeply nested v2 file trees decode quadratically.
+  `Decoder.MaxStrLen` is now also enforced on values decoded for `Unmarshaler` fields
 - Get uTP from `anacrolix/go-utp`, where the implementation-selecting `utp` package moved from
   `go-libutp`. The pure Go implementation can be selected with the `purego_utp` build tag, as well
   as with `purego` or `CGO_ENABLED=0` as before

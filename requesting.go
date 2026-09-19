@@ -247,6 +247,7 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 		pieceStates:    &t.requestPieceStates,
 		requestIndexes: t.requestIndexes,
 	}
+	candidateLimit := p.requestCandidateLimit()
 	requestHeap.pieceStates.Clear()
 	requestHeap.pieceStatesGen = t.requestPieceStates.gen
 	t.logPieceRequestOrder()
@@ -263,6 +264,9 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 			requestHeap.pieceStates.Set(pieceIndex, pieceExtra)
 			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
 			t.iterUndirtiedRequestIndexesInPiece(&it, pieceIndex, func(r requestStrategy.RequestIndex) {
+				if len(requestHeap.requestIndexes) >= candidateLimit {
+					return
+				}
 				if !allowedFast {
 					// We must signal interest to request this. TODO: We could set interested if the
 					// peers pieces (minus the allowed fast set) overlap with our missing pieces if
@@ -284,12 +288,27 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 				}
 				requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
 			})
-			return true
+			return len(requestHeap.requestIndexes) < candidateLimit
 		},
 	)
 	t.assertPendingRequests()
 	desired.Requests = requestHeap
 	return
+}
+
+func (p *PeerConn) requestCandidateLimit() int {
+	// The piece order is already sorted by urgency, partial state,
+	// availability and piece index. Keep enough alternatives to refill the
+	// peer pipeline without rebuilding a heap containing the entire readahead
+	// window after every received 16 KiB chunk.
+	return requestCandidateLimitFor(
+		int(p.t.chunksPerRegularPiece()),
+		int(p.nominalMaxRequests()),
+	)
+}
+
+func requestCandidateLimitFor(chunksPerPiece, nominalMaxRequests int) int {
+	return max(chunksPerPiece*2, nominalMaxRequests*4)
 }
 
 // Update requests if there's a reason assigned.

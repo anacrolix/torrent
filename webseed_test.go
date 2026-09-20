@@ -7,7 +7,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-quicktest/qt"
 
@@ -74,4 +76,81 @@ func TestDownloadFromTwoNonOverlappingWebseeds(t *testing.T) {
 	got, err := io.ReadAll(r)
 	qt.Assert(t, qt.IsNil(err))
 	qt.Assert(t, qt.DeepEquals(got, append(dataA, dataB...)))
+}
+
+// Regression test for https://github.com/anacrolix/torrent/issues/1098: cl.activeWebseedRequests
+// (the Client-level view of in-flight webseed requests) and the per-torrent view built by walking
+// cl.torrents can transiently disagree after a torrent with in-flight webseed requests is dropped,
+// because the torrent leaves cl.torrents synchronously while its entries leave
+// cl.activeWebseedRequests only once each request notices it was cancelled and closes
+// asynchronously. Client.updateWebseedRequests must tolerate that divergence instead of panicking.
+func TestDropTorrentWithInFlightWebseedRequests(t *testing.T) {
+	// The handler blocks until the test is done, keeping any webseed request that reaches it
+	// in-flight for the duration of the test.
+	block := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-block
+	}))
+	defer srv.Close()
+	defer close(block)
+
+	data := make([]byte, 4*defaultChunkSize)
+	rand.Read(data)
+	tu := testutil.Torrent{
+		Name:  "testdata",
+		Files: []testutil.File{{Name: "a.bin", Data: string(data)}},
+	}
+	mi, _ := tu.Generate(int64(2 * defaultChunkSize))
+
+	cfg := TestingConfig(t)
+	cl, err := NewClient(cfg)
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+
+	tt, _, err := cl.AddTorrentSpec(&TorrentSpec{
+		AddTorrentOpts: AddTorrentOpts{
+			InfoHash:  mi.HashInfoBytes(),
+			InfoBytes: mi.InfoBytes,
+		},
+		Webseeds: []string{srv.URL + "/"},
+	})
+	qt.Assert(t, qt.IsNil(err))
+	tt.DownloadAll()
+
+	// Wait until there's a webseed request in flight (blocked in the handler above).
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		cl.rLock()
+		n := len(cl.activeWebseedRequests)
+		cl.rUnlock()
+		if n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for a webseed request to start")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	// Race dropping the torrent (which cancels, but doesn't synchronously remove, its in-flight
+	// webseed requests) against simulated timer firings, which used to panic (see gh-1098).
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			cl.lock()
+			cl.updateWebseedRequests()
+			cl.unlock()
+		}
+	}()
+	tt.Drop()
+	close(stop)
+	wg.Wait()
 }

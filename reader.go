@@ -399,6 +399,15 @@ func (r *reader) Close() error {
 }
 
 func (r *reader) posChanged() {
+	// ReadaheadFunc is documented to run with the Client locked. Keep that
+	// contract for dynamic readahead, while static readahead can determine an
+	// unchanged piece window without taking the Client lock.
+	if r.readaheadFunc != nil {
+		r.t.cl.lock()
+		defer r.t.cl.unlock()
+		r.posChangedClientLocked()
+		return
+	}
 	to := r.piecesUncached()
 	from := r.pieces
 	if to == from {

@@ -41,10 +41,6 @@ func (me *trackingFileIo) Close() error {
 	return nil
 }
 
-func (me *trackingFileIo) closeWriters() (closedPaths []string, remaining int, err error) {
-	return nil, 0, nil
-}
-
 func TestPromotePartFileSkipsPartPathWhenDisabled(t *testing.T) {
 	ioImpl := &trackingFileIo{}
 	torrent := &fileTorrentImpl{

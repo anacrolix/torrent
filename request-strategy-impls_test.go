@@ -3,6 +3,7 @@ package torrent
 import (
 	"context"
 	"testing"
+	"weak"
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/iter"
@@ -73,6 +74,51 @@ func (s *storageClient) OpenTorrent(
 			return storagePiece{complete: p.Index() < s.completed}
 		},
 	}, nil
+}
+
+func TestRequestCandidateLimitSkipsRequestsHeldByOtherPeers(t *testing.T) {
+	cl := newTestingClient(t)
+	tor, new := cl.AddTorrentOpt(AddTorrentOpts{
+		InfoHash: testingTorrentInfoHash,
+		Storage:  &storageClient{},
+	})
+	qt.Assert(t, qt.IsTrue(new))
+	const (
+		pieceLength = 256 << 10
+		numPieces   = 4
+	)
+	qt.Assert(t, qt.IsNil(tor.setInfoUnlocked(&metainfo.Info{
+		Pieces:      make([]byte, numPieces*metainfo.HashSize),
+		PieceLength: pieceLength,
+		Length:      pieceLength * numPieces,
+	})))
+
+	requestingPeer := cl.newConnection(nil, newConnectionOpts{network: "test"})
+	requestingPeer.setTorrent(tor)
+	holdingPeer := cl.newConnection(nil, newConnectionOpts{network: "test"})
+	holdingPeer.setTorrent(tor)
+	requestingPeer.onPeerHasAllPiecesNoTriggers()
+	requestingPeer.peerChoking = false
+
+	tor.cl.lock()
+	for i := 0; i < tor.numPieces(); i++ {
+		tor.pieces[i].priority.Raise(PiecePriorityNormal)
+		tor.updatePiecePriorityNoRequests(i)
+	}
+	tor.cl.unlock()
+
+	limit := requestingPeer.requestCandidateLimit()
+	qt.Assert(t, qt.Equals(limit, 32))
+	for req := range RequestIndex(limit) {
+		holdingPeer.requestState.Requests.Add(req)
+		tor.requestState[req] = requestState{peer: weak.Make(holdingPeer)}
+	}
+
+	desired := requestingPeer.getDesiredRequestState()
+	qt.Assert(t, qt.HasLen(desired.Requests.requestIndexes, limit))
+	for _, req := range desired.Requests.requestIndexes {
+		qt.Check(t, qt.IsTrue(req >= RequestIndex(limit)), qt.Commentf("request %v is already held", req))
+	}
 }
 
 func BenchmarkRequestStrategy(b *testing.B) {

@@ -248,7 +248,7 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 		requestIndexes: t.requestIndexes,
 	}
 	candidateLimit := p.requestCandidateLimit()
-	stealCandidates := make([]RequestIndex, 0, candidateLimit)
+	var stealCandidates []RequestIndex
 	requestHeap.pieceStates.Clear()
 	requestHeap.pieceStatesGen = t.requestPieceStates.gen
 	t.logPieceRequestOrder()
@@ -290,6 +290,9 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 						requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
 					}
 				} else if len(stealCandidates) < candidateLimit {
+					if stealCandidates == nil {
+						stealCandidates = make([]RequestIndex, 0, candidateLimit)
+					}
 					stealCandidates = append(stealCandidates, r)
 				}
 			})

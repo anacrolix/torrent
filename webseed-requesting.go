@@ -61,6 +61,16 @@ func (cl *Client) updateWebseedRequests() {
 	existingRequests := maps.Collect(cl.iterCurrentWebseedRequestsFromClient())
 	panicif.False(maps.Equal(existingRequests, maps.Collect(cl.iterCurrentWebseedRequests())))
 
+	// Slices spoken for, whichever webseed is doing the fetching. Requests are unique per url and
+	// slice, so without this a slice is requested from every webseed at once: the copies fetch the
+	// same bytes, and each one cancels itself as soon as it reads a chunk another copy has already
+	// delivered. That churn costs far more than it gains, so a slice is left to the one request
+	// that has it. Starts as the slices already in flight and grows as the plan is built.
+	slicesTaken := make(map[webseedSliceRequestKey]struct{}, len(existingRequests))
+	for key := range existingRequests {
+		slicesTaken[key.sliceRequestKey()] = struct{}{}
+	}
+
 	g.MakeMapIfNil(&cl.aprioriMap)
 	aprioriMap := cl.aprioriMap
 	clear(aprioriMap)
@@ -68,7 +78,7 @@ func (cl *Client) updateWebseedRequests() {
 		//if len(aprioriMap) >= webseedHostRequestConcurrency {
 		//	break
 		//}
-		if g.MapContains(existingRequests, uniqueKey) {
+		if g.MapContains(slicesTaken, uniqueKey.sliceRequestKey()) {
 			continue
 		}
 		cur, ok := aprioriMap[uniqueKey]
@@ -185,8 +195,15 @@ func (cl *Client) updateWebseedRequests() {
 		if len(plan.byCost[costKey]) >= webseedHostRequestConcurrency {
 			continue
 		}
-		g.MakeMapIfNil(&plan.byCost)
 		requestKey := elem.webseedUniqueRequestKey
+		sliceKey := requestKey.sliceRequestKey()
+		// One request per slice, here as well as against the requests already in flight: a plan
+		// holding the same slice for several webseeds would start the duplicates itself.
+		if elem.existingWebseedRequest == nil && g.MapContains(slicesTaken, sliceKey) {
+			continue
+		}
+		slicesTaken[sliceKey] = struct{}{}
+		g.MakeMapIfNil(&plan.byCost)
 		plan.byCost[costKey] = append(plan.byCost[costKey], plannedWebseedRequest{
 			url:        elem.url,
 			t:          elem.t,
@@ -208,8 +225,6 @@ func (cl *Client) updateWebseedRequests() {
 			//fmt.Println(formatMap(existingRequests))
 		}
 	})
-
-	// TODO: Do we deduplicate requests across different webseeds?
 
 	for costKey, plannedRequests := range plan.byCost {
 		for _, request := range plannedRequests {
@@ -347,6 +362,17 @@ type webseedUniqueRequestKey struct {
 	url        webseedUrlKey
 	t          *Torrent
 	sliceIndex webseedSliceIndex
+}
+
+// The range a request covers, without the webseed it goes to: two webseeds asked for the same slice
+// return the same bytes.
+type webseedSliceRequestKey struct {
+	t          *Torrent
+	sliceIndex webseedSliceIndex
+}
+
+func (me webseedUniqueRequestKey) sliceRequestKey() webseedSliceRequestKey {
+	return webseedSliceRequestKey{t: me.t, sliceIndex: me.sliceIndex}
 }
 
 type aprioriMapValue struct {

@@ -130,7 +130,8 @@ func BenchmarkRequestStrategy(b *testing.B) {
 			remainingChunks := (numPieces - completed) * (pieceLength / chunkSize)
 			qt.Assert(b, qt.HasLen(rs.Requests.requestIndexes, min(
 				remainingChunks,
-				int(cl.config.MaxUnverifiedBytes/chunkSize))))
+				int(cl.config.MaxUnverifiedBytes/chunkSize),
+				peer.requestCandidateLimit())))
 		}
 	}
 }

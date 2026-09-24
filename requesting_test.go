@@ -43,6 +43,37 @@ func TestRequestMapOrderAcrossInstances(t *testing.T) {
 	qt.Assert(t, qt.ContentEquals(keysAsSlice(makeTypicalRequests()), keysAsSlice(makeTypicalRequests())))
 }
 
+func TestRequestCandidateLimitFor(t *testing.T) {
+	tests := []struct {
+		name               string
+		chunksPerPiece     int
+		nominalMaxRequests int
+		want               int
+	}{
+		{name: "piece window dominates", chunksPerPiece: 128, nominalMaxRequests: 32, want: 256},
+		{name: "peer pipeline dominates", chunksPerPiece: 16, nominalMaxRequests: 64, want: 256},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			qt.Assert(t, qt.Equals(
+				requestCandidateLimitFor(test.chunksPerPiece, test.nominalMaxRequests),
+				test.want,
+			))
+		})
+	}
+}
+
+func TestMergeRequestCandidates(t *testing.T) {
+	qt.Assert(t, qt.DeepEquals(
+		mergeRequestCandidates([]RequestIndex{1, 2}, []RequestIndex{3, 4, 5}, 4),
+		[]RequestIndex{1, 2, 3, 4},
+	))
+	qt.Assert(t, qt.DeepEquals(
+		mergeRequestCandidates([]RequestIndex{1, 2, 3, 4}, []RequestIndex{5, 6}, 4),
+		[]RequestIndex{1, 2, 3, 4},
+	))
+}
+
 // Added for testing repeating loop iteration after shuffling in Peer.applyRequestState.
 func TestForLoopRepeatItem(t *testing.T) {
 	t.Run("ExplicitLoopVar", func(t *testing.T) {

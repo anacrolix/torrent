@@ -3,6 +3,7 @@ package bencode
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -285,4 +286,124 @@ func TestJsonDecoderBehaviour(t *testing.T) {
 	test("", 0, io.EOF)
 	test("{}", 1, io.EOF)
 	test("{} {", 1, io.ErrUnexpectedEOF)
+}
+
+// deepList returns a bencode list nested n levels deep around the integer 0.
+func deepList(n int) string {
+	return strings.Repeat("l", n) + "i0e" + strings.Repeat("e", n)
+}
+
+// deepDict returns a bencode dict nested n levels deep around the integer 0, with key "a" at each
+// level.
+func deepDict(n int) string {
+	return strings.Repeat("d1:a", n) + "i0e" + strings.Repeat("e", n)
+}
+
+// Ensure that deeply nested dicts and lists are rejected with a SyntaxError instead of recursing
+// unboundedly, and that the Decoder.MaxDepth field overrides the default.
+func TestDecodeMaxDepth(t *testing.T) {
+	decode := func(t *testing.T, input string) error {
+		t.Helper()
+		var d interface{}
+		return Unmarshal([]byte(input), &d)
+	}
+	checkErr := func(t *testing.T, input string, wantErr bool) {
+		t.Helper()
+		err := decode(t, input)
+		if !wantErr {
+			if err != nil {
+				t.Fatalf("expected %d-deep input to decode, got %v", strings.Count(input, "d")+strings.Count(input, "l"), err)
+			}
+			return
+		}
+		var se *SyntaxError
+		if !errors.As(err, &se) {
+			t.Fatalf("expected SyntaxError, got %T: %v", err, err)
+		}
+		qt.Check(t, qt.StringContains(se.Error(), "nesting depth"))
+	}
+	// The default limit allows exactly DefaultMaxDepth levels of nesting.
+	checkErr(t, deepList(DefaultMaxDepth), false)
+	checkErr(t, deepList(DefaultMaxDepth+1), true)
+	checkErr(t, deepDict(DefaultMaxDepth), false)
+	checkErr(t, deepDict(DefaultMaxDepth+1), true)
+	// A custom MaxDepth is honored.
+	for _, depth := range []int{1, 2, 10, 100} {
+		in := deepDict(depth)
+		d := NewDecoder(strings.NewReader(in))
+		d.MaxDepth = depth
+		var v interface{}
+		if err := d.Decode(&v); err != nil {
+			t.Errorf("MaxDepth=%d: expected %d-deep input to decode, got %v", depth, depth, err)
+		}
+		d = NewDecoder(strings.NewReader(deepDict(depth + 1)))
+		d.MaxDepth = depth
+		var se *SyntaxError
+		if err := d.Decode(&v); !errors.As(err, &se) {
+			t.Errorf("MaxDepth=%d: expected SyntaxError for %d-deep input, got %T: %v", depth, depth+1, err, err)
+		}
+	}
+}
+
+// Values routed through the Unmarshaler (readOneValue) path are depth-bounded too, so that e.g.
+// metainfo.InfoBytes cannot carry a stack-overflowing nested value.
+func TestDecodeMaxDepthUnmarshaler(t *testing.T) {
+	decode := func(innerDepth int) error {
+		var m struct {
+			Info Bytes `bencode:"info"`
+		}
+		// The envelope dict adds one nesting level.
+		return Unmarshal([]byte("d4:info"+deepList(innerDepth)+"e"), &m)
+	}
+	if err := decode(DefaultMaxDepth - 1); err != nil {
+		t.Fatalf("expected info nested %d levels deep to decode, got %v", DefaultMaxDepth-1, err)
+	}
+	var se *SyntaxError
+	if err := decode(DefaultMaxDepth); !errors.As(err, &se) {
+		t.Fatalf("expected SyntaxError for info nested %d levels deep, got %T: %v", DefaultMaxDepth, err, err)
+	}
+}
+
+// The depth counter stays balanced across Decodes and across the panic used to surface a depth
+// error: the same Decoder can be reused, as TestDecoderConsecutive does, and must not inherit any
+// leftover depth.
+func TestDecodeMaxDepthConsecutive(t *testing.T) {
+	// Two max-depth values back to back: if depth leaked out of the first Decode, the second would
+	// fail.
+	d := NewDecoder(bytes.NewBufferString(deepDict(DefaultMaxDepth) + deepList(DefaultMaxDepth)))
+	var v1 interface{}
+	qt.Assert(t, qt.IsNil(d.Decode(&v1)))
+	var v2 interface{}
+	qt.Assert(t, qt.IsNil(d.Decode(&v2)))
+	// A depth error must unwind the counter too: after rejecting one too-deep value, the same
+	// Decoder must still accept a value at the limit.
+	d.r = strings.NewReader(deepDict(DefaultMaxDepth + 1))
+	var v3 interface{}
+	var se *SyntaxError
+	qt.Assert(t, qt.ErrorAs(d.Decode(&v3), &se))
+	d.r = strings.NewReader(deepDict(DefaultMaxDepth))
+	var v4 interface{}
+	qt.Assert(t, qt.IsNil(d.Decode(&v4)), qt.Commentf("depth counter leaked out of the failed Decode"))
+}
+
+// The readOneValue path (values decoded for Unmarshaler fields) must apply Decoder.MaxStrLen too,
+// otherwise oversized bulk fields bypass the limit entirely.
+func TestDecodeMaxStrLenUnmarshaler(t *testing.T) {
+	in := "d1:b10:abcdefghije" // key "b" -> 10-byte string
+	decode := func(maxStrLen MaxStrLen) error {
+		d := NewDecoder(strings.NewReader(in))
+		d.MaxStrLen = maxStrLen
+		var m struct {
+			B Bytes `bencode:"b"`
+		}
+		return d.Decode(&m)
+	}
+	if err := decode(10); err != nil {
+		t.Fatalf("expected 10-byte string at limit 10 to decode, got %v", err)
+	}
+	var se *SyntaxError
+	if err := decode(9); !errors.As(err, &se) {
+		t.Fatalf("expected SyntaxError for 10-byte string at limit 9, got %T: %v", err, err)
+	}
+	qt.Check(t, qt.StringContains(se.Error(), "exceeds limit"))
 }

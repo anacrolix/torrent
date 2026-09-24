@@ -16,11 +16,21 @@ import (
 // allocation when parsing, but also leaves the window open to implement a better solution.
 const DefaultDecodeMaxStrLen = 1<<27 - 1 // ~128MiB
 
+// The default maximum nesting depth of bencode dicts and lists. The decoder recurses once per
+// nesting level, so without a limit a few million levels of nesting would exhaust the goroutine
+// stack (a fatal, unrecoverable error in Go). Real-world metainfo nests only a handful of levels
+// deep, so this bound is not restrictive in practice.
+const DefaultMaxDepth = 64
+
 type MaxStrLen = int64
 
 type Decoder struct {
 	// Maximum parsed bencode string length. Defaults to DefaultMaxStrLen if zero.
 	MaxStrLen MaxStrLen
+	// Maximum nesting depth of bencode dicts and lists. Defaults to DefaultMaxDepth if zero.
+	// Input nested deeper than this is rejected with a SyntaxError. The decoder recurses once per
+	// nesting level, so raising this trades stack-safety against accepting deeper input.
+	MaxDepth int
 
 	r interface {
 		io.ByteScanner
@@ -28,7 +38,9 @@ type Decoder struct {
 	}
 	// Sum of bytes used to Decode values.
 	Offset int64
-	buf    bytes.Buffer
+	// Current nesting depth of dicts and lists during a Decode. It is 0 outside of a Decode call.
+	depth int
+	buf   bytes.Buffer
 }
 
 func (d *Decoder) Decode(v interface{}) (err error) {
@@ -221,7 +233,7 @@ func (d *Decoder) parseStringLength() (int, error) {
 	length, err := strconv.ParseInt(bytesAsString(d.buf.Bytes()), 10, 0)
 	checkForIntParseError(err, start)
 	if int64(length) > d.getMaxStrLen() {
-		err = fmt.Errorf("parsed string length %v exceeds limit (%v)", length, DefaultDecodeMaxStrLen)
+		err = fmt.Errorf("parsed string length %v exceeds limit (%v)", length, d.getMaxStrLen())
 	}
 	d.buf.Reset()
 	return int(length), err
@@ -544,6 +556,8 @@ func (d *Decoder) readOneValue() bool {
 
 	switch b {
 	case 'd', 'l':
+		defer d.leaveContainer()
+		d.enterContainer(d.Offset - 1)
 		// read until there is nothing to read
 		for d.readOneValue() {
 		}
@@ -561,6 +575,9 @@ func (d *Decoder) readOneValue() bool {
 			checkForIntParseError(err, d.Offset-1)
 
 			d.buf.WriteString(":")
+			if length > d.getMaxStrLen() {
+				d.throwSyntaxError(d.Offset-1, fmt.Errorf("parsed string length %v exceeds limit (%v)", length, d.getMaxStrLen()))
+			}
 			n, err := io.CopyN(&d.buf, d.r, length)
 			d.Offset += n
 			if err != nil {
@@ -633,8 +650,12 @@ func (d *Decoder) parseValue(v reflect.Value) (bool, error) {
 	case 'e':
 		return false, nil
 	case 'd':
+		defer d.leaveContainer()
+		d.enterContainer(d.Offset - 1)
 		return true, d.parseDict(v)
 	case 'l':
+		defer d.leaveContainer()
+		d.enterContainer(d.Offset - 1)
 		return true, d.parseList(v)
 	case 'i':
 		return true, d.parseInt(v)
@@ -671,8 +692,12 @@ func (d *Decoder) parseValueInterface() (interface{}, bool) {
 	case 'e':
 		return nil, false
 	case 'd':
+		defer d.leaveContainer()
+		d.enterContainer(d.Offset - 1)
 		return d.parseDictInterface(), true
 	case 'l':
+		defer d.leaveContainer()
+		d.enterContainer(d.Offset - 1)
 		return d.parseListInterface(), true
 	case 'i':
 		return d.parseIntInterface(), true
@@ -789,4 +814,28 @@ func (d *Decoder) getMaxStrLen() int64 {
 		return DefaultDecodeMaxStrLen
 	}
 	return d.MaxStrLen
+}
+
+// Returns the effective maximum dict/list nesting depth for this Decoder.
+func (d *Decoder) getMaxDepth() int {
+	if d.MaxDepth == 0 {
+		return DefaultMaxDepth
+	}
+	return d.MaxDepth
+}
+
+// enterContainer is called once the 'd' or 'l' byte starting a dict or list has been consumed (at
+// offset). The caller must have already scheduled leaveContainer with defer: because the leave is
+// registered before the depth check can panic, the counter stays balanced on error returns and
+// panics alike.
+func (d *Decoder) enterContainer(offset int64) {
+	maxDepth := d.getMaxDepth()
+	d.depth++
+	if d.depth > maxDepth {
+		d.throwSyntaxError(offset, fmt.Errorf("nesting depth %d exceeds limit (%d)", d.depth, maxDepth))
+	}
+}
+
+func (d *Decoder) leaveContainer() {
+	d.depth--
 }

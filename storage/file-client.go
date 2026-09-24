@@ -30,12 +30,26 @@ type NewFileClientOpts struct {
 	// startup, and keep the rest in memory.
 	PieceCompletion PieceCompletion
 	UsePartFiles    g.Option[bool]
-	Logger          *slog.Logger
+	// DisableMmap opens files through the classic read/write implementation even where the memory
+	// mapped one is available. Mapped files must not be changed by anything but this client: one
+	// that is replaced or truncated underneath a mapping faults the process (SIGBUS) instead of
+	// returning an error. Set this where something else writes the same files, such as another
+	// downloader for the same content or a sync tool.
+	DisableMmap bool
+	Logger      *slog.Logger
 }
 
 // The specific part-files option or the default.
 func (me NewFileClientOpts) partFiles() bool {
 	return me.UsePartFiles.UnwrapOr(true)
+}
+
+// The file IO implementation to open torrents with.
+func (me NewFileClientOpts) fileIo() fileIo {
+	if me.DisableMmap {
+		return newClassicFileIo()
+	}
+	return defaultFileIo()
 }
 
 // NewFileOpts creates a new ClientImplCloser that stores files using the OS native filesystem.
@@ -102,7 +116,7 @@ func (fs *fileClientImpl) OpenTorrent(
 		metainfoFileInfos,
 		info.FileSegmentsIndex(),
 		infoHash,
-		defaultFileIo(),
+		fs.opts.fileIo(),
 		fs,
 	}
 	if t.partFiles() {

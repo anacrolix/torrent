@@ -650,7 +650,10 @@ func (me *regularTrackerAnnounceDispatcher) singleAnnounce(
 	me.updateAnnounceState(key, func(state *announceState) {
 		state.Err = err
 		state.lastAttemptCompleted = now
-		if err == nil {
+		if err != nil {
+			state.consecutiveFailures++
+		} else {
+			state.consecutiveFailures = 0
 			state.lastOk = lastAnnounceOk{
 				AnnouncedEvent: req.Event,
 				Interval:       time.Duration(resp.Interval) * time.Second,
@@ -833,7 +836,8 @@ func (me *regularTrackerAnnounceDispatcher) nextAnnounceEvent(key torrentTracker
 		if state.Err == nil || when.IsZero() {
 			return
 		}
-		minWhen := state.lastAttemptCompleted.Add(time.Minute)
+		minWhen := state.lastAttemptCompleted.Add(
+			me.torrentClient.config.failedAnnounceInterval(state.consecutiveFailures))
 		if when.Before(minWhen) {
 			when = minWhen
 		}
@@ -860,6 +864,8 @@ type announceState struct {
 	lastOk               lastAnnounceOk
 	Err                  error
 	lastAttemptCompleted time.Time
+	// Announces that failed in a row, for the retry interval. Reset by the next one that works.
+	consecutiveFailures int
 	// Has ever sent completed event. Should only be sent once.
 	sentCompleted bool
 }

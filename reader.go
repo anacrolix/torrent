@@ -317,6 +317,13 @@ func (r *reader) readAt(ctx context.Context, b []byte, pos int64) (n int, err er
 		err = io.EOF
 		return
 	}
+	// Storage is piece-addressed and knows nothing of this reader's extent, so
+	// a buffer longer than what remains would come back holding the next
+	// file's bytes. Clip it to the extent; readContext turns the boundary into
+	// io.EOF.
+	if remaining := r.length - pos; int64(len(b)) > remaining {
+		b = b[:remaining]
+	}
 	n, err = r.readOnceAt(ctx, b, pos)
 	if err == nil {
 		return

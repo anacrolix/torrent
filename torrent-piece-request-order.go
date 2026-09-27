@@ -104,9 +104,14 @@ func (t *Torrent) checkPendingPiecesMatchesRequestOrder() {
 		// order while staying pending. The two legitimately diverge here.
 		return
 	}
+	pro := t.getPieceRequestOrder()
+	if pro == nil {
+		// Not set up yet: v2 piece layers are applied while the info is still being set.
+		return
+	}
 	short := *t.canonicalShortInfohash()
 	var proBitmap roaring.Bitmap
-	for item := range t.getPieceRequestOrder().Iter {
+	for item := range pro.Iter {
 		if item.Key.InfoHash.Value() != short {
 			continue
 		}

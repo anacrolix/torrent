@@ -41,7 +41,6 @@ func (t *Torrent) NewReader() Reader {
 
 func (t *Torrent) newReader(offset, length int64) Reader {
 	r := reader{
-		mu:     t.cl.locker(),
 		t:      t,
 		offset: offset,
 		length: length,
@@ -175,12 +174,17 @@ func (t *Torrent) addReader(r *reader) {
 		t.readers = make(map[*reader]struct{})
 	}
 	t.readers[r] = struct{}{}
-	r.posChanged()
+	r.posChangedClientLocked()
 }
 
 func (t *Torrent) deleteReader(r *reader) {
 	delete(t.readers, r)
-	t.readersChanged()
+	// Removing a reader can only change priorities in the piece range that
+	// reader previously covered. Recalculating every piece is particularly
+	// expensive for large torrents and stalls all client activity while the
+	// client lock is held.
+	t.updateReaderPieces()
+	t.updatePiecePriorities(r.pieces.begin, r.pieces.end, "Torrent.deleteReader")
 }
 
 // Raise the priorities of pieces in the range [begin, end) to at least Normal

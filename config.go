@@ -38,6 +38,41 @@ type ClientTrackerConfig struct {
 	// implementation, or deprecate in favour of a Client DNS resolver. It was done manually before
 	// calling the Announce.Do wrapper.
 	LookupTrackerIp func(*url.URL) ([]net.IP, error)
+	// How long to wait before retrying an announce that failed. Each further consecutive failure
+	// doubles the wait, up to FailedAnnounceMaxInterval. A tracker that has gone away is retried
+	// forever, so without a growing interval every torrent keeps knocking at this rate.
+	FailedAnnounceMinInterval time.Duration
+	// The cap on the doubling described above. Set it to FailedAnnounceMinInterval to retry at a
+	// constant interval.
+	FailedAnnounceMaxInterval time.Duration
+}
+
+const (
+	defaultFailedAnnounceMinInterval = time.Minute
+	defaultFailedAnnounceMaxInterval = 30 * time.Minute
+)
+
+// failedAnnounceInterval is how long to wait after an announce that failed, given how many
+// consecutive failures there have been (1 for the first).
+func (cfg *ClientTrackerConfig) failedAnnounceInterval(consecutiveFailures int) time.Duration {
+	d := cfg.FailedAnnounceMinInterval
+	if d <= 0 {
+		d = defaultFailedAnnounceMinInterval
+	}
+	maxInterval := cfg.FailedAnnounceMaxInterval
+	if maxInterval <= 0 {
+		maxInterval = defaultFailedAnnounceMaxInterval
+	}
+	if maxInterval < d {
+		maxInterval = d
+	}
+	for i := 1; i < consecutiveFailures; i++ {
+		d *= 2
+		if d >= maxInterval {
+			return maxInterval
+		}
+	}
+	return d
 }
 
 type ClientDhtConfig struct {

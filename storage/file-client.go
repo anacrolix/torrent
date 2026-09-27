@@ -127,7 +127,8 @@ func (fs *fileClientImpl) OpenTorrent(
 		}
 	}
 	return TorrentImpl{
-		Piece: t.Piece,
-		Close: t.Close,
+		Piece:        t.Piece,
+		Close:        t.Close,
+		CloseWriters: t.CloseWriters,
 	}, nil
 }

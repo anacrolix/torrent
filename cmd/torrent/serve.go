@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"path/filepath"
 
-	"github.com/anacrolix/bargle"
+	"github.com/anacrolix/bargle/v2"
 	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/torrent"
@@ -14,13 +14,14 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-func serve() (cmd bargle.Command) {
+func serveCmd(p *bargle.Parser) action {
 	var filePaths []string
-	cmd.Positionals = append(cmd.Positionals, &bargle.Positional{
-		Value: bargle.AutoUnmarshaler(&filePaths),
-	})
-	cmd.Desc = "creates and seeds a torrent from a filepath"
-	cmd.DefaultAction = func() error {
+	paths := bargle.Positionals(
+		"file path",
+		bargle.AppendSlice(&filePaths, bargle.BuiltinUnmarshaler[string]))
+	bargle.ParseAll(p, paths)
+	p.Require(paths)
+	return func() error {
 		cfg := torrent.NewDefaultClientConfig()
 		cfg.Seed = true
 		cl, err := torrent.NewClient(cfg)
@@ -86,5 +87,4 @@ func serve() (cmd bargle.Command) {
 		}
 		select {}
 	}
-	return
 }

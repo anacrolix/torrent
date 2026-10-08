@@ -31,6 +31,34 @@ type Info struct {
 	// BEP 52 (BitTorrent v2)
 	MetaVersion int64    `bencode:"meta version,omitempty"`
 	FileTree    FileTree `bencode:"file tree,omitempty"`
+
+	// v2Spans is set by CachePieceLengths; see there.
+	v2Spans []v2PieceSpan
+}
+
+// v2PieceSpan is one file of a v2 torrent as Piece.Length needs it: the piece
+// it starts in and the torrent offset it ends at.
+type v2PieceSpan struct {
+	firstPiece int
+	end        int64
+}
+
+// CachePieceLengths lays out the files of a v2 info once, so Piece.Length no
+// longer walks the whole file tree on every call — it is asked for every chunk
+// written. Call it before the info is shared; it does not change the info's
+// encoding.
+func (info *Info) CachePieceLengths() {
+	if !info.HasV2() || info.PieceLength <= 0 {
+		return
+	}
+	pl := info.PieceLength
+	spans := []v2PieceSpan{}
+	var offset int64
+	for fi := range info.FileTree.upvertedFiles(pl) {
+		spans = append(spans, v2PieceSpan{firstPiece: int(offset / pl), end: offset + fi.Length})
+		offset = (offset + fi.Length + pl - 1) / pl * pl
+	}
+	info.v2Spans = spans
 }
 
 // The Info.Name field is "advisory". For multi-file torrents it's usually a suggested directory

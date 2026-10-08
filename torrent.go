@@ -548,6 +548,7 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 	if err := validateInfo(info); err != nil {
 		return fmt.Errorf("bad info: %w", err)
 	}
+	info.CachePieceLengths()
 	if t.storageOpener != nil && !t.deferStorageOpen {
 		var err error
 		ctx := log.ContextWithLogger(context.Background(), t.logger)

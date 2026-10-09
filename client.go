@@ -2140,6 +2140,16 @@ func (cl *Client) canStartPieceHashers() bool {
 	return cl.belowMaxActivePieceHashers()
 }
 
+// Reports whether a torrent other than except has just downloaded pieces waiting for a hasher.
+func (cl *Client) downloadedPiecesWaitForHash(except *Torrent) bool {
+	for t := range cl.torrents {
+		if t != except && t.considerStartingHashers() && !t.piecesDownloadedForHash.IsEmpty() {
+			return true
+		}
+	}
+	return false
+}
+
 func (cl *Client) startPieceHashers() {
 	if !cl.canStartPieceHashers() {
 		return
@@ -2157,9 +2167,13 @@ func (cl *Client) startPieceHashers() {
 	if len(ts) == 0 {
 		return
 	}
-	// Sort largest torrents first, as those are preferred by webseeds, and will cause less
-	// thrashing.
+	// Torrents with just downloaded pieces come first. Then the largest, as those are preferred
+	// by webseeds, and will cause less thrashing.
 	h := heap.InterfaceForSlice(&ts, func(a, b *Torrent) bool {
+		ad, bd := !a.piecesDownloadedForHash.IsEmpty(), !b.piecesDownloadedForHash.IsEmpty()
+		if ad != bd {
+			return ad
+		}
 		return a.length() > b.length()
 	})
 	heap.Init(h)

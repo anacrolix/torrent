@@ -12,20 +12,12 @@ import (
 
 // Two torrents with several pieces each, and no hashers running until the test asks.
 func newHashPriorityClient(t *testing.T) (cl *Client, checking, downloaded *Torrent) {
-	old := maxActivePieceHashers
-	maxActivePieceHashers = 0
-
 	cfg := TestingConfig(t)
 	cfg.DefaultStorage = storage.NewFileOpts(storage.NewFileClientOpts{ClientBaseDir: t.TempDir()})
 	cl, err := NewClient(cfg)
 	qt.Assert(t, qt.IsNil(err))
 	t.Cleanup(func() { cl.Close() })
-	// Hashers read the limit under the client lock.
-	t.Cleanup(func() {
-		cl.lock()
-		maxActivePieceHashers = old
-		cl.unlock()
-	})
+	setMaxActivePieceHashers(t, cl, 0)
 	add := func(name string) *Torrent {
 		mi, err := metainfo.LoadFromFile(name)
 		qt.Assert(t, qt.IsNil(err))

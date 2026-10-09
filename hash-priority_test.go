@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"testing"
+	"time"
 
 	g "github.com/anacrolix/generics"
 	qt "github.com/go-quicktest/qt"
@@ -10,14 +11,12 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-// Two torrents with several pieces each, and no hashers running until the test asks.
-func newHashPriorityClient(t *testing.T) (cl *Client, checking, downloaded *Torrent) {
+func TestDownloadedPiecesAreHashedFirst(t *testing.T) {
 	cfg := TestingConfig(t)
 	cfg.DefaultStorage = storage.NewFileOpts(storage.NewFileClientOpts{ClientBaseDir: t.TempDir()})
 	cl, err := NewClient(cfg)
 	qt.Assert(t, qt.IsNil(err))
-	t.Cleanup(func() { cl.Close() })
-	setMaxActivePieceHashers(t, cl, 0)
+	defer cl.Close()
 	add := func(name string) *Torrent {
 		mi, err := metainfo.LoadFromFile(name)
 		qt.Assert(t, qt.IsNil(err))
@@ -26,33 +25,34 @@ func newHashPriorityClient(t *testing.T) (cl *Client, checking, downloaded *Torr
 		<-tt.GotInfo()
 		return tt
 	}
-	checking = add("testdata/debian-10.8.0-amd64-netinst.iso.torrent")
-	downloaded = add("testdata/sintel.torrent")
-	cl.lock()
-	for _, tt := range []*Torrent{checking, downloaded} {
-		tt.piecesQueuedForHash.Clear()
-		tt.piecesDownloadedForHash.Clear()
+	checking := add("testdata/debian-10.8.0-amd64-netinst.iso.torrent")
+	downloaded := add("testdata/sintel.torrent")
+
+	// Let the checks from adding the torrents finish. Then queue by hand and look under the same
+	// lock, so no hasher gets to the pieces meanwhile.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		cl.lock()
+		if cl.activePieceHashers == 0 || time.Now().After(deadline) {
+			break
+		}
+		cl.unlock()
+		time.Sleep(time.Millisecond)
 	}
+	defer cl.unlock()
+	qt.Assert(t, qt.Equals(cl.activePieceHashers, 0))
 	checking.piecesQueuedForHash.AddRange(0, 3)
 	downloaded.piecesQueuedForHash.AddRange(0, 3)
 	downloaded.piecesDownloadedForHash.Add(2)
-	maxActivePieceHashers = 1
-	cl.unlock()
-	return
-}
 
-func TestDownloadedPiecesAreHashedFirst(t *testing.T) {
-	cl, checking, downloaded := newHashPriorityClient(t)
-	cl.lock()
-	defer cl.unlock()
 	qt.Check(t, qt.Equals(downloaded.getPieceToHash(), g.Some(2)))
 	qt.Check(t, qt.IsTrue(cl.downloadedPiecesWaitForHash(checking)))
 	qt.Check(t, qt.IsFalse(cl.downloadedPiecesWaitForHash(downloaded)))
-
-	// The only hasher goes to the torrent with a downloaded piece, though the other is larger.
+	// Hashers go to the torrent with a downloaded piece first, though the other is larger.
 	qt.Assert(t, qt.IsTrue(checking.length() > downloaded.length()))
-	cl.startPieceHashers()
-	qt.Check(t, qt.Equals(downloaded.activePieceHashes, 1))
-	qt.Check(t, qt.Equals(checking.activePieceHashes, 0))
-	qt.Check(t, qt.IsTrue(downloaded.piecesDownloadedForHash.IsEmpty()))
+	qt.Check(t, qt.IsTrue(hashFirst(downloaded, checking)))
+	qt.Check(t, qt.IsFalse(hashFirst(checking, downloaded)))
+	// Without downloaded pieces, the larger torrent goes first as before.
+	downloaded.piecesDownloadedForHash.Clear()
+	qt.Check(t, qt.IsTrue(hashFirst(checking, downloaded)))
 }

@@ -133,8 +133,7 @@ type Torrent struct {
 	fileSegmentsIndex g.Option[segments.Index]
 
 	_chunksPerRegularPiece chunkIndexType
-	// Info.NumPieces walks the whole file tree of a v2 torrent on every call, and
-	// the webseed request loop asks for it constantly.
+	// Info.NumPieces walks a v2 file tree per call, and webseeds call it constantly.
 	_numPieces pieceIndex
 
 	webSeeds map[webseedUrlKey]*webseedPeer

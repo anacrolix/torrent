@@ -32,21 +32,17 @@ type Info struct {
 	MetaVersion int64    `bencode:"meta version,omitempty"`
 	FileTree    FileTree `bencode:"file tree,omitempty"`
 
-	// v2Spans is set by CachePieceLengths; see there.
 	v2Spans []v2PieceSpan
 }
 
-// v2PieceSpan is one file of a v2 torrent as Piece.Length needs it: the piece
-// it starts in and the torrent offset it ends at.
+// v2PieceSpan is a v2 file's first piece and the torrent offset it ends at.
 type v2PieceSpan struct {
 	firstPiece int
 	end        int64
 }
 
-// CachePieceLengths lays out the files of a v2 info once, so Piece.Length no
-// longer walks the whole file tree on every call — it is asked for every chunk
-// written. Call it before the info is shared; it does not change the info's
-// encoding.
+// CachePieceLengths lays out a v2 info's files once so Piece.Length doesn't walk
+// the file tree per call. Call it before the info is shared.
 func (info *Info) CachePieceLengths() {
 	if !info.HasV2() || info.PieceLength <= 0 {
 		return

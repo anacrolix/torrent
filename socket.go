@@ -126,16 +126,6 @@ type listenFunc func(n network, addr string, f firewallCallback, logger *slog.Lo
 
 const listenAllRetryLimit = 150
 
-func listenAll(
-	networks []network,
-	getHost func(string) string,
-	port int,
-	f firewallCallback,
-	logger *slog.Logger,
-) ([]socket, error) {
-	return listenAllWithListenFunc(networks, getHost, port, f, logger, listen)
-}
-
 func listenAllWithListenFunc(
 	networks []network,
 	getHost func(string) string,

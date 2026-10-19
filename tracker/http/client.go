@@ -3,7 +3,6 @@ package httpTracker
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -57,39 +56,15 @@ func NewClient(url_ *url.URL, opts NewClientOpts) Client {
 	}
 }
 
-// Returns a reader for the response body that fails if it exceeds the client's limit.
-func (cl Client) limitBody(body io.Reader) io.Reader {
+// Returns a reader for the response body that fails with *http.MaxBytesError if it exceeds the
+// client's limit.
+func (cl Client) limitBody(body io.ReadCloser) io.Reader {
 	if cl.maxResponseBytes < 0 {
 		return body
 	}
-	return &limitedReader{r: body, n: cl.maxResponseBytes}
+	// The ResponseWriter is only used to close server connections, so nil is fine for clients.
+	return http.MaxBytesReader(nil, body, cl.maxResponseBytes)
 }
-
-// Like io.LimitedReader, but returns an error rather than EOF if the limit is exceeded.
-type limitedReader struct {
-	r io.Reader
-	n int64
-}
-
-func (me *limitedReader) Read(b []byte) (n int, err error) {
-	if me.n <= 0 {
-		// Probe for any data past the limit.
-		var probe [1]byte
-		n, err = me.r.Read(probe[:])
-		if n > 0 {
-			err = ErrResponseTooLarge
-		}
-		return 0, err
-	}
-	if int64(len(b)) > me.n {
-		b = b[:me.n]
-	}
-	n, err = me.r.Read(b)
-	me.n -= int64(n)
-	return
-}
-
-var ErrResponseTooLarge = errors.New("tracker response too large")
 
 func (cl Client) Close() error {
 	cl.hc.CloseIdleConnections()

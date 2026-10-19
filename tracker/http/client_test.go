@@ -2,7 +2,6 @@ package httpTracker
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -36,5 +35,6 @@ func TestAnnounceResponseSizeLimit(t *testing.T) {
 	qt.Check(t, qt.IsNil(announce(-1)))
 	qt.Check(t, qt.IsNil(announce(int64(len(body)))))
 	err = announce(int64(len(body) - 1))
-	qt.Check(t, qt.IsTrue(errors.Is(err, ErrResponseTooLarge)), qt.Commentf("%v", err))
+	var mbe *http.MaxBytesError
+	qt.Check(t, qt.ErrorAs(err, &mbe))
 }

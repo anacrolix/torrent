@@ -5,8 +5,7 @@ go 1.25.0
 require (
 	github.com/RoaringBitmap/roaring/v2 v2.16.0
 	github.com/alexflint/go-arg v1.4.3
-	github.com/anacrolix/bargle v1.0.0
-	github.com/anacrolix/bargle/v2 v2.0.0
+	github.com/anacrolix/bargle/v2 v2.0.1-0.20260901022258-5ab11f1290c9
 	github.com/anacrolix/btree v0.1.1
 	github.com/anacrolix/chansync v0.8.0
 	github.com/anacrolix/dht/v2 v2.23.1-0.20260525063928-ec3a9bd99456

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/url"
+	"sync"
 	"time"
 	"weak"
 
@@ -55,6 +56,24 @@ type regularTrackerAnnounceDispatcher struct {
 
 	timer                      mytimer.Timer
 	pendingTorrentInputUpdates map[*Torrent]struct{}
+
+	// Finished announces wait here to be applied under the Client lock, all that are pending at
+	// once. resultsDraining is set while some goroutine holds the Client lock to apply them.
+	resultsMu       sync.Mutex
+	results         []announceResult
+	resultsDraining bool
+}
+
+// The outcome of one announce, as the attempter hands it back to be applied under the Client lock.
+type announceResult struct {
+	key    torrentTrackerAnnouncerKey
+	logger *slog.Logger
+	// nil when the torrent was GCed before the announce started.
+	t         *Torrent
+	req       tracker.AnnounceRequest
+	resp      tracker.AnnounceResponse
+	err       error
+	completed time.Time
 }
 
 type announceDataRow = indexed.Pair[torrentTrackerAnnouncerKey, nextAnnounceInput]
@@ -532,7 +551,19 @@ func (me *regularTrackerAnnounceDispatcher) startAnnounce(key torrentTrackerAnno
 	me.trackerAnnouncing.UpdateOrCreate(key.url, func(i int) int {
 		return i + 1
 	})
-	go me.singleAnnounceAttempter(key, next.AnnounceEvent)
+	// Everything the announce needs from the torrent is gathered here, while the dispatcher holds
+	// the Client lock anyway, so the attempter can go straight to the network.
+	res := announceResult{
+		key:    key,
+		logger: me.logger.With("short infohash", key.ShortInfohash, "url", key.url),
+		t:      me.getTorrentForAnnounceRequest(key.ShortInfohash),
+	}
+	if res.t != nil {
+		// A logger that includes the nice torrent group so we know what the announce is for.
+		res.logger = res.logger.With(res.t.slogGroup())
+		res.req = res.t.announceRequest(next.AnnounceEvent, key.ShortInfohash)
+	}
+	go me.singleAnnounceAttempter(res)
 }
 
 func (me *regularTrackerAnnounceDispatcher) alterInfohashConcurrency(ih shortInfohash, update func(existing int) int) {
@@ -599,73 +630,91 @@ func (me *regularTrackerAnnounceDispatcher) updateTimer() {
 	me.timer.Update(me.nextTimerDelay())
 }
 
-func (me *regularTrackerAnnounceDispatcher) singleAnnounceAttempter(key torrentTrackerAnnouncerKey, event tracker.AnnounceEvent) {
+// Announces without the Client lock and hands the outcome back to be applied with it.
+func (me *regularTrackerAnnounceDispatcher) singleAnnounceAttempter(res announceResult) {
+	if res.t != nil {
+		me.singleAnnounce(&res)
+	}
+	me.queueResult(res)
+}
+
+// Actually do an announce. We know *Torrent is accessible.
+func (me *regularTrackerAnnounceDispatcher) singleAnnounce(res *announceResult) {
+	ctx, cancel := context.WithTimeout(context.TODO(), tracker.DefaultTrackerAnnounceTimeout)
+	defer cancel()
+	res.logger.Debug("announcing", "req", res.req)
+	res.resp, res.err = me.trackerClients[res.key.url].client.Announce(ctx, res.req, me.getAnnounceOpts())
+	res.completed = time.Now()
+	level := slog.LevelDebug
+	if res.err != nil {
+		level = analog.SlogErrorLevel(res.err).UnwrapOr(level)
+	}
+	// numPeers is (.resp.Peers | length) with jq...
+	res.logger.Log(context.Background(), level, "announced", "resp", res.resp, "err", res.err)
+}
+
+// Queues a finished announce. Taking the Client lock once per announce has every announce of a
+// burst (all trackers of a newly added torrent, say) queue up for it in front of the peer
+// connections, so whoever finds no one applying results takes the lock and applies all of them,
+// including those that arrive meanwhile.
+func (me *regularTrackerAnnounceDispatcher) queueResult(res announceResult) {
+	me.resultsMu.Lock()
+	me.results = append(me.results, res)
+	if me.resultsDraining {
+		me.resultsMu.Unlock()
+		return
+	}
+	me.resultsDraining = true
+	me.resultsMu.Unlock()
+
 	me.torrentClient.lock()
 	defer me.torrentClient.unlock()
-	defer me.finishedAnnounce(key)
-	ih := key.ShortInfohash
-	logger := me.logger.With(
-		"short infohash", ih,
-		"url", key.url,
-	)
-	t := me.getTorrentForAnnounceRequest(key.ShortInfohash)
-	if t == nil {
-		logger.Debug("skipping announce for GCed torrent")
-		me.updateAnnounceState(key, func(state *announceState) {
+	for {
+		me.resultsMu.Lock()
+		batch := me.results
+		me.results = nil
+		if len(batch) == 0 {
+			me.resultsDraining = false
+			me.resultsMu.Unlock()
+			return
+		}
+		me.resultsMu.Unlock()
+		for _, r := range batch {
+			me.applyResult(r)
+		}
+	}
+}
+
+func (me *regularTrackerAnnounceDispatcher) applyResult(res announceResult) {
+	defer me.finishedAnnounce(res.key)
+	if res.t == nil {
+		res.logger.Debug("skipping announce for GCed torrent")
+		me.updateAnnounceState(res.key, func(state *announceState) {
 			state.Err = errors.New("announce skipped: Torrent GCed")
 			state.lastAttemptCompleted = time.Now()
 		})
 		me.updateTimer()
-	} else {
-		me.singleAnnounce(key, event, logger, t)
+		return
 	}
-}
-
-// Actually do an announce. We know *Torrent is accessible.
-func (me *regularTrackerAnnounceDispatcher) singleAnnounce(
-	key torrentTrackerAnnouncerKey,
-	event tracker.AnnounceEvent,
-	logger *slog.Logger,
-	t *Torrent,
-) {
-	// A logger that includes the nice torrent group so we know what the announce is for.
-	logger = logger.With(t.slogGroup())
-	req := t.announceRequest(event, key.ShortInfohash)
-	me.torrentClient.unlock()
-	ctx, cancel := context.WithTimeout(context.TODO(), tracker.DefaultTrackerAnnounceTimeout)
-	defer cancel()
-	logger.Debug("announcing", "req", req)
-	resp, err := me.trackerClients[key.url].client.Announce(ctx, req, me.getAnnounceOpts())
-	now := time.Now()
-	{
-		level := slog.LevelDebug
-		if err != nil {
-			level = analog.SlogErrorLevel(err).UnwrapOr(level)
-		}
-		// numPeers is (.resp.Peers | length) with jq...
-		logger.Log(context.Background(), level, "announced", "resp", resp, "err", err)
-	}
-
-	me.torrentClient.lock()
-	me.updateAnnounceState(key, func(state *announceState) {
-		state.Err = err
-		state.lastAttemptCompleted = now
-		if err != nil {
+	me.updateAnnounceState(res.key, func(state *announceState) {
+		state.Err = res.err
+		state.lastAttemptCompleted = res.completed
+		if res.err != nil {
 			state.consecutiveFailures++
 		} else {
 			state.consecutiveFailures = 0
 			state.lastOk = lastAnnounceOk{
-				AnnouncedEvent: req.Event,
-				Interval:       time.Duration(resp.Interval) * time.Second,
-				NumPeers:       len(resp.Peers),
-				Completed:      now,
+				AnnouncedEvent: res.req.Event,
+				Interval:       time.Duration(res.resp.Interval) * time.Second,
+				NumPeers:       len(res.resp.Peers),
+				Completed:      res.completed,
 			}
-			if req.Event == tracker.Completed {
+			if res.req.Event == tracker.Completed {
 				state.sentCompleted = true
 			}
 		}
 	})
-	t.addPeers(peerInfos(nil).AppendFromTracker(resp.Peers))
+	res.t.addPeers(peerInfos(nil).AppendFromTracker(res.resp.Peers))
 }
 
 // Updates the announce state, shared by regularTrackerAnnounceDispatcher and Torrent, but it lives in Torrent

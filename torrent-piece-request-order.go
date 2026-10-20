@@ -46,7 +46,11 @@ func (t *Torrent) deletePieceRequestOrder() {
 	}
 	cpro := t.cl.pieceRequestOrder
 	key := t.clientPieceRequestOrderKey()
-	pro := cpro[key]
+	pro, ok := cpro[key]
+	if !ok {
+		// Setting the info failed after the storage was opened.
+		return
+	}
 	for i := range t.numPieces() {
 		pro.pieces.Delete(t.pieceRequestOrderKey(i))
 	}

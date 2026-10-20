@@ -35,12 +35,9 @@ import (
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/torrent/internal/amortize"
 	"github.com/anacrolix/torrent/internal/extracmp"
-	"github.com/anacrolix/torrent/tracker"
-	"github.com/anacrolix/torrent/webtorrent"
 	"github.com/cespare/xxhash"
 	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
-	"github.com/pion/webrtc/v4"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/check"
@@ -377,42 +374,7 @@ func (cl *Client) init(cfg *ClientConfig) {
 		}
 	}
 
-	cl.websocketTrackers = websocketTrackers{
-		PeerId: cl.peerID,
-		Slogger: cl.slogger.With("name", "websocketTrackers"),
-		GetAnnounceRequest: func(
-			event tracker.AnnounceEvent, infoHash [20]byte,
-		) (
-			tracker.AnnounceRequest, error,
-		) {
-			cl.lock()
-			defer cl.unlock()
-			t, ok := cl.torrentsByShortHash[infoHash]
-			if !ok {
-				return tracker.AnnounceRequest{}, errors.New("torrent not tracked by client")
-			}
-			return t.announceRequest(event, infoHash), nil
-		},
-		Proxy:                      cl.config.HTTPProxy,
-		WebsocketTrackerHttpHeader: cl.config.WebsocketTrackerHttpHeader,
-		ICEServers:                 cl.ICEServers(),
-		DialContext:                cl.config.TrackerDialContext,
-		callbacks:                  &cl.config.Callbacks,
-		OnConn: func(dc webtorrent.DataChannelConn, dcc webtorrent.DataChannelContext) {
-			cl.lock()
-			defer cl.unlock()
-			t, ok := cl.torrentsByShortHash[dcc.InfoHash]
-			if !ok {
-				cl.logger.WithDefaultLevel(log.Warning).Printf(
-					"got webrtc conn for unloaded torrent with infohash %x",
-					dcc.InfoHash,
-				)
-				dc.Close()
-				return
-			}
-			go t.onWebRtcConn(dc, dcc)
-		},
-	}
+	cl.initWebsocketTrackers()
 
 	cl.webseedRequestTimer = time.AfterFunc(webseedRequestUpdateTimerInterval, cl.updateWebseedRequestsTimerFunc)
 }
@@ -2035,16 +1997,6 @@ func (cl *Client) locker() *lockWithDeferreds {
 
 func (cl *Client) String() string {
 	return fmt.Sprintf("<%[1]T %[1]p>", cl)
-}
-
-func (cl *Client) ICEServers() []webrtc.ICEServer {
-	var ICEServers []webrtc.ICEServer
-	if cl.config.ICEServerList != nil {
-		ICEServers = cl.config.ICEServerList
-	} else if cl.config.ICEServers != nil {
-		ICEServers = []webrtc.ICEServer{{URLs: cl.config.ICEServers}}
-	}
-	return ICEServers
 }
 
 // Returns connection-level aggregate connStats at the Client level. See the comment on

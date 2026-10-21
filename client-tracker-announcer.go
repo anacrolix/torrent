@@ -963,6 +963,16 @@ func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 	g.MapMustAssignNew(me.trackerClients, urlStr, &value)
 }
 
+// Closes the tracker clients. Announces still in flight fail.
+func (me *regularTrackerAnnounceDispatcher) close() (errs []error) {
+	for _, v := range me.trackerClients {
+		if err := v.client.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return
+}
+
 // Returns nil if the Torrent has been GCd. Use this lazily as a way to stop caring about announcing
 // something, if we don't get to sending Completed or error in time.
 func (me *regularTrackerAnnounceDispatcher) getTorrentForAnnounceRequest(ih shortInfohash) *Torrent {

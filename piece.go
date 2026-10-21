@@ -341,6 +341,7 @@ func (p Piece) VerifyDataContext(ctx context.Context) error {
 	locker := p.t.cl.locker()
 	locker.Lock()
 	if p.t.closed.IsSet() {
+		locker.Unlock()
 		return errTorrentClosed
 	}
 	target, err := p.t.queuePieceCheck(p.Index())

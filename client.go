@@ -1499,6 +1499,7 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 				ipPort := p.addr()
 				return bep40PriorityIgnoreError(cl.publicAddr(ipPort.IP), ipPort)
 			},
+			prioritizeLocal: cl.config.PrioritizeLocalPeers,
 		},
 		conns: make(map[*PeerConn]struct{}, 2*cl.config.EstablishedConnsPerTorrent),
 

@@ -300,6 +300,8 @@ type DownloadCmd struct {
 	Ipv6 bool `default:"true"`
 	Pex  bool `default:"true"`
 
+	EnableLocalPeerPrioritization bool `help:"prefer peers on loopback and private networks: dial them first, drop them last, and let them take requests from remote peers"`
+
 	LinearDiscard bool     `help:"Read and discard selected regions from start to finish. Useful for testing simultaneous Reader and static file prioritization."`
 	TestPeer      []string `help:"addresses of some starting peers"`
 
@@ -332,6 +334,7 @@ func downloadErr(ctx context.Context, flags downloadFlags, logger *slog.Logger) 
 	clientConfig.PublicIp4 = flags.PublicIP.To4()
 	clientConfig.PublicIp6 = flags.PublicIP
 	clientConfig.DisablePEX = !flags.Pex
+	clientConfig.PrioritizeLocalPeers = flags.EnableLocalPeerPrioritization
 	clientConfig.DisableWebtorrent = !flags.Webtorrent
 	clientConfig.NoDefaultPortForwarding = !flags.PortForward
 	if flags.MaxAllocPeerRequestDataPerConn != nil {

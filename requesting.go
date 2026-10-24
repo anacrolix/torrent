@@ -247,6 +247,8 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 		pieceStates:    &t.requestPieceStates,
 		requestIndexes: t.requestIndexes,
 	}
+	candidateLimit := p.requestCandidateLimit()
+	var stealCandidates []RequestIndex
 	requestHeap.pieceStates.Clear()
 	requestHeap.pieceStatesGen = t.requestPieceStates.gen
 	t.logPieceRequestOrder()
@@ -282,14 +284,49 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 					// Can't re-request while awaiting acknowledgement.
 					return
 				}
-				requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
+				requestingPeer := t.requestingPeer(r)
+				if requestingPeer == nil || requestingPeer == p {
+					if len(requestHeap.requestIndexes) < candidateLimit {
+						requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
+					}
+				} else if len(stealCandidates) < candidateLimit {
+					if stealCandidates == nil {
+						stealCandidates = make([]RequestIndex, 0, candidateLimit)
+					}
+					stealCandidates = append(stealCandidates, r)
+				}
 			})
-			return true
+			return len(requestHeap.requestIndexes) < candidateLimit
 		},
+	)
+	requestHeap.requestIndexes = mergeRequestCandidates(
+		requestHeap.requestIndexes,
+		stealCandidates,
+		candidateLimit,
 	)
 	t.assertPendingRequests()
 	desired.Requests = requestHeap
 	return
+}
+
+func mergeRequestCandidates(primary, steal []RequestIndex, limit int) []RequestIndex {
+	remaining := max(0, limit-len(primary))
+	return append(primary, steal[:min(len(steal), remaining)]...)
+}
+
+func (p *PeerConn) requestCandidateLimit() int {
+	// The piece order is already sorted by urgency, partial state,
+	// availability and piece index. Keep enough alternatives to refill the
+	// peer pipeline without rebuilding a heap containing the entire readahead
+	// window after every received 16 KiB chunk.
+	return requestCandidateLimitFor(
+		int(p.t.chunksPerRegularPiece()),
+		int(p.nominalMaxRequests()),
+	)
+}
+
+func requestCandidateLimitFor(chunksPerPiece, nominalMaxRequests int) int {
+	return max(chunksPerPiece*2, nominalMaxRequests*4)
 }
 
 // Update requests if there's a reason assigned.

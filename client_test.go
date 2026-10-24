@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
 	"testing/iotest"
 	"time"
@@ -949,4 +950,70 @@ func TestDroppedTorrentsNotReturned(t *testing.T) {
 	_, ok = cl.Torrent(tt.InfoHash())
 	qt.Check(t, qt.IsFalse(ok))
 	qt.Check(t, qt.HasLen(cl.Torrents(), 0))
+}
+
+type closeRecordingPacketConn struct {
+	net.PacketConn
+	closed *sync.WaitGroup
+}
+
+func (me closeRecordingPacketConn) Close() error {
+	me.closed.Done()
+	return me.PacketConn.Close()
+}
+
+// Tracker clients are cached per tracker URL and must be closed with the Client, or every Client
+// leaks their sockets and reader goroutines.
+func TestClientCloseClosesTrackerClients(t *testing.T) {
+	tracker, err := net.ListenPacket("udp", "127.0.0.1:0")
+	qt.Assert(t, qt.IsNil(err))
+	defer tracker.Close()
+
+	var mu sync.Mutex
+	var open sync.WaitGroup
+	created := 0
+	cfg := TestingConfig(t)
+	cfg.DisableTrackers = false
+	cfg.TrackerListenPacket = func(network, addr string) (net.PacketConn, error) {
+		pc, err := net.ListenPacket(network, addr)
+		if err != nil {
+			return nil, err
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		created++
+		open.Add(1)
+		return closeRecordingPacketConn{pc, &open}, nil
+	}
+	cl, err := NewClient(cfg)
+	qt.Assert(t, qt.IsNil(err))
+	_, _, err = cl.AddTorrentSpec(&TorrentSpec{
+		AddTorrentOpts: AddTorrentOpts{InfoHash: metainfo.HashBytes([]byte("close-tracker-clients"))},
+		Trackers:       [][]string{{"udp://" + tracker.LocalAddr().String() + "/announce"}},
+	})
+	qt.Assert(t, qt.IsNil(err))
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		mu.Lock()
+		n := created
+		mu.Unlock()
+		if n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("tracker client never opened a socket")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cl.Close()
+	done := make(chan struct{})
+	go func() {
+		open.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("tracker client sockets still open after Client.Close")
+	}
 }

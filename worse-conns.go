@@ -24,6 +24,7 @@ type worseConnInput struct {
 
 	BadDirection bool
 	Useful       bool
+	Local        bool
 }
 
 // getPeerPriority memoizes the peer priority lookup. Ranking runs single-threaded under the client
@@ -38,6 +39,8 @@ func (me *worseConnInput) getPeerPriority() (peerPriority, error) {
 
 type worseConnLensOpts struct {
 	incomingIsBad, outgoingIsBad bool
+	// Rank local peers above remote ones. See ClientConfig.PrioritizeLocalPeers.
+	prioritizeLocal bool
 }
 
 // worseConnInputFromPeer snapshots the peer fields used by connection ranking so heap operations
@@ -45,6 +48,7 @@ type worseConnLensOpts struct {
 func worseConnInputFromPeer(dst *worseConnInput, p *PeerConn, opts worseConnLensOpts) {
 	dst.BadDirection = false
 	dst.Useful = p.useful()
+	dst.Local = opts.prioritizeLocal && p.isLocal()
 	dst.LastHelpful = p.lastHelpful()
 	dst.CompletedHandshake = p.completedHandshake
 	dst.GetPeerPriority = p.peerPriority
@@ -67,6 +71,9 @@ func (l *worseConnInput) Less(r *worseConnInput) bool {
 	}
 	if l.Useful != r.Useful {
 		return !l.Useful && r.Useful
+	}
+	if l.Local != r.Local {
+		return !l.Local && r.Local
 	}
 	if !l.LastHelpful.Equal(r.LastHelpful) {
 		return l.LastHelpful.Before(r.LastHelpful)

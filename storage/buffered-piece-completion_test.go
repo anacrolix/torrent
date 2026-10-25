@@ -11,10 +11,11 @@ import (
 )
 
 type recordingPieceCompletion struct {
-	mu         sync.Mutex
-	state      map[metainfo.PieceKey]bool
-	batch      []PieceCompletionChange
-	persistent bool
+	mu              sync.Mutex
+	state           map[metainfo.PieceKey]bool
+	batch           []PieceCompletionChange
+	persistent      bool
+	deletedTorrents []metainfo.Hash
 }
 
 func (me *recordingPieceCompletion) Get(pk metainfo.PieceKey) (c Completion, err error) {
@@ -64,6 +65,18 @@ func (me *recordingPieceCompletion) Close() error {
 
 func (me *recordingPieceCompletion) Persistent() bool {
 	return me.persistent
+}
+
+func (me *recordingPieceCompletion) DeleteTorrent(infoHash metainfo.Hash) error {
+	me.mu.Lock()
+	defer me.mu.Unlock()
+	for key := range me.state {
+		if key.InfoHash == infoHash {
+			delete(me.state, key)
+		}
+	}
+	me.deletedTorrents = append(me.deletedTorrents, infoHash)
+	return nil
 }
 
 func TestBufferedPieceCompletionDefersTrueUntilCheckpoint(t *testing.T) {
@@ -180,4 +193,33 @@ func TestBufferedPieceCompletionPersistentForwardsUnderlyingState(t *testing.T) 
 
 	underlying.persistent = false
 	qt.Assert(t, qt.IsFalse(persistenter.Persistent()))
+}
+
+func TestBufferedPieceCompletionDeleteTorrentClearsOverlayAndUnderlying(t *testing.T) {
+	underlying := &recordingPieceCompletion{}
+	pc := newBufferedPieceCompletion(underlying)
+	deleter, ok := pc.(PieceCompletionTorrentDeleter)
+	qt.Assert(t, qt.IsTrue(ok))
+
+	targetHash := metainfo.HashBytes([]byte("target"))
+	targetKey := metainfo.PieceKey{InfoHash: targetHash, Index: 1}
+	otherKey := metainfo.PieceKey{InfoHash: metainfo.HashBytes([]byte("other")), Index: 2}
+
+	qt.Assert(t, qt.IsNil(pc.Set(targetKey, g.Some(true))))
+	qt.Assert(t, qt.IsNil(pc.Set(otherKey, g.Some(true))))
+	qt.Assert(t, qt.IsNil(deleter.DeleteTorrent(targetHash)))
+
+	value, err := pc.Get(targetKey)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.IsFalse(value.Ok))
+
+	value, err = pc.Get(otherKey)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.IsTrue(value.Ok))
+	qt.Assert(t, qt.IsTrue(value.Complete))
+
+	underlying.mu.Lock()
+	defer underlying.mu.Unlock()
+	qt.Assert(t, qt.HasLen(underlying.deletedTorrents, 1))
+	qt.Assert(t, qt.Equals(underlying.deletedTorrents[0], targetHash))
 }

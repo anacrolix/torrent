@@ -1245,11 +1245,30 @@ func (t *Torrent) countBytesHashed(n int64) {
 	t.cl.counters.BytesHashed.Add(n)
 }
 
+func (t *Torrent) countPieceHashed(passed, short bool, ioErr error) {
+	field := func(c *TorrentStatCounters) *Count {
+		switch {
+		case passed:
+			return &c.PiecesHashedGood
+		case ioErr != nil:
+			return &c.PiecesHashedErrors
+		case short:
+			return &c.PiecesHashedMissing
+		default:
+			return &c.PiecesHashedBad
+		}
+	}
+	field(&t.counters).Add(1)
+	field(&t.cl.counters).Add(1)
+}
+
 func (t *Torrent) hashPiece(piece pieceIndex) (
 	correct bool,
 	// These are peers that sent us blocks that differ from what we hash here. TODO: Track Peer not
 	// bannable addr for peer types that are rebuked differently.
 	differingPeers map[bannableAddr]struct{},
+	// Storage had less data for the piece than its length, such as when a file is missing.
+	short bool,
 	err error,
 ) {
 	p := t.piece(piece)
@@ -1272,7 +1291,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 			return
 		}
 		hw := hashWriter{hashCache: sha1HashCache}
-		differingPeers, err = t.hashPieceWithSpecificHash(piece, &hw)
+		differingPeers, short, err = t.hashPieceWithSpecificHash(piece, &hw)
 		// For a hybrid torrent, we work with the v2 files, but if we use a v1 hash, we can assume
 		// that the pieces are padded with zeroes.
 		if t.info.FilesArePieceAligned() {
@@ -1286,7 +1305,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 		correct = sum == v1Hash.Value
 	} else if hashV2 := p.state().hashV2; hashV2 != nil {
 		hw := hashWriter{hashCache: v2HashCache}
-		differingPeers, err = t.hashPieceWithSpecificHash(piece, &hw)
+		differingPeers, short, err = t.hashPieceWithSpecificHash(piece, &hw)
 		var sum [32]byte
 		// What about the final piece in a torrent? From BEP 52: "The layer is chosen so that one
 		// hash covers piece length bytes". Note that if a piece doesn't have a hash in piece layers
@@ -1299,7 +1318,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 	} else {
 		expected := p.mustGetOnlyFile().piecesRoot.Unwrap()
 		hw := &hashWriter{hashCache: v2HashCache}
-		differingPeers, err = t.hashPieceWithSpecificHash(piece, hw)
+		differingPeers, short, err = t.hashPieceWithSpecificHash(piece, hw)
 		var sum [32]byte
 		// This is *not* padded to piece length.
 		sumExactly(sum[:], hw.materialize().Sum)
@@ -1318,6 +1337,7 @@ func sumExactly(dst []byte, sum func(b []byte) []byte) {
 func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, hw *hashWriter) (
 	// These are peers that sent us blocks that differ from what we hash here.
 	differingPeers map[bannableAddr]struct{},
+	short bool,
 	err error,
 ) {
 	var w io.Writer = hw
@@ -1347,6 +1367,7 @@ func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, hw *hashWriter) (
 	maxWritten := p.Info().Length()
 	panicif.GreaterThan(written, maxWritten)
 	t.countBytesHashed(written)
+	short = written < maxWritten
 	return
 }
 
@@ -2470,6 +2491,8 @@ func (t *Torrent) gauges() (ret TorrentGauges) {
 		}
 	}
 	ret.PiecesComplete = t.numPiecesCompleted()
+	ret.PiecesQueuedForHash = int(t.piecesQueuedForHash.GetCardinality())
+	ret.PiecesHashing = t.activePieceHashes
 	return
 }
 
@@ -2877,7 +2900,7 @@ func (t *Torrent) finishHash(index pieceIndex) {
 	p := t.piece(index)
 	// Do we really need to spell out that it's a copy error? If it's a failure to hash the hash
 	// will just be wrong.
-	correct, failedPeers, copyErr := t.hashPiece(index)
+	correct, failedPeers, short, copyErr := t.hashPiece(index)
 	t.storageLock.RUnlock()
 	level := slog.LevelDebug
 	switch copyErr {
@@ -2902,6 +2925,7 @@ func (t *Torrent) finishHash(index pieceIndex) {
 		t.smartBanCache.ForgetBlockSeq(iterRange(t.pieceRequestIndexBegin(index), t.pieceRequestIndexBegin(index+1)))
 	}
 	p.state().hashing = false
+	t.countPieceHashed(correct, short, copyErr)
 	t.pieceHashed(index, correct, copyErr)
 	t.updatePiecePriority(index, "Torrent.finishHash")
 	t.activePieceHashes--

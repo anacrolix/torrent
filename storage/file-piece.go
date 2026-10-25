@@ -81,6 +81,11 @@ func (me *filePieceImpl) pieceCompletion() PieceCompletion {
 
 func (me *filePieceImpl) Completion() (c Completion) {
 	c = me.t.getCompletion(me.p.Index())
+	if !c.Ok && c.Err == nil && me.dataMissing() {
+		// Nothing to hash: the piece can't be complete, and saying so lets it be requested right
+		// away rather than after a check of everything already in storage.
+		return Completion{Ok: true}
+	}
 	if !c.Ok || c.Err != nil {
 		return c
 	}
@@ -102,6 +107,29 @@ func (me *filePieceImpl) iterFileSegments() iter.Seq2[int, segments.Extent] {
 		}
 		panicif.NotEq(noFiles, pieceExtent.Length == 0)
 	}
+}
+
+// Reports whether a file of the piece is missing or too short to hold its part of it.
+func (me *filePieceImpl) dataMissing() bool {
+	for i, extent := range me.iterFileSegments() {
+		if extent.Length == 0 {
+			continue
+		}
+		file := me.t.file(i)
+		file.mu.RLock()
+		s, err := os.Stat(file.safeOsPath)
+		if me.partFiles() && errors.Is(err, fs.ErrNotExist) {
+			s, err = os.Stat(file.partFilePath())
+		}
+		file.mu.RUnlock()
+		if errors.Is(err, fs.ErrNotExist) {
+			return true
+		}
+		if err == nil && s.Size() < extent.End() {
+			return true
+		}
+	}
+	return false
 }
 
 // If a piece is complete, check constituent files have the minimum required sizes.

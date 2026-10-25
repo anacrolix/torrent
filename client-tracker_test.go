@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/anacrolix/torrent/internal/testutil"
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/tracker"
 )
 
@@ -222,4 +224,23 @@ func startTestTracker() (*httptest.Server, string) {
 	s := httptest.NewServer(http.HandlerFunc(testtracker))
 	trackerUrl := "ws" + strings.TrimPrefix(s.URL, "http")
 	return s, trackerUrl
+}
+
+// Each tracker added starts an announce that looks up its tracker client while adding the next one
+// writes to the same map. Only -race catches it.
+func TestAddTrackersWhileAnnouncing(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("d8:intervali3600e5:peers0:e"))
+	}))
+	defer s.Close()
+	cfg := TestingConfig(t)
+	cfg.DisableTrackers = false
+	cl, err := NewClient(cfg)
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	to, _ := cl.AddTorrentInfoHash(metainfo.Hash{1})
+	for i := range 20 {
+		to.AddTrackers([][]string{{fmt.Sprintf("%s/%d", s.URL, i)}})
+		time.Sleep(time.Millisecond)
+	}
 }

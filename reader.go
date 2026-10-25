@@ -190,10 +190,11 @@ func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 // We still pass ctx here, although it's a reader field now.
 func (r *reader) readContext(ctx context.Context, b []byte) (n int, err error) {
 	if len(b) > 0 {
-		r.reading = true
 		// TODO: Rework reader piece priorities so we don't have to push updates in to the Client
 		// and take the lock here.
 		r.mu.Lock()
+		// Guarded by mu: SetReadahead and SetReadaheadFunc read it from other goroutines.
+		r.reading = true
 		r.posChanged()
 		r.mu.Unlock()
 	}

@@ -179,7 +179,10 @@ type Torrent struct {
 	_completedPieces typedRoaring.Bitmap[pieceIndex]
 	// Pieces that need to be hashed.
 	piecesQueuedForHash typedRoaring.Bitmap[pieceIndex]
-	activePieceHashes   int
+	// The queued pieces that were just downloaded, as opposed to data already in storage being
+	// checked. They are hashed first.
+	piecesDownloadedForHash typedRoaring.Bitmap[pieceIndex]
+	activePieceHashes       int
 
 	connsWithAllPieces map[*Peer]struct{}
 
@@ -2819,6 +2822,10 @@ func (t *Torrent) pieceHasher(initial pieceIndex) {
 			break
 		}
 		pi := piOpt.Value
+		// Checking data already in storage gives way to pieces just downloaded elsewhere.
+		if !t.piecesDownloadedForHash.Contains(pi) && t.cl.downloadedPiecesWaitForHash(t) {
+			break
+		}
 		t.startHash(pi)
 		t.cl.unlock()
 		t.finishHash(pi)
@@ -2829,6 +2836,7 @@ func (t *Torrent) pieceHasher(initial pieceIndex) {
 
 func (t *Torrent) startHash(pi pieceIndex) {
 	t.piecesQueuedForHash.Remove(pi)
+	t.piecesDownloadedForHash.Remove(pi)
 	t.pieces[pi].hashing = true
 	t.deferPublishPieceStateChange(pi)
 	t.updatePiecePriority(pi, "Torrent.startHash")
@@ -2838,6 +2846,13 @@ func (t *Torrent) startHash(pi pieceIndex) {
 }
 
 func (t *Torrent) getPieceToHash() (_ g.Option[pieceIndex]) {
+	for i := range t.piecesDownloadedForHash.Iterate {
+		p := &t.pieces[i]
+		if p.hashing || p.marking {
+			continue
+		}
+		return g.Some(i)
+	}
 	for i := range t.piecesQueuedForHash.Iterate {
 		p := &t.pieces[i]
 		if p.hashing || p.marking {
@@ -2941,6 +2956,14 @@ func (t *Torrent) queueInitialPieceCheck(i pieceIndex) {
 		return
 	}
 	// Should only get closed or missing hash errors here which are ok.
+	_, _ = t.queuePieceCheck(i)
+}
+
+// Queues a piece whose chunks were all just received, ahead of checks of data already in storage.
+func (t *Torrent) queueDownloadedPieceCheck(i pieceIndex) {
+	if t.piece(i).haveHash() {
+		t.piecesDownloadedForHash.Add(i)
+	}
 	_, _ = t.queuePieceCheck(i)
 }
 

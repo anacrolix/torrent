@@ -33,7 +33,6 @@ import (
 	"github.com/anacrolix/missinggo/v2/pubsub"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
-	"github.com/pion/webrtc/v4"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 
@@ -53,7 +52,6 @@ import (
 	"github.com/anacrolix/torrent/types/infohash"
 	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 	"github.com/anacrolix/torrent/webseed"
-	"github.com/anacrolix/torrent/webtorrent"
 )
 
 var errTorrentClosed = errors.New("torrent closed")
@@ -2092,53 +2090,6 @@ func (t *Torrent) seeding() bool {
 	return true
 }
 
-func (t *Torrent) onWebRtcConn(
-	c webtorrent.DataChannelConn,
-	dcc webtorrent.DataChannelContext,
-) {
-	defer c.Close()
-	netConn := webrtcNetConn{
-		ReadWriteCloser:    c,
-		DataChannelContext: dcc,
-	}
-	peerRemoteAddr := netConn.RemoteAddr()
-	//t.logger.Levelf(log.Critical, "onWebRtcConn remote addr: %v", peerRemoteAddr)
-	if t.cl.badPeerAddr(peerRemoteAddr) {
-		return
-	}
-	localAddrIpPort := missinggo.IpPortFromNetAddr(netConn.LocalAddr())
-
-	pc, err := t.cl.initiateProtocolHandshakes(
-		context.Background(),
-		netConn,
-		t,
-		false,
-		newConnectionOpts{
-			outgoing:        dcc.LocalOffered,
-			remoteAddr:      peerRemoteAddr,
-			localPublicAddr: localAddrIpPort,
-			network:         webrtcNetwork,
-			connString:      fmt.Sprintf("webrtc offer_id %x: %v", dcc.OfferId, regularNetConnPeerConnConnString(netConn)),
-		},
-	)
-	if err != nil {
-		t.logger.WithDefaultLevel(log.Error).Printf("error in handshaking webrtc connection: %v", err)
-		return
-	}
-	if dcc.LocalOffered {
-		pc.Discovery = PeerSourceTracker
-	} else {
-		pc.Discovery = PeerSourceIncoming
-	}
-	pc.conn.SetWriteDeadline(time.Time{})
-	t.cl.lock()
-	defer t.cl.unlock()
-	err = t.runHandshookConn(pc)
-	if err != nil {
-		t.logger.WithDefaultLevel(log.Debug).Printf("error running handshook webrtc conn: %v", err)
-	}
-}
-
 func (t *Torrent) logRunHandshookConn(pc *PeerConn, logAll bool, level log.Level) {
 	err := t.runHandshookConn(pc)
 	if err != nil || logAll {
@@ -2148,25 +2099,6 @@ func (t *Torrent) logRunHandshookConn(pc *PeerConn, logAll bool, level log.Level
 
 func (t *Torrent) runHandshookConnLoggingErr(pc *PeerConn) {
 	t.logRunHandshookConn(pc, false, log.Debug)
-}
-
-func (t *Torrent) startWebsocketAnnouncer(u url.URL, shortInfohash [20]byte) torrentTrackerAnnouncer {
-	wtc, release := t.cl.websocketTrackers.Get(u.String(), shortInfohash)
-	// This needs to run before the Torrent is dropped from the Client, to prevent a new
-	// webtorrent.TrackerClient for the same info hash before the old one is cleaned up.
-	t.onClose = append(t.onClose, release)
-	wst := websocketTrackerStatus{u, wtc}
-	go func() {
-		err := wtc.Announce(tracker.Started, shortInfohash)
-		if err != nil {
-			level := log.Warning
-			if t.closed.IsSet() {
-				level = log.Debug
-			}
-			t.logger.Levelf(level, "error doing initial announce to %q: %v", u.String(), err)
-		}
-	}()
-	return wst
 }
 
 func (t *Torrent) startScrapingTracker(_url string) {
@@ -3382,18 +3314,6 @@ func (t *Torrent) iterUndirtiedRequestIndexesInPiece(
 		pieceRequestIndexOffset, pieceRequestIndexOffset+t.pieceNumChunks(piece),
 		f,
 	)
-}
-
-type webRtcStatsReports map[string]webrtc.StatsReport
-
-func (t *Torrent) GetWebRtcPeerConnStats() map[string]webRtcStatsReports {
-	stats := make(map[string]webRtcStatsReports)
-	trackersMap := t.cl.websocketTrackers.clients
-	for i, trackerClient := range trackersMap {
-		ts := trackerClient.RtcPeerConnStats()
-		stats[i] = ts
-	}
-	return stats
 }
 
 type requestState struct {

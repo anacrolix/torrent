@@ -1164,13 +1164,34 @@ func (t *Torrent) requestIndexEnd(r RequestIndex) int64 {
 }
 
 func (t *Torrent) requestOffset(r Request) int64 {
-	return torrentRequestOffset(t.length(), int64(t.usualPieceSize()), r)
+	return torrentRequestOffset(t.pieceAlignedEnd(), int64(t.usualPieceSize()), r)
+}
+
+// The torrent offset one past the last piece's data. v2 files are piece aligned, so this can lie
+// past the torrent's length.
+func (t *Torrent) pieceAlignedEnd() int64 {
+	if t.numPieces() == 0 {
+		return 0
+	}
+	last := t.numPieces() - 1
+	return int64(last)*int64(t.usualPieceSize()) + int64(t.pieceLength(last))
 }
 
 // Return the request that would include the given offset into the torrent data. Returns !ok if
 // there is no such request.
 func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
-	return torrentOffsetRequest(t.length(), t.info.PieceLength, int64(t.chunkSize), off)
+	req, ok = torrentOffsetRequest(t.pieceAlignedEnd(), t.info.PieceLength, int64(t.chunkSize), off)
+	if !ok {
+		return
+	}
+	// v2 pieces at the end of a file can be short, and the offsets up to the next piece hold no
+	// data.
+	pieceLength := t.pieceLength(pieceIndex(req.Index))
+	if req.Begin >= pieceLength {
+		return Request{}, false
+	}
+	req.Length = min(req.Length, pieceLength-req.Begin)
+	return
 }
 
 func (t *Torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
@@ -3724,10 +3745,15 @@ func (t *Torrent) withSlogger(base *slog.Logger) *slog.Logger {
 }
 
 func (t *Torrent) wantReceiveChunk(reqIndex RequestIndex) bool {
+	pi := t.pieceIndexOfRequestIndex(reqIndex)
+	// With v2 a short piece can sit between full ones, leaving request indexes past its end that
+	// map to no chunk.
+	if pi >= t.numPieces() || reqIndex%t.chunksPerRegularPiece() >= t.pieceNumChunks(pi) {
+		return false
+	}
 	if t.checkValidReceiveChunk(t.requestIndexToRequest(reqIndex)) != nil {
 		return false
 	}
-	pi := t.pieceIndexOfRequestIndex(reqIndex)
 	if t.ignorePieceForRequests(pi) {
 		return false
 	}
@@ -3855,9 +3881,14 @@ func (t *Torrent) incrementPiecesDirtiedStats(p Piece, inc func(stats *ConnStats
 }
 
 // Maximum end request index for the torrent (one past the last). There might be other requests that
-// don't make sense if padding files and v2 are in use.
+// don't make sense if padding files and v2 are in use. With v2 the request indexes of the short
+// pieces between files mean this lies past the torrent's length in chunks.
 func (t *Torrent) maxEndRequest() RequestIndex {
-	return RequestIndex(intCeilDiv(uint64(t.length()), t.chunkSize.Uint64()))
+	if t.numPieces() == 0 {
+		return 0
+	}
+	last := t.numPieces() - 1
+	return t.pieceRequestIndexBegin(last) + RequestIndex(t.pieceNumChunks(last))
 }
 
 // Avoids needing or indexing the pieces slice.

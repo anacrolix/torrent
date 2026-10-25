@@ -165,7 +165,11 @@ type ClientConfig struct {
 	DisableTCP bool `long:"disable-tcp"`
 	// Called to instantiate storage for each added torrent. Builtin backends
 	// are in the storage package. If not set, the "file" implementation is
-	// used (and Closed when the Client is Closed).
+	// used (and Closed when the Client is Closed). A DefaultStorage provided
+	// here is owned by the caller and is not Closed by the Client: if it
+	// implements storage.ClientImplCloser (as the builtin backends do, e.g. to
+	// release a piece completion database), Close it after Client.Close
+	// returns, and also if NewClient fails.
 	DefaultStorage storage.ClientImpl
 
 	HeaderObfuscationPolicy HeaderObfuscationPolicy

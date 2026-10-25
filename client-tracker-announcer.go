@@ -975,5 +975,11 @@ func (me *regularTrackerAnnounceDispatcher) pendTorrentInputUpdate(t *Torrent) {
 	if t.cl.config.DisableTrackers {
 		return
 	}
+	if g.MapContains(me.pendingTorrentInputUpdates, t) {
+		return
+	}
 	me.pendingTorrentInputUpdates[t] = struct{}{}
+	// The timer may be waiting for a regular announce far in the future. Bring it forward so the
+	// update, such as a dropped torrent's Stopped announce, isn't held back until then.
+	me.updateTimer()
 }

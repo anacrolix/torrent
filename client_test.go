@@ -366,6 +366,35 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 	qt.Check(t, qt.Equals(n, 0))
 }
 
+func TestDropDuringVerify(t *testing.T) {
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	info := metainfo.Info{
+		Name:        "big.bin",
+		PieceLength: 16384,
+		Length:      1024 * 16384,
+		Pieces:      make([]byte, 1024*20),
+	}
+	b, err := bencode.Marshal(info)
+	qt.Assert(t, qt.IsNil(err))
+	tt, err := cl.AddTorrent(&metainfo.MetaInfo{InfoBytes: b})
+	qt.Assert(t, qt.IsNil(err))
+	go tt.VerifyDataContext(t.Context())
+	tt.Drop()
+	done := make(chan error, 1)
+	go func() {
+		err := tt.VerifyDataContext(t.Context())
+		cl.Close()
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		qt.Check(t, qt.ErrorIs(err, errTorrentClosed))
+	case <-time.After(5 * time.Second):
+		t.Fatal("client lock still held after dropping a torrent during verification")
+	}
+}
+
 func TestDhtInheritBlocklist(t *testing.T) {
 	ipl := iplist.New(nil)
 	qt.Assert(t, qt.IsNotNil(ipl))

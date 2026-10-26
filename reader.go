@@ -351,6 +351,12 @@ func (r *reader) readAt(ctx context.Context, b []byte, pos int64) (n int, err er
 	}
 	r.slogger().Error("read failed after completion resync", "err", err)
 
+	// Retrying cannot help once the torrent is closed or the caller gave up:
+	// the recursion below would never end (the stack grows until the runtime
+	// kills the process).
+	if r.t.closed.IsSet() || ctx.Err() != nil {
+		return
+	}
 	if r.t.hasStorageCap() {
 		// Ensure params weren't modified (Go sux). Recurse to detect infinite loops. TODO: I expect
 		// only some errors should pass through here, this might cause us to get stuck if we retry

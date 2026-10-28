@@ -2,10 +2,14 @@ package torrent
 
 import (
 	"cmp"
+	"context"
+	"fmt"
 	"io"
+	"net"
 	"os"
 	"testing"
 	"testing/iotest"
+	"time"
 
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/missinggo/v2"
@@ -13,6 +17,10 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/internal/testutil"
+	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/torrent/mse"
+	pp "github.com/anacrolix/torrent/peer_protocol"
+	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 )
 
 func TestPeerConnEstablished(t *testing.T) {
@@ -187,4 +195,104 @@ func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
 	qt.Check(t, qt.IsNil(err))
 	qt.Check(t, qt.Equals(pos, 0))
 	qt.Check(t, qt.IsNil(iotest.TestReader(r, []byte(testutil.GreetingFileContents))))
+}
+
+func TestInitiateHandshakesConcurrentMetadata(t *testing.T) {
+	mi, err := metainfo.LoadFromFile("testdata/bittorrent-v2-hybrid-test.torrent")
+	qt.Assert(t, qt.IsNil(err))
+	v1 := mi.HashInfoBytes()
+	v2 := infohash_v2.HashBytes(mi.InfoBytes)
+	for _, initialV2 := range []bool{false, true} {
+		for _, tc := range []struct {
+			name            string
+			encrypted       bool
+			metadataOnReply bool
+		}{
+			{name: "plain"},
+			{name: "encrypted", encrypted: true},
+			{name: "reply", metadataOnReply: true},
+		} {
+			t.Run(fmt.Sprintf("initialV2=%v/%s", initialV2, tc.name), func(t *testing.T) {
+				var tor *Torrent
+				metadataDone := make(chan struct{})
+				var metadataErr error
+				receiveMetadata := func() {
+					metadataErr = tor.SetInfoBytes(mi.InfoBytes)
+					close(metadataDone)
+				}
+				cfg := TestingConfig(t)
+				if tc.metadataOnReply {
+					cfg.Callbacks.CompletedHandshake = func(*PeerConn, InfoHash) {
+						go receiveMetadata()
+					}
+				}
+				cfg.DisableTCP = true
+				cfg.DisableUTP = true
+				cl, err := NewClient(cfg)
+				qt.Assert(t, qt.IsNil(err))
+				defer cl.Close()
+				initial := v1
+				if initialV2 {
+					initial = *v2.ToShort()
+				}
+				tor, _ = cl.AddTorrentOpt(AddTorrentOpts{
+					InfoHash: initial, DisableInitialPieceCheck: true,
+				})
+				ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+				defer cancel()
+				local, remote := net.Pipe()
+				defer local.Close()
+				defer remote.Close()
+				deadline, _ := ctx.Deadline()
+				qt.Assert(t, qt.IsNil(local.SetDeadline(deadline)))
+				qt.Assert(t, qt.IsNil(remote.SetDeadline(deadline)))
+
+				peerDone := make(chan error, 1)
+				go func() {
+					// Metadata must be able to acquire the client lock while the
+					// initiator is waiting for the peer's handshake.
+					if !tc.metadataOnReply {
+						<-metadataDone
+						if metadataErr != nil {
+							peerDone <- metadataErr
+							return
+						}
+					}
+					var rw io.ReadWriter = remote
+					if tc.encrypted {
+						var err error
+						rw, _, err = mse.ReceiveHandshake(ctx, rw, func(yield func([]byte) bool) {
+							if yield(v1[:]) {
+								yield(v2.ToShort().Bytes())
+							}
+						}, mse.DefaultCryptoSelector)
+						if err != nil {
+							peerDone <- err
+							return
+						}
+					}
+					_, err := pp.Handshake(ctx, rw, &initial, PeerID{}, PeerExtensionBits{})
+					peerDone <- err
+				}()
+				if !tc.metadataOnReply {
+					go receiveMetadata()
+				}
+				conn := &PeerConn{r: local, w: local}
+				conn.headerEncrypted = tc.encrypted
+				err = cl.initiateHandshakes(ctx, conn, tor)
+				select {
+				case <-metadataDone:
+				case <-ctx.Done():
+					t.Fatal("metadata update did not complete")
+				}
+				peerErr := <-peerDone
+				qt.Check(t, qt.IsNil(metadataErr))
+				qt.Check(t, qt.IsNil(peerErr))
+				qt.Check(t, qt.IsNil(err))
+				if !tc.metadataOnReply {
+					qt.Check(t, qt.Equals(conn.v2, initialV2))
+				}
+			})
+		}
+	}
 }

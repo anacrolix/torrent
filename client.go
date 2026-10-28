@@ -1052,6 +1052,10 @@ func (cl *Client) incomingPeerPort() int {
 
 func (cl *Client) initiateHandshakes(ctx context.Context, c *PeerConn, t *Torrent) (err error) {
 	if c.headerEncrypted {
+		// Metadata can change the canonical infohash while the handshake is in flight.
+		cl.rLock()
+		skey := *t.canonicalShortInfohash()
+		cl.rUnlock()
 		var rw io.ReadWriter
 		rw, c.cryptoMethod, err = mse.InitiateHandshakeContext(
 			ctx,
@@ -1059,7 +1063,7 @@ func (cl *Client) initiateHandshakes(ctx context.Context, c *PeerConn, t *Torren
 				io.Reader
 				io.Writer
 			}{c.r, c.w},
-			t.canonicalShortInfohash().Bytes(),
+			skey.Bytes(),
 			nil,
 			cl.config.CryptoProvides,
 		)
@@ -1069,14 +1073,18 @@ func (cl *Client) initiateHandshakes(ctx context.Context, c *PeerConn, t *Torren
 		}
 	}
 	localReservedBits := cl.config.Extensions
+	cl.rLock()
 	handshakeIh := *t.canonicalShortInfohash()
 	// If we're sending the v1 infohash, and we know the v2 infohash, set the v2 upgrade bit. This
 	// means the peer can send the v2 infohash in the handshake to upgrade the connection.
 	localReservedBits.SetBit(pp.ExtensionBitV2Upgrade, g.Some(handshakeIh) == t.infoHash && t.infoHashV2.Ok)
+	cl.rUnlock()
 	ih, err := cl.connBtHandshake(context.TODO(), c, &handshakeIh, localReservedBits)
 	if err != nil {
 		return fmt.Errorf("bittorrent protocol handshake: %w", err)
 	}
+	cl.rLock()
+	defer cl.rUnlock()
 	if g.Some(ih) == t.infoHash {
 		return nil
 	}

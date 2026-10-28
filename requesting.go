@@ -412,12 +412,20 @@ func (p *PeerConn) applyRequestState(next desiredRequestState) {
 				continue
 			}
 
-			// Don't steal from the poor.
-			diff := int64(current.Requests.GetCardinality()) + 1 - (int64(existing.uncancelledRequests()) - 1)
-			// Steal a request that leaves us with one more request than the existing peer
-			// connection if the stealer more recently received a chunk.
-			if diff > 1 || (diff == 1 && !p.lastUsefulChunkReceived.After(existing.lastUsefulChunkReceived)) {
-				continue
+			if steal, ok := t.localPeerMayStealRequest(&p.Peer, &existing.Peer); ok {
+				// Local peers take requests from remote ones, and remote peers never take them
+				// back. See ClientConfig.PrioritizeLocalPeers.
+				if !steal {
+					continue
+				}
+			} else {
+				// Don't steal from the poor.
+				diff := int64(current.Requests.GetCardinality()) + 1 - (int64(existing.uncancelledRequests()) - 1)
+				// Steal a request that leaves us with one more request than the existing peer
+				// connection if the stealer more recently received a chunk.
+				if diff > 1 || (diff == 1 && !p.lastUsefulChunkReceived.After(existing.lastUsefulChunkReceived)) {
+					continue
+				}
 			}
 			// Don't steal a request the current holder has not had time to answer. The tests
 			// above compare queue depths, which say nothing about whether the block is already

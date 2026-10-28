@@ -2527,17 +2527,23 @@ func (t *Torrent) addPeerConn(c *PeerConn) (err error) {
 	if len(t.conns) >= t.maxEstablishedConns {
 		numOutgoing := t.numOutgoingConns()
 		numIncoming := len(t.conns) - numOutgoing
-		c := t.worstBadConn(worseConnLensOpts{
+		worst := t.worstBadConn(worseConnLensOpts{
 			// We've already established that we have too many connections at this point, so we just
 			// need to match what kind we have too many of vs. what we're trying to add now.
-			incomingIsBad: (numIncoming-numOutgoing > 1) && c.outgoing,
-			outgoingIsBad: (numOutgoing-numIncoming > 1) && !c.outgoing,
+			incomingIsBad:   (numIncoming-numOutgoing > 1) && c.outgoing,
+			outgoingIsBad:   (numOutgoing-numIncoming > 1) && !c.outgoing,
+			prioritizeLocal: t.prioritizeLocalPeers(),
 		})
-		if c == nil {
+		if worst == nil {
 			return errors.New("don't want conn")
 		}
-		c.close()
-		t.deletePeerConn(c)
+		// Local conns rank above remote ones, so this only happens when every droppable conn is
+		// local. Don't swap one out for a remote peer.
+		if t.prioritizeLocalPeers() && worst.isLocal() && !c.isLocal() {
+			return errors.New("don't want remote conn over local conns")
+		}
+		worst.close()
+		t.deletePeerConn(worst)
 	}
 	if len(t.conns) >= t.maxEstablishedConns {
 		panic(len(t.conns))
@@ -2584,8 +2590,9 @@ func (t *Torrent) wantOutgoingConns() bool {
 	}
 	numIncomingConns := len(t.conns) - t.numOutgoingConns()
 	return t.worstBadConn(worseConnLensOpts{
-		incomingIsBad: numIncomingConns-t.numOutgoingConns() > 1,
-		outgoingIsBad: false,
+		incomingIsBad:   numIncomingConns-t.numOutgoingConns() > 1,
+		outgoingIsBad:   false,
+		prioritizeLocal: t.prioritizeLocalPeers(),
 	}) != nil
 }
 
@@ -2599,8 +2606,9 @@ func (t *Torrent) wantIncomingConns() bool {
 	}
 	numIncomingConns := len(t.conns) - t.numOutgoingConns()
 	return t.worstBadConn(worseConnLensOpts{
-		incomingIsBad: false,
-		outgoingIsBad: t.numOutgoingConns()-numIncomingConns > 1,
+		incomingIsBad:   false,
+		outgoingIsBad:   t.numOutgoingConns()-numIncomingConns > 1,
+		prioritizeLocal: t.prioritizeLocalPeers(),
 	}) != nil
 }
 
@@ -2613,7 +2621,9 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 		return true
 	})
 	defer putPeerConnSlice(conns)
-	wcs := getWorseConnSlice(conns, worseConnLensOpts{})
+	wcs := getWorseConnSlice(conns, worseConnLensOpts{
+		prioritizeLocal: t.prioritizeLocalPeers(),
+	})
 	defer wcs.release()
 	heap.Init(wcs)
 	for len(t.conns) > t.maxEstablishedConns && wcs.Len() > 0 {

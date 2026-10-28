@@ -649,6 +649,7 @@ func TestPeerConnPeerRequestDataLifecycle(t *testing.T) {
 		})))
 		pc := cl.newConnection(nil, newConnectionOpts{network: "test"})
 		pc.setTorrent(tor)
+		pc.t.chunkSize = 1
 		return pc, Request{Index: 0, ChunkSpec: ChunkSpec{Begin: 0, Length: 1}}, outstandingChunkPoolBuffers()
 	}
 

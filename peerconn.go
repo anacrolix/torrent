@@ -748,34 +748,26 @@ again:
 	c.locker().Unlock()
 }
 
-func (c *PeerConn) peerRequestDataAllocSize(size int) int {
-	if size <= c.t.chunkSize.Int() {
-		return c.t.chunkSize.Int()
-	}
-	return size
-}
-
 func (c *PeerConn) peerRequestDataBuffered() (n int) {
 	// TODO: Should we include a limit to the number of individual requests to keep N small, or keep
 	// a counter elsewhere?
 	for r := range c.readyPeerRequests {
-		n += c.peerRequestDataAllocSize(r.Length.Int())
+		n += r.Length.Int()
 	}
 	return
 }
 
 func (c *PeerConn) waitForDataAlloc(size int) bool {
-	allocSize := c.peerRequestDataAllocSize(size)
 	maxAlloc := c.t.cl.config.MaxAllocPeerRequestDataPerConn
 	locker := c.locker()
 	for {
-		if allocSize > maxAlloc {
+		if size > maxAlloc {
 			c.slogger.Warn("peer request length exceeds MaxAllocPeerRequestDataPerConn",
 				"requested", size,
 				"max", maxAlloc)
 			return false
 		}
-		if c.peerRequestDataBuffered()+allocSize <= maxAlloc {
+		if c.peerRequestDataBuffered()+size <= maxAlloc {
 			return true
 		}
 		allocDecreased := c.peerRequestDataAllocDecreased.Signaled()
@@ -891,8 +883,9 @@ func (c *PeerConn) useBestReject(r Request) {
 	}
 }
 
-// Data read from storage for a peer request. Buffers big enough to be worth reusing come from the
-// Torrent chunk pool, and must be passed back to PeerConn.releasePeerRequestData when done.
+// Data read from storage for a peer request. Requests of exactly the Torrent chunk size use the
+// chunk pool, so pooled capacity matches the length charged against MaxAllocPeerRequestDataPerConn.
+// Such buffers must be passed back to PeerConn.releasePeerRequestData when done.
 type peerRequestData struct {
 	buf []byte
 	// Set if buf belongs to the Torrent chunk pool.
@@ -900,7 +893,7 @@ type peerRequestData struct {
 }
 
 func (c *PeerConn) getPeerRequestData(n int) (prd peerRequestData) {
-	if n <= c.t.chunkSize.Int() {
+	if n == c.t.chunkSize.Int() {
 		prd.poolPtr = c.t.chunkPool.Get()
 		prd.buf = (*prd.poolPtr)[:n]
 	} else {

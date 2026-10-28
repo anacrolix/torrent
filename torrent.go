@@ -1908,7 +1908,7 @@ func appendMissingStrings(old, new []string) (ret []string) {
 	ret = old
 new:
 	for _, n := range new {
-		for _, o := range old {
+		for _, o := range ret {
 			if o == n {
 				continue new
 			}
@@ -3595,6 +3595,15 @@ func (t *Torrent) canonicalShortInfohash() *infohash.T {
 		return &t.infoHash.Value
 	}
 	return t.infoHashV2.UnwrapPtr().ToShort()
+}
+
+func (t *Torrent) CloseWriters() error {
+	t.storageLock.RLock()
+	defer t.storageLock.RUnlock()
+	if t.storage == nil {
+		return nil
+	}
+	return t.storage.CloseWriters()
 }
 
 func (t *Torrent) iterShortInfohashes() iter.Seq[shortInfohash] {

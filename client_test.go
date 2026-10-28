@@ -22,6 +22,7 @@ import (
 	"github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/dialer"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
@@ -32,6 +33,15 @@ func TestClientDefault(t *testing.T) {
 	cl, err := NewClient(TestingConfig(t))
 	qt.Assert(t, qt.IsNil(err))
 	qt.Assert(t, qt.HasLen(cl.Close(), 0))
+}
+
+func TestClientWithSocks5Dialer(t *testing.T) {
+	cfg := NewDefaultClientConfig()
+	cfg.DialForPeerConns = false
+	cl, err := NewClient(cfg)
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	cl.AddDialer(dialer.NewSocks5("127.0.0.1:1080", nil))
 }
 
 func TestClientNilConfig(t *testing.T) {

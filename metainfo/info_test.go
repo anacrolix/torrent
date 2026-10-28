@@ -1,6 +1,9 @@
 package metainfo
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -106,5 +109,39 @@ func TestFileTreeValidate(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A symlink to a regular file is recorded with the target's length, which is
+// what GeneratePieces hashes; Walk's Lstat size (the link's own) must not
+// leak into the torrent.
+func TestBuildFromFilePathFollowsFileSymlinks(t *testing.T) {
+	realDir, linkDir := t.TempDir(), t.TempDir()
+	target := filepath.Join(realDir, "payload.bin")
+	if err := os.WriteFile(target, bytes.Repeat([]byte("x"), 5000), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(linkDir, "payload.bin")); err != nil {
+		t.Skip(err)
+	}
+	var overLinks, overReal Info
+	if err := overLinks.BuildFromFilePath(linkDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := overReal.BuildFromFilePath(realDir); err != nil {
+		t.Fatal(err)
+	}
+	if got := overLinks.UpvertedFiles()[0].Length; got != 5000 {
+		t.Fatalf("length through symlink = %d, want 5000", got)
+	}
+	if !bytes.Equal(overLinks.Pieces, overReal.Pieces) {
+		t.Fatal("pieces differ between the linked and the real tree")
+	}
+	// A symlink to a directory is refused rather than silently mis-sized.
+	if err := os.Symlink(realDir, filepath.Join(linkDir, "dir")); err == nil {
+		var info Info
+		if err := info.BuildFromFilePath(linkDir); err == nil {
+			t.Fatal("symlink to a directory accepted")
+		}
 	}
 }

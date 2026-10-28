@@ -238,14 +238,14 @@ func (me *filePieceImpl) MarkNotComplete() (err error) {
 }
 
 func (me *filePieceImpl) promotePartFile(f file) (err error) {
-	// Flush file on completion, even if we don't promote it.
+	if !me.partFiles() {
+		return nil
+	}
+	// Flush the part file before promotion so its contents are durable.
 	err = me.t.io.flush(f.partFilePath(), 0, f.length())
 	if err != nil {
 		me.logger().Warn("error flushing file before promotion", "file", f.partFilePath(), "err", err)
 		err = nil
-	}
-	if !me.partFiles() {
-		return nil
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()

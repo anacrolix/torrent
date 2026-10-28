@@ -59,6 +59,18 @@ func (info *Info) BuildFromFilePath(root string) (err error) {
 		if err != nil {
 			return err
 		}
+		if fi.Mode()&os.ModeSymlink != 0 {
+			// Walk reports the link itself; GeneratePieces opens the path and
+			// so reads the target. Sizes must describe the bytes that get
+			// hashed, or the torrent silently records a truncated file.
+			fi, err = os.Stat(path)
+			if err != nil {
+				return err
+			}
+			if !fi.Mode().IsRegular() {
+				return fmt.Errorf("%q: symlink to a non-regular file is not supported", path)
+			}
+		}
 		if fi.IsDir() {
 			// Directories are implicit in torrent files.
 			return nil

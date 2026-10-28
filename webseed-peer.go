@@ -273,9 +273,15 @@ func (ws *webseedPeer) sliceProcessor(webseedRequest *webseedRequest) {
 		// This used to occur only on webseed.ErrTooFast but I think it makes sense to slow down any
 		// kind of error. Pausing here will starve the available requester slots which slows things
 		// down. TODO: Use the Retry-After implementation from Erigon.
-		select {
-		case <-ws.peer.closed.Done():
-		case <-time.After(time.Duration(rand.Int63n(int64(10 * time.Second)))):
+		// Only back off for errors the webseed is responsible for. A request we cancelled ourselves
+		// (the usual end of a request once its remaining chunks are no longer wanted) says nothing
+		// about the server, and the wait holds the slice: nobody else may request it while this
+		// request sits here sleeping.
+		if !ourOwnDoing(err, webseedRequest, ws.peer.closedCtx) {
+			select {
+			case <-ws.peer.closed.Done():
+			case <-time.After(time.Duration(rand.Int63n(int64(10 * time.Second)))):
+			}
 		}
 	}
 	ws.slogger().Debug("webseed request ended")
@@ -434,4 +440,10 @@ func (cn *webseedPeer) peerHasAllPieces() (all, known bool) {
 
 func (me *webseedPeer) slogger() *slog.Logger {
 	return me.peer.slogger
+}
+
+// ourOwnDoing reports whether a request failed because we cancelled it, rather than because of
+// anything the webseed did.
+func ourOwnDoing(err error, req *webseedRequest, peerCtx context.Context) bool {
+	return req.cancelled.Load() || peerCtx.Err() != nil || errors.Is(err, context.Canceled)
 }

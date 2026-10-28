@@ -35,6 +35,13 @@ type Torrent struct {
 	TorrentImpl
 }
 
+func (t *Torrent) CloseWriters() error {
+	if t.TorrentImpl.CloseWriters == nil {
+		return nil
+	}
+	return t.TorrentImpl.CloseWriters()
+}
+
 // Deprecated. Use PieceWithHash, as this doesn't work with pure v2 torrents.
 func (t *Torrent) Piece(p metainfo.Piece) Piece {
 	return t.PieceWithHash(p, g.Some(p.V1Hash().Unwrap().Bytes()))

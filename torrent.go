@@ -610,6 +610,8 @@ func (t *Torrent) hashInfoBytes(b []byte, info *metainfo.Info) error {
 				cl.torrentsByShortHash[v1Hash] = t
 				t.infoHash.Set(v1Hash)
 			}
+		} else {
+			return errors.New("info bytes don't match v1 infohash or truncated v2 infohash")
 		}
 	} else if t.infoHash.Ok && t.infoHashV2.Ok {
 		if v1Hash != t.infoHash.Value {

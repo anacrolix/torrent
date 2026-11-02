@@ -160,6 +160,11 @@ type networkAndHost struct {
 }
 
 func isUnsupportedNetworkError(err error) bool {
+	// The host has no support for the address family at all, e.g. a kernel or container without
+	// IPv6.
+	if errors.Is(err, syscall.EAFNOSUPPORT) {
+		return true
+	}
 	var sysErr *os.SyscallError
 	//spewCfg := spew.NewDefaultConfig()
 	//spewCfg.ContinueOnMethod = true

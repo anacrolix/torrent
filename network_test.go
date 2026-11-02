@@ -69,8 +69,20 @@ func dialClosure(f func(net, addr string) (net.Conn, error), network string) fun
 	}
 }
 
+// Reports whether the host can open IPv6 sockets at all. Some sandboxes and containers can't.
+func hostSupportsIpv6() bool {
+	l, err := net.Listen("tcp6", "[::1]:0")
+	if err != nil {
+		return false
+	}
+	l.Close()
+	return true
+}
+
 func TestListenLocalhostNetwork(t *testing.T) {
-	testListenerNetwork(t, net.Listen, "tcp", "tcp", "0.0.0.0:0", false)
+	// With IPv6 available, Go listens dual-stack on "::" for "tcp" and "0.0.0.0". Without it, it
+	// falls back to an IPv4 socket.
+	testListenerNetwork(t, net.Listen, "tcp", "tcp", "0.0.0.0:0", !hostSupportsIpv6())
 	testListenerNetwork(t, net.Listen, "tcp", "tcp", "[::1]:0", false)
 	testListenerNetwork(t, listenUtpListener, "udp", "udp6", "[::1]:0", false)
 	testListenerNetwork(t, listenUtpListener, "udp", "udp6", "[::]:0", false)

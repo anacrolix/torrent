@@ -1,6 +1,17 @@
 name: Go
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs when a PR gets new commits. Pushes to master and tags
+# always run to completion.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -27,8 +38,13 @@ jobs:
           sudo apt install -y fuse
         if: matrix.os == 'ubuntu-latest'
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install just
-        run: cargo install just
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: storage/possum/lib
+      # Prebuilt binary, rather than compiling just from source every run.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
       - name: Build possum
         run: |
           cd storage/possum/lib

@@ -96,3 +96,21 @@ func TestListenLocalhostNetwork(t *testing.T) {
 		listenClosure(net.Listen, "tcp4", "localhost:0"),
 	)
 }
+
+func TestIsUnsupportedNetworkError(t *testing.T) {
+	// 192.0.2.0/24 is reserved for documentation (RFC 5737), so no interface should have it.
+	l, err := net.Listen("tcp4", "192.0.2.1:0")
+	if err == nil {
+		l.Close()
+		t.Skip("host can bind 192.0.2.1")
+	}
+	qt.Check(t, qt.IsTrue(isUnsupportedNetworkError(err)), qt.Commentf("%v", err))
+	qt.Check(t, qt.IsFalse(isUnsupportedNetworkError(nil)))
+	// A port that's in use is a real failure, not an unsupported network.
+	l, err = net.Listen("tcp4", "127.0.0.1:0")
+	qt.Assert(t, qt.IsNil(err))
+	defer l.Close()
+	_, err = net.Listen("tcp4", l.Addr().String())
+	qt.Assert(t, qt.IsNotNil(err))
+	qt.Check(t, qt.IsFalse(isUnsupportedNetworkError(err)), qt.Commentf("%v", err))
+}

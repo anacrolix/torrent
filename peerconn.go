@@ -3,6 +3,7 @@ package torrent
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -908,18 +909,28 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		MaxLength: 4 * pp.Integer(max(int64(t.chunkSize), defaultChunkSize)),
 		Pool:      &t.chunkPool,
 	}
+	lockedDecodes := 0
 	for {
 		var msg pp.Message
-		func() {
-			cl.unlock()
-			// TODO: Could TryLock and pump for more messages here until we can get the lock and
-			// process them in a batch.
-			defer cl.lock()
+		// Messages already in the buffer can be decoded without blocking, so keep the lock rather
+		// than handing it off per message. Cap the run so other conns get a turn.
+		if lockedDecodes < maxLockedDecodes && fullMessageBuffered(decoder.R) {
+			lockedDecodes++
 			err = decoder.Decode(&msg)
 			if err != nil {
 				err = fmt.Errorf("decoding message: %w", err)
 			}
-		}()
+		} else {
+			lockedDecodes = 0
+			func() {
+				cl.unlock()
+				defer cl.lock()
+				err = decoder.Decode(&msg)
+				if err != nil {
+					err = fmt.Errorf("decoding message: %w", err)
+				}
+			}()
+		}
 		// Do this before checking closed.
 		if cb := c.callbacks.ReadMessage; cb != nil && err == nil {
 			cb(c, &msg)
@@ -1988,4 +1999,17 @@ func (c *PeerConn) reconcileHandshakeStats() {
 		return true
 	})
 	c.reconciledHandshakeStats = true
+}
+
+// Maximum consecutive messages decoded under the client lock before it is released.
+var maxLockedDecodes = 64
+
+// Reports whether a whole length-prefixed message is already in the buffer, so decoding it can't
+// block on the network.
+func fullMessageBuffered(r *bufio.Reader) bool {
+	if r.Buffered() < 4 {
+		return false
+	}
+	b, _ := r.Peek(4)
+	return r.Buffered() >= 4+int(binary.BigEndian.Uint32(b))
 }

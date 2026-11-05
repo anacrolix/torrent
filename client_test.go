@@ -36,7 +36,9 @@ func TestClientDefault(t *testing.T) {
 }
 
 func TestClientWithSocks5Dialer(t *testing.T) {
-	cfg := NewDefaultClientConfig()
+	// Use the testing config so we listen on an ephemeral port. The default port (42069) falls in
+	// Linux's ephemeral range, so it can collide with sockets from tests running concurrently.
+	cfg := TestingConfig(t)
 	cfg.DialForPeerConns = false
 	cl, err := NewClient(cfg)
 	qt.Assert(t, qt.IsNil(err))

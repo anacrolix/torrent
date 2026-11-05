@@ -704,7 +704,9 @@ func (t *Torrent) setMetadataSize(size int) (err error) {
 		// We already know the correct metadata size.
 		return
 	}
-	if uint32(size) > maxMetadataSize {
+	// Compare as int: converting to uint32 first truncates sizes >= 1<<32 (and wraps negatives) so
+	// they would pass, then make() below either panics or allocates gigabytes.
+	if size < 0 || size > int(maxMetadataSize) {
 		return log.WithLevel(log.Warning, errors.New("bad size"))
 	}
 	if len(t.metadataBytes) == size {
@@ -3420,10 +3422,11 @@ func (t *Torrent) checkValidReceiveChunk(r Request) error {
 	if r.Begin >= pieceLength {
 		return fmt.Errorf("chunk begins beyond end of piece (%v >= %v)", r.Begin, pieceLength)
 	}
-	// We could check chunk lengths here, but chunk request size is not changed often, and tricky
-	// for peers to manipulate as they need to send potentially large buffers to begin with. There
-	// should be considerable checks elsewhere for this case due to the network overhead. We should
-	// catch most of the overflow manipulation stuff by checking index and begin above.
+	// The chunk must be exactly the one we would request: misaligned or oversized chunks would be
+	// written past the end of the chunk, or the piece, which the storage layer panics on.
+	if expected := t.requestIndexToRequest(t.requestIndexFromRequest(r)); r != expected {
+		return fmt.Errorf("chunk %v doesn't match expected request %v", r, expected)
+	}
 	return nil
 }
 
@@ -3526,6 +3529,13 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 	case utHolepunch.Connect:
 		holepunchAddr := msg.AddrPort
 		t.logger.Printf("got holepunch connect request for %v from %p", holepunchAddr, sender)
+		// Connects skip the dial rate limiter so the punch is timely, and any peer can send them
+		// for any address. Respect the half-open limits so a peer can't make us dial without bound.
+		if len(t.halfOpen) >= t.cl.config.HalfOpenConnsPerTorrent ||
+			t.cl.numHalfOpen >= t.cl.config.TotalHalfOpenConns {
+			torrent.Add("holepunch connects dropped at half-open limit", 1)
+			return nil
+		}
 		if g.MapContains(t.cl.undialableWithoutHolepunch, holepunchAddr) {
 			setAdd(&t.cl.undialableWithoutHolepunchDialedAfterHolepunchConnect, holepunchAddr)
 			if g.MapContains(t.cl.accepted, holepunchAddr) {

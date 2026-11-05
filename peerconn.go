@@ -910,7 +910,42 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		Pool:      &t.chunkPool,
 	}
 	lockedDecodes := 0
+	// Chunks from consecutive buffered Piece messages, written to storage together so the client
+	// lock is released once per batch rather than once per chunk.
+	var chunkWrites []bufferedChunkWrite
+	flushChunkWrites := func() {
+		if len(chunkWrites) == 0 {
+			return
+		}
+		if t.closed.IsSet() {
+			// The storage may be closed. Drop the writes; the Torrent state no longer matters.
+			for _, cw := range chunkWrites {
+				cw.w.pw.decrementPendingWrites()
+				t.chunkPool.Put(cw.piecePtr)
+			}
+		} else {
+			cl.unlock()
+			for i := range chunkWrites {
+				chunkWrites[i].err = chunkWrites[i].w.write()
+			}
+			cl.lock()
+			for _, cw := range chunkWrites {
+				c.receiveChunkEpilogue(cw.w, cw.err)
+				t.chunkPool.Put(cw.piecePtr)
+			}
+		}
+		clear(chunkWrites)
+		chunkWrites = chunkWrites[:0]
+	}
+	defer flushChunkWrites()
 	for {
+		// Keep batching only while the next message is a Piece that will be decoded without
+		// releasing the lock. Anything else must see the batch's effects first.
+		if len(chunkWrites) != 0 && (len(chunkWrites) >= maxChunkWriteBatch ||
+			lockedDecodes >= maxLockedDecodes ||
+			!bufferedMessageIsPiece(decoder.R)) {
+			flushChunkWrites()
+		}
 		var msg pp.Message
 		// Messages already in the buffer can be decoded without blocking, so keep the lock rather
 		// than handing it off per message. Cap the run so other conns get a turn.
@@ -1017,8 +1052,14 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			}
 		case pp.Piece:
 			c.doChunkReadStats(int64(len(msg.Piece)))
-			err = c.receiveChunk(&msg)
-			t.chunkPool.Put(msg.PiecePtr)
+			var w *pendingChunkWrite
+			w, err = c.receiveChunkPrologue(&msg)
+			if w != nil {
+				// The batch owns the buffer until the chunk is written.
+				chunkWrites = append(chunkWrites, bufferedChunkWrite{w: w, piecePtr: msg.PiecePtr})
+			} else {
+				t.chunkPool.Put(msg.PiecePtr)
+			}
 			msg.Piece = nil
 			if err != nil {
 				err = fmt.Errorf("receiving chunk: %w", err)
@@ -2004,6 +2045,15 @@ func (c *PeerConn) reconcileHandshakeStats() {
 // Maximum consecutive messages decoded under the client lock before it is released.
 var maxLockedDecodes = 64
 
+// Maximum received chunks written to storage per release of the client lock.
+var maxChunkWriteBatch = 16
+
+type bufferedChunkWrite struct {
+	w        *pendingChunkWrite
+	piecePtr *[]byte
+	err      error
+}
+
 // Reports whether a whole length-prefixed message is already in the buffer, so decoding it can't
 // block on the network.
 func fullMessageBuffered(r *bufio.Reader) bool {
@@ -2012,4 +2062,19 @@ func fullMessageBuffered(r *bufio.Reader) bool {
 	}
 	b, _ := r.Peek(4)
 	return r.Buffered() >= 4+int(binary.BigEndian.Uint32(b))
+}
+
+// Reports whether the next message is a Piece that's wholly in the buffer.
+func bufferedMessageIsPiece(r *bufio.Reader) bool {
+	if !fullMessageBuffered(r) {
+		return false
+	}
+	b, _ := r.Peek(4)
+	if binary.BigEndian.Uint32(b) == 0 {
+		// Keepalive.
+		return false
+	}
+	// The whole message is buffered, so this can't block.
+	b, _ = r.Peek(5)
+	return pp.MessageType(b[4]) == pp.Piece
 }

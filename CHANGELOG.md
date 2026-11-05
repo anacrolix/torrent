@@ -10,8 +10,8 @@ messages**, BEP 14 and BEP 27 support, a completed BEP 6, SOCKS5 peer dialing, a
 
 **Security:** fixes [GHSA-2wrx-84qj-4pcg](https://github.com/anacrolix/torrent/security/advisories/GHSA-2wrx-84qj-4pcg)
 (unbounded bencode recursion), [GHSA-4mxg-hpvf-2386](https://github.com/anacrolix/torrent/security/advisories/GHSA-4mxg-hpvf-2386)
-(unverified metadata for btih magnets) and a remote crash via negative ut_metadata piece indexes
-(#1169). All users should upgrade.
+(unverified metadata for btih magnets), and remote crashes and resource exhaustion triggered by
+malicious peers (#1169, #1171). All users should upgrade.
 
 **Breaking API changes:**
 
@@ -30,6 +30,11 @@ Changes:
   btih magnets and `AddTorrentInfoHash` torrents (GHSA-4mxg-hpvf-2386, #1158, `f317bd86`)
 - Reject out-of-range ut_metadata piece indexes, which let any peer crash the client (#1169,
   `40a8d413`)
+- Bound peer-supplied fields that could crash or exhaust the client: `metadata_size` truncation in
+  the extended handshake, Piece messages that don't match the request, and hash requests before
+  the info is known no longer panic. Peer-keyed expvar maps are capped, ut_holepunch connects
+  respect half-open limits, and tracker announce intervals are clamped to at least one minute
+  (#1171, `4b30f293`)
 - `bencode`: Limit dict/list nesting depth to `Decoder.MaxDepth` (default 64). Deeper input is
   rejected with a `SyntaxError` instead of recursing unboundedly, which previously could crash the
   process with a fatal stack overflow and made deeply nested v2 file trees decode quadratically.

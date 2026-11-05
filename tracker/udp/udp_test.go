@@ -135,3 +135,34 @@ func TestConnectionIdMismatch(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// errorResponseWriter answers every request with a tracker error response.
+type errorResponseWriter struct {
+	d *Dispatcher
+}
+
+func (w errorResponseWriter) Write(b []byte) (int, error) {
+	var h RequestHeader
+	if err := Read(bytes.NewReader(b), &h); err != nil {
+		return 0, err
+	}
+	var resp bytes.Buffer
+	if err := Write(&resp, ResponseHeader{Action: ActionError, TransactionId: h.TransactionId}); err != nil {
+		return 0, err
+	}
+	resp.WriteString("rate limited")
+	go func() { _ = w.d.Dispatch(resp.Bytes(), nil) }()
+	return len(b), nil
+}
+
+func TestAnnounceConnectErrorResponse(t *testing.T) {
+	var d Dispatcher
+	cl := Client{Dispatcher: &d, Writer: errorResponseWriter{&d}}
+	for range 2 {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_, _, err := cl.Announce(ctx, AnnounceRequest{}, Options{}, func(net.Addr) bool { return false })
+		cancel()
+		var errResp ErrorResponse
+		qt.Assert(t, qt.ErrorAs(err, &errResp))
+	}
+}

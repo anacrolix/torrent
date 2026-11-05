@@ -66,7 +66,7 @@ Changes:
   when a read's context ended (#1168, `8e67d734`)
 - Fix a memory leak where dropped torrents stayed reachable through deferred unlock actions and
   were never garbage collected (#930, #1129, `44941e96`, thanks @istancescu)
-- `tracker/udp`: Don't relock `cl.mu` on a connect error response (#1148, `5cba0673`)
+- `tracker/udp`: Fix a client deadlock on a connect error response (#1148, `5cba0673`)
 - Add SOCKS5 proxy support for outgoing peer connections with `dialer.Socks5` (#1075, `3c926d06`,
   `4ad31c51`)
 - Add `ClientConfig.ListenPacket` to build the uTP/DHT socket on a caller-provided

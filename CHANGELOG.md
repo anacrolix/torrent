@@ -2,12 +2,39 @@
 
 All notable changes to [anacrolix/torrent](https://github.com/anacrolix/torrent) are documented in this file.
 
-## [Unreleased]
+## [v1.62.0] - Unreleased
 
+Large release with **security fixes**, **big memory and throughput improvements for pieces and peer
+messages**, BEP 14 and BEP 27 support, a completed BEP 6, SOCKS5 peer dialing, and migrations to
+`log/slog` and roaring v2.
+
+**Security:** fixes [GHSA-2wrx-84qj-4pcg](https://github.com/anacrolix/torrent/security/advisories/GHSA-2wrx-84qj-4pcg)
+(unbounded bencode recursion), [GHSA-4mxg-hpvf-2386](https://github.com/anacrolix/torrent/security/advisories/GHSA-4mxg-hpvf-2386)
+(unverified metadata for btih magnets) and a remote crash via negative ut_metadata piece indexes
+(#1169). All users should upgrade.
+
+**Breaking API changes:**
+
+- `Torrent.Piece` returns a `Piece` value instead of `*Piece`
+- Roaring bitmaps are now `github.com/RoaringBitmap/roaring/v2` (`PeerConn.PeerPieces`,
+  `webseed.Client.Pieces`, `typed-roaring`)
+- `storage.PieceCompletionGetSetter.Set` takes `g.Option[bool]` instead of `bool`
+- `peer_protocol.Decoder.Pool` is a `ChunkBufferPool` instead of `*sync.Pool`
+- `tracker/http.Peer.FromDictInterface` returns an `error`
+- `fs.TorrentFS.Root` and the `fs/cmd/torrentfs` package are removed
+- Go 1.25 is required
+
+Changes:
+
+- Reject info bytes that don't match a v1-only infohash, so peers can't serve forged metadata for
+  btih magnets and `AddTorrentInfoHash` torrents (GHSA-4mxg-hpvf-2386, #1158, `f317bd86`)
+- Reject out-of-range ut_metadata piece indexes, which let any peer crash the client (#1169,
+  `40a8d413`)
 - `bencode`: Limit dict/list nesting depth to `Decoder.MaxDepth` (default 64). Deeper input is
   rejected with a `SyntaxError` instead of recursing unboundedly, which previously could crash the
   process with a fatal stack overflow and made deeply nested v2 file trees decode quadratically.
-  `Decoder.MaxStrLen` is now also enforced on values decoded for `Unmarshaler` fields (`76452a2c`)
+  `Decoder.MaxStrLen` is now also enforced on values decoded for `Unmarshaler` fields
+  (GHSA-2wrx-84qj-4pcg, `76452a2c`)
 - Get uTP from `anacrolix/go-utp`, where the implementation-selecting `utp` package moved from
   `go-libutp`. The pure Go implementation can be selected with the `purego_utp` build tag, as well
   as with `purego` or `CGO_ENABLED=0` as before (`2287d597`, `5561014e`)
@@ -18,6 +45,12 @@ All notable changes to [anacrolix/torrent](https://github.com/anacrolix/torrent)
 - Reject unsolicited BEP 52 hashes from peers (#1054, `42bf4100`)
 - Skip address families the host doesn't support when listening, instead of failing on hosts
   without IPv6 (#1157, `e119fbe2`)
+- Match unsupported-network listen errors by errno per platform, including Winsock errors on Windows
+  (#1159, `6e2c965f`)
+- Decode buffered peer messages without releasing the client lock, raising `Have` throughput under
+  contention by about 40% (#1166, `84db35a8`)
+- Remove a debug log on the per-chunk hot path, raising piece throughput by 20-35% (#1170,
+  `afd39ce2`)
 - Add SOCKS5 proxy support for outgoing peer connections with `dialer.Socks5` (#1075, `3c926d06`,
   `4ad31c51`)
 - Add `ClientConfig.ListenPacket` to build the uTP/DHT socket on a caller-provided
@@ -98,6 +131,8 @@ All notable changes to [anacrolix/torrent](https://github.com/anacrolix/torrent)
 - Batch torrent input updates by doing them in the dispatcher (`f90637a7`, `ca759172`)
 - Close shared readers when storage is closed (`e8c5742d`)
 - Use `InsteadOf` and various other indexed improvements to manage announce overdue (`ee06ed50`)
+- Hyphenate file names that use underscores outside Go-recognized suffixes (#1167, `3792e549`)
+- CI: cache go test results across runs (#1165, `b4cbbc76`)
 - Test and CI fixes, including using an ephemeral listen port in the SOCKS5 dialer test (#1156, `34887523`),
   Windows Hyper-V port exclusions (`a59d7c92`), and not running every workflow twice on PR
   branches (#1147, `5f95cd33`)
@@ -991,7 +1026,7 @@ Large release with **WebTorrent support** and **webseed** implementation.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/anacrolix/torrent/compare/v1.61.0...HEAD
+[v1.62.0]: https://github.com/anacrolix/torrent/compare/v1.61.0...v1.62.0
 [v1.61.0]: https://github.com/anacrolix/torrent/compare/v1.60.0...v1.61.0
 [v1.60.0]: https://github.com/anacrolix/torrent/compare/v1.59.1...v1.60.0
 [v1.59.1]: https://github.com/anacrolix/torrent/compare/v1.59.0...v1.59.1

@@ -3,6 +3,7 @@ package torrent
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -300,7 +301,7 @@ func (cn *PeerConn) requestMetadataPiece(index int) {
 }
 
 func (cn *PeerConn) requestedMetadataPiece(index int) bool {
-	return index < len(cn.metadataRequests) && cn.metadataRequests[index]
+	return index >= 0 && index < len(cn.metadataRequests) && cn.metadataRequests[index]
 }
 
 func (cn *PeerConn) onPeerSentCancel(r Request) {
@@ -666,9 +667,18 @@ func (me *PeerConn) numPeerRequests() int {
 	return len(me.unreadPeerRequests) + len(me.readyPeerRequests)
 }
 
+// The expvar key for a peer-requested chunk length. Lengths are peer-controlled, so only powers of
+// two get their own key, keeping the number of keys in the global map bounded.
+func requestedChunkLengthKey(l pp.Integer) string {
+	if l != 0 && l&(l-1) == 0 {
+		return strconv.FormatUint(l.Uint64(), 10)
+	}
+	return "other"
+}
+
 // startFetch is for testing purposes currently.
 func (c *PeerConn) onReadRequest(r Request, startFetch bool) error {
-	requestedChunkLengths.Add(strconv.FormatUint(r.Length.Uint64(), 10), 1)
+	requestedChunkLengths.Add(requestedChunkLengthKey(r.Length), 1)
 	if c.havePeerRequest(r) {
 		torrent.Add("duplicate requests received", 1)
 		if c.fastEnabled() {
@@ -908,18 +918,28 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		MaxLength: 4 * pp.Integer(max(int64(t.chunkSize), defaultChunkSize)),
 		Pool:      &t.chunkPool,
 	}
+	lockedDecodes := 0
 	for {
 		var msg pp.Message
-		func() {
-			cl.unlock()
-			// TODO: Could TryLock and pump for more messages here until we can get the lock and
-			// process them in a batch.
-			defer cl.lock()
+		// Messages already in the buffer can be decoded without blocking, so keep the lock rather
+		// than handing it off per message. Cap the run so other conns get a turn.
+		if lockedDecodes < maxLockedDecodes && fullMessageBuffered(decoder.R) {
+			lockedDecodes++
 			err = decoder.Decode(&msg)
 			if err != nil {
 				err = fmt.Errorf("decoding message: %w", err)
 			}
-		}()
+		} else {
+			lockedDecodes = 0
+			func() {
+				cl.unlock()
+				defer cl.lock()
+				err = decoder.Decode(&msg)
+				if err != nil {
+					err = fmt.Errorf("decoding message: %w", err)
+				}
+			}()
+		}
 		// Do this before checking closed.
 		if cb := c.callbacks.ReadMessage; cb != nil && err == nil {
 			cb(c, &msg)
@@ -1114,11 +1134,12 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		c.PeerPrefersEncryption = d.Encryption
 		for name, id := range d.M {
 			if _, ok := c.PeerExtensionIDs[name]; !ok {
-				peersSupportingExtension.Add(
-					// expvar.Var.String must produce valid JSON. "ut_payme\xeet_address" was being
-					// entered here which caused problems later when unmarshalling.
-					strconv.Quote(string(name)),
-					1)
+				// Names are peer-controlled and the handshake can be repeated, so cap how many we
+				// track per conn.
+				if len(c.PeerExtensionIDs) >= maxPeerExtensionNames {
+					continue
+				}
+				peersSupportingExtension.add(string(name))
 			}
 			c.PeerExtensionIDs[name] = id
 		}
@@ -1570,7 +1591,8 @@ func (pc *PeerConn) getHashes(msg *pp.Message) ([][32]byte, error) {
 }
 
 func (pc *PeerConn) onHashRequest(msg *pp.Message) error {
-	if !pc.t.info.HasV2() {
+	// The info is nil until we have it, and peers can send hash requests at any time.
+	if !pc.t.haveInfo() || !pc.t.info.HasV2() {
 		return errors.New("torrent has no v2 metadata")
 	}
 
@@ -1988,4 +2010,17 @@ func (c *PeerConn) reconcileHandshakeStats() {
 		return true
 	})
 	c.reconciledHandshakeStats = true
+}
+
+// Maximum consecutive messages decoded under the client lock before it is released.
+var maxLockedDecodes = 64
+
+// Reports whether a whole length-prefixed message is already in the buffer, so decoding it can't
+// block on the network.
+func fullMessageBuffered(r *bufio.Reader) bool {
+	if r.Buffered() < 4 {
+		return false
+	}
+	b, _ := r.Peek(4)
+	return r.Buffered() >= 4+int(binary.BigEndian.Uint32(b))
 }

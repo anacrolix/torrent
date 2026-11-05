@@ -31,6 +31,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
+          # Replaced by go-test-cache, which also saves updated test results.
+          cache: false
+      - uses: ./.github/actions/go-test-cache
       - run: brew install macfuse fuse-t && echo 'FUSE_FORCE_BACKEND=fuse-t' >> $GITHUB_ENV
         if: matrix.os == 'macos-latest'
       - run: |

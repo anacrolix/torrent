@@ -64,6 +64,9 @@ Changes:
 - `storage`: Avoid O(n^2) completion lookups when marking pieces complete (#1155, `9f60b788`)
 - Don't retry reader wait errors on capped storage, which could recurse until the stack overflowed
   when a read's context ended (#1168, `8e67d734`)
+- Fix a memory leak where dropped torrents stayed reachable through deferred unlock actions and
+  were never garbage collected (#930, #1129, `44941e96`, thanks @istancescu)
+- `tracker/udp`: Don't relock `cl.mu` on a connect error response (#1148, `5cba0673`)
 - Add SOCKS5 proxy support for outgoing peer connections with `dialer.Socks5` (#1075, `3c926d06`,
   `4ad31c51`)
 - Add `ClientConfig.ListenPacket` to build the uTP/DHT socket on a caller-provided

@@ -41,9 +41,9 @@ type TrackerClient struct {
 	// Deprecated: Use Slogger.
 	Logger  log.Logger
 	Slogger *slog.Logger
-	// Options used when dialing the tracker. The HTTPHeader field is overridden by
-	// WebsocketTrackerHttpHeader if that is set.
-	DialOptions *websocket.DialOptions
+	// Used for the websocket handshake. If nil, http.DefaultClient is used. Ignored on js, where
+	// the browser's WebSocket is used.
+	HTTPClient *http.Client
 
 	mu             sync.Mutex
 	cond           sync.Cond
@@ -121,16 +121,13 @@ func (tc *TrackerClient) doWebsocket() error {
 	tc.stats.Dials++
 	tc.mu.Unlock()
 
-	var opts websocket.DialOptions
-	if tc.DialOptions != nil {
-		opts = *tc.DialOptions
-	}
+	var header http.Header
 	if tc.WebsocketTrackerHttpHeader != nil {
-		opts.HTTPHeader = tc.WebsocketTrackerHttpHeader()
+		header = tc.WebsocketTrackerHttpHeader()
 	}
 
 	dialCtx, cancelDial := context.WithTimeout(context.Background(), handshakeTimeout)
-	c, _, err := websocket.Dial(dialCtx, tc.Url, &opts)
+	c, err := dialTracker(dialCtx, tc.Url, tc.HTTPClient, header)
 	cancelDial()
 	if err != nil {
 		tc.OnDisconnected(err)

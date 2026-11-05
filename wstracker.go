@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/anacrolix/log"
-	"github.com/coder/websocket"
 	"github.com/pion/webrtc/v4"
 
 	"github.com/anacrolix/torrent/tracker"
@@ -69,17 +68,15 @@ func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.Tra
 	defer me.mu.Unlock()
 	value, ok := me.clients[url]
 	if !ok {
-		dialOpts := &websocket.DialOptions{
-			HTTPClient: &netHttp.Client{
-				Transport: &netHttp.Transport{
-					Proxy:       me.Proxy,
-					DialContext: me.DialContext,
-				},
+		httpClient := &netHttp.Client{
+			Transport: &netHttp.Transport{
+				Proxy:       me.Proxy,
+				DialContext: me.DialContext,
 			},
 		}
 		value = &refCountedWebtorrentTrackerClient{
 			TrackerClient: webtorrent.TrackerClient{
-				DialOptions:                dialOpts,
+				HTTPClient:                 httpClient,
 				Url:                        url,
 				GetAnnounceRequest:         me.GetAnnounceRequest,
 				PeerId:                     me.PeerId,

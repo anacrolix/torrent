@@ -22,6 +22,8 @@ malicious peers (#1169, #1171). All users should upgrade.
 - `peer_protocol.Decoder.Pool` is a `ChunkBufferPool` instead of `*sync.Pool`
 - `tracker/http.Peer.FromDictInterface` returns an `error`
 - `fs.TorrentFS.Root` and the `fs/cmd/torrentfs` package are removed
+- `webtorrent.TrackerClient.Dialer` is replaced by `HTTPClient *http.Client`, as the WebSocket
+  library moved from gorilla/websocket to coder/websocket (#1177)
 - Go 1.25 is required
 
 Changes:
@@ -56,6 +58,12 @@ Changes:
   contention by about 40% (#1166, `84db35a8`)
 - Remove a debug log on the per-chunk hot path, raising piece throughput by 20-35% (#1170,
   `afd39ce2`)
+- Replace gorilla/websocket with coder/websocket for the WebTorrent tracker client (#1177, `bb94c1ba`)
+- Reuse chunk pool buffers for served peer request data, cutting allocations per request from
+  ~17 KB to ~0.9 KB (#1082, `95af5dee`)
+- `storage`: Avoid O(n^2) completion lookups when marking pieces complete (#1155, `9f60b788`)
+- Don't retry reader wait errors on capped storage, which could recurse until the stack overflowed
+  when a read's context ended (#1168, `8e67d734`)
 - Add SOCKS5 proxy support for outgoing peer connections with `dialer.Socks5` (#1075, `3c926d06`,
   `4ad31c51`)
 - Add `ClientConfig.ListenPacket` to build the uTP/DHT socket on a caller-provided

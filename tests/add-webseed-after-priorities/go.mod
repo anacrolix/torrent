@@ -1,4 +1,4 @@
-module github.com/anacrolix/torrent/tests/webseed-partial-seed
+module github.com/anacrolix/torrent/tests/add-webseed-after-priorities
 
 go 1.23
 

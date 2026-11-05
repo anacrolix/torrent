@@ -28,7 +28,6 @@ type (
 )
 
 func (t *Torrent) requestStrategyPieceOrderState(i int) requestStrategy.PieceRequestOrderState {
-	t.slogger().Debug("requestStrategyPieceOrderState", "pieceIndex", i)
 	return requestStrategy.PieceRequestOrderState{
 		Priority:     t.piece(i).purePriority(),
 		Partial:      t.piecePartiallyDownloaded(i),

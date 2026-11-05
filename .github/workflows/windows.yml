@@ -28,6 +28,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
+          # Replaced by go-test-cache, which also saves updated test results.
+          cache: false
+      - uses: ./.github/actions/go-test-cache
       - name: Fix Windows dynamic port range
         shell: pwsh
         run: |
@@ -35,6 +38,6 @@ jobs:
           netsh int ipv4 set dynamicport udp start=20000 num=16384
       - run: go mod download
       - name: Test packages
-        run: go test -count=1 ./...
+        run: go test ./...
         env:
           CGO_ENABLED: "0"

@@ -667,9 +667,18 @@ func (me *PeerConn) numPeerRequests() int {
 	return len(me.unreadPeerRequests) + len(me.readyPeerRequests)
 }
 
+// The expvar key for a peer-requested chunk length. Lengths are peer-controlled, so only powers of
+// two get their own key, keeping the number of keys in the global map bounded.
+func requestedChunkLengthKey(l pp.Integer) string {
+	if l != 0 && l&(l-1) == 0 {
+		return strconv.FormatUint(l.Uint64(), 10)
+	}
+	return "other"
+}
+
 // startFetch is for testing purposes currently.
 func (c *PeerConn) onReadRequest(r Request, startFetch bool) error {
-	requestedChunkLengths.Add(strconv.FormatUint(r.Length.Uint64(), 10), 1)
+	requestedChunkLengths.Add(requestedChunkLengthKey(r.Length), 1)
 	if c.havePeerRequest(r) {
 		torrent.Add("duplicate requests received", 1)
 		if c.fastEnabled() {
@@ -1166,11 +1175,12 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		c.PeerPrefersEncryption = d.Encryption
 		for name, id := range d.M {
 			if _, ok := c.PeerExtensionIDs[name]; !ok {
-				peersSupportingExtension.Add(
-					// expvar.Var.String must produce valid JSON. "ut_payme\xeet_address" was being
-					// entered here which caused problems later when unmarshalling.
-					strconv.Quote(string(name)),
-					1)
+				// Names are peer-controlled and the handshake can be repeated, so cap how many we
+				// track per conn.
+				if len(c.PeerExtensionIDs) >= maxPeerExtensionNames {
+					continue
+				}
+				peersSupportingExtension.add(string(name))
 			}
 			c.PeerExtensionIDs[name] = id
 		}
@@ -1622,7 +1632,8 @@ func (pc *PeerConn) getHashes(msg *pp.Message) ([][32]byte, error) {
 }
 
 func (pc *PeerConn) onHashRequest(msg *pp.Message) error {
-	if !pc.t.info.HasV2() {
+	// The info is nil until we have it, and peers can send hash requests at any time.
+	if !pc.t.haveInfo() || !pc.t.info.HasV2() {
 		return errors.New("torrent has no v2 metadata")
 	}
 

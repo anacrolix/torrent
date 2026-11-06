@@ -1342,7 +1342,7 @@ func (p *PeerConn) initUpdateRequestsTimer() {
 		}
 	}
 	if enableUpdateRequestsTimer {
-		p.updateRequestsTimer = time.AfterFunc(math.MaxInt64, p.updateRequestsTimerFunc)
+		p.updateRequestsTimer = newReleasedTimer(math.MaxInt64, p.updateRequestsTimerFunc)
 	}
 }
 

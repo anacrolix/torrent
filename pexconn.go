@@ -21,7 +21,7 @@ type pexConnState struct {
 	enabled bool
 	xid     pp.ExtensionNumber
 	last    *pexEvent
-	timer   *time.Timer
+	timer   *releasedTimer
 	gate    chan struct{}
 	readyfn func()
 	torrent *Torrent
@@ -52,7 +52,7 @@ func (s *pexConnState) Init(c *PeerConn) {
 	s.logger = c.logger.WithDefaultLevel(log.Debug).WithNames("pex")
 	s.readyfn = c.tickleWriter
 	s.gate = make(chan struct{}, 1)
-	s.timer = time.AfterFunc(0, func() {
+	s.timer = newReleasedTimer(0, func() {
 		s.gate <- struct{}{}
 		s.readyfn() // wake up the writer
 	})

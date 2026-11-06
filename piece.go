@@ -222,18 +222,6 @@ func (pw *piecePendingWrites) decrementPendingWrites() {
 	}
 }
 
-// withPendingWriteRef records a write in flight for the duration of f. It increments before f and
-// decrements after it returns (even on error), holding the strong reference returned by
-// incrementPendingWrites across the call via the deferred decrement, so the tracking struct can't be
-// reclaimed (nor its count lost to a fresh allocation) while the write is in flight. Call with the
-// Client lock held; f may release and reacquire it, as long as it's held again on return so the
-// decrement stays serialized with allocation.
-func (p Piece) withPendingWriteRef(f func() error) error {
-	pw := p.incrementPendingWrites()
-	defer pw.decrementPendingWrites()
-	return f()
-}
-
 func (p Piece) pendingWritesCount() int64 {
 	pw := p.loadPendingWrites()
 	if pw == nil {

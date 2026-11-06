@@ -153,7 +153,9 @@ Changes:
 - Check `Torrent.haveInfo` when writing announce record status progress (`13522ce1`)
 - Use a heap in `Client.startPieceHashers` (`8192686d`)
 - Batch torrent input updates by doing them in the dispatcher (`f90637a7`, `ca759172`)
-- Close shared readers when storage is closed (`e8c5742d`)
+- `storage`: Closing file storage now releases its file handles and memory maps. Previously a
+  dropped torrent's files stayed open until the process exited, so they couldn't be renamed or
+  deleted on Windows, and deleted files kept their disk space on Linux (#1062, `e8c5742d`)
 - Use `InsteadOf` and various other indexed improvements to manage announce overdue (`ee06ed50`)
 - Hyphenate file names that use underscores outside Go-recognized suffixes (#1167, `3792e549`)
 - CI: cache go test results across runs (#1165, `b4cbbc76`)

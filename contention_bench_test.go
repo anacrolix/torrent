@@ -6,6 +6,8 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -19,7 +21,7 @@ import (
 // K conns on one torrent, each running mainReadLoop concurrently, to measure client lock
 // contention in the read path.
 func BenchmarkContentionMainReadLoop(b *testing.B) {
-	for _, kind := range []string{"piece", "have"} {
+	for _, kind := range []string{"piece", "piece-file", "have"} {
 		for _, k := range []int{1, 2, 4, 8, 16} {
 			b.Run(fmt.Sprintf("%s/conns=%d", kind, k), func(b *testing.B) {
 				benchContention(b, kind, k)
@@ -32,6 +34,13 @@ func benchContention(b *testing.B, kind string, k int) {
 	var cl Client
 	cfg := TestingConfig(b)
 	ts := &torrentStorage{}
+	isPiece := strings.HasPrefix(kind, "piece")
+	if kind == "piece-file" {
+		f, err := os.CreateTemp(b.TempDir(), "")
+		qt.Assert(b, qt.IsNil(err))
+		b.Cleanup(func() { f.Close() })
+		ts.file = f
+	}
 	cfg.DefaultStorage = &torrentStorageClient{ts}
 	cl.init(cfg)
 	t, _ := cl.AddTorrentOpt(AddTorrentOpts{
@@ -75,7 +84,7 @@ func benchContention(b *testing.B, kind string, k int) {
 	for i := range k {
 		var buf []byte
 		switch kind {
-		case "piece":
+		case "piece", "piece-file":
 			for c := range piecesPerPiece {
 				buf = append(buf, pp.Message{
 					Type:  pp.Piece,
@@ -93,7 +102,7 @@ func benchContention(b *testing.B, kind string, k int) {
 	}
 	var msgsPerIter int
 	switch kind {
-	case "piece":
+	case "piece", "piece-file":
 		msgsPerIter = k * piecesPerPiece
 		b.SetBytes(int64(k * piecesPerPiece * chunkSize))
 	case "have":
@@ -113,7 +122,7 @@ func benchContention(b *testing.B, kind string, k int) {
 	}
 	b.ResetTimer()
 	for range b.N {
-		if kind == "piece" {
+		if isPiece {
 			cl.lock()
 			for i, c := range conns {
 				t.pendAllChunkSpecs(i)
@@ -135,7 +144,7 @@ func benchContention(b *testing.B, kind string, k int) {
 			})
 		}
 		wg.Wait()
-		if kind == "piece" {
+		if isPiece {
 			ts.allChunksWritten.Wait()
 		}
 	}

@@ -11,7 +11,8 @@ messages**, BEP 14 and BEP 27 support, a completed BEP 6, SOCKS5 peer dialing, a
 **Security:** fixes [GHSA-2wrx-84qj-4pcg](https://github.com/anacrolix/torrent/security/advisories/GHSA-2wrx-84qj-4pcg)
 (unbounded bencode recursion), [GHSA-4mxg-hpvf-2386](https://github.com/anacrolix/torrent/security/advisories/GHSA-4mxg-hpvf-2386)
 (unverified metadata for btih magnets), and remote crashes and resource exhaustion triggered by
-malicious peers (#1169, #1171). All users should upgrade.
+malicious peers (#1169, #1171). It also upgrades pion/dtls to fix CVE-2026-26014 (#1178). All
+users should upgrade.
 
 **Breaking API changes:**
 
@@ -37,6 +38,8 @@ Changes:
   the info is known no longer panic. Peer-keyed expvar maps are capped, ut_holepunch connects
   respect half-open limits, and tracker announce intervals are clamped to at least one minute
   (#1171, `4b30f293`)
+- Upgrade `pion/dtls/v3` to v3.0.11 for CVE-2026-26014 (GHSA-9f3f-wv7r-qc8r), random AES-GCM
+  nonces that could leak the authentication key (#1153, #1178, `adafce05`)
 - `bencode`: Limit dict/list nesting depth to `Decoder.MaxDepth` (default 64). Deeper input is
   rejected with a `SyntaxError` instead of recursing unboundedly, which previously could crash the
   process with a fatal stack overflow and made deeply nested v2 file trees decode quadratically.
@@ -67,6 +70,11 @@ Changes:
 - Fix a memory leak where dropped torrents stayed reachable through deferred unlock actions and
   were never garbage collected (#930, #1129, `44941e96`, thanks @istancescu)
 - `tracker/udp`: Fix a client deadlock on a connect error response (#1148, `5cba0673`)
+- Snapshot the infohash for outgoing handshakes, so a hybrid torrent's canonical infohash changing
+  mid-handshake can't make the handshake disagree with itself (#1179, `82f2d6f4`)
+- Write buffered chunks in batches per client lock release (#1172, `009b3aac`)
+- `metainfo`: `Load` ignores a malformed `announce-list` and falls back to `announce` (#910, #1151,
+  `2611fbfc`, thanks @asmanya)
 - Add SOCKS5 proxy support for outgoing peer connections with `dialer.Socks5` (#1075, `3c926d06`,
   `4ad31c51`)
 - Add `ClientConfig.ListenPacket` to build the uTP/DHT socket on a caller-provided

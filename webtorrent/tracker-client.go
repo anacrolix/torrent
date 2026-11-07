@@ -310,12 +310,17 @@ func (tc *TrackerClient) announce(event tracker.AnnounceEvent, infoHash [20]byte
 		return fmt.Errorf("getting announce parameters: %w", err)
 	}
 
+	eventText, err := request.Event.MarshalText()
+	if err != nil {
+		return fmt.Errorf("encoding announce event: %w", err)
+	}
+
 	req := AnnounceRequest{
 		Numwant:    len(offers),
 		Uploaded:   request.Uploaded,
 		Downloaded: request.Downloaded,
 		Left:       request.Left,
-		Event:      request.Event.String(),
+		Event:      string(eventText),
 		Action:     "announce",
 		InfoHash:   binaryToJsonString(infoHash[:]),
 		PeerID:     tc.peerIdBinary(),

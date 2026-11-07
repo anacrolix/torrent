@@ -64,6 +64,12 @@ func GetRequestablePieces(
 		maxUnverifiedBytes         = input.MaxUnverifiedBytes()
 	)
 	for item := range pro.tree.Scan {
+		// The order is by priority first, so no piece from here on is wanted. Scanning them
+		// anyway checks every incomplete piece, under the client lock, on every request update
+		// of every peer.
+		if item.State.Priority == types.PiecePriorityNone {
+			break
+		}
 		ih := item.Key.InfoHash.Value()
 		t := input.Torrent(ih)
 		pieceLength := t.PieceLength()

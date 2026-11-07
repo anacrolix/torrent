@@ -617,6 +617,7 @@ func (cl *Client) Close() (errs []error) {
 	panicif.NotZero(len(cl.torrents))
 	panicif.NotZero(len(cl.torrentsByShortHash))
 	cl.clearPortMappings()
+	errs = append(errs, cl.regularTrackerAnnounceDispatcher.close()...)
 	for i := range cl.onClose {
 		cl.onClose[len(cl.onClose)-1-i]()
 	}

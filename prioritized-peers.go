@@ -15,12 +15,16 @@ type prioritizedPeersItem struct {
 	prio     peerPriority
 	addrHash int64
 	p        PeerInfo
+	local    bool
 }
 
 func (me prioritizedPeersItem) Less(than btree.Item) bool {
 	other := than.(prioritizedPeersItem)
 	if me.p.Trusted != other.p.Trusted {
 		return !me.p.Trusted && other.p.Trusted
+	}
+	if me.local != other.local {
+		return !me.local && other.local
 	}
 	if me.prio != other.prio {
 		return me.prio < other.prio
@@ -78,6 +82,14 @@ func writeIPPortAddrStringHash(h *maphash.Hash, addr ipPortAddr) {
 type prioritizedPeers struct {
 	om      *btree.BTree
 	getPrio func(PeerInfo) peerPriority
+	// Ranks local peers above all other untrusted peers when set.
+	prioritizeLocal bool
+}
+
+func (me *prioritizedPeers) newItem(p PeerInfo) prioritizedPeersItem {
+	item := newPrioritizedPeersItem(me.getPrio(p), p)
+	item.local = me.prioritizeLocal && p.isLocal()
+	return item
 }
 
 func (me *prioritizedPeers) Each(f func(PeerInfo)) {
@@ -96,12 +108,12 @@ func (me *prioritizedPeers) Len() int {
 
 // Returns true if a peer is replaced.
 func (me *prioritizedPeers) Add(p PeerInfo) bool {
-	return me.om.ReplaceOrInsert(newPrioritizedPeersItem(me.getPrio(p), p)) != nil
+	return me.om.ReplaceOrInsert(me.newItem(p)) != nil
 }
 
 // Returns true if a peer is replaced.
 func (me *prioritizedPeers) AddReturningReplacedPeer(p PeerInfo) (ret PeerInfo, ok bool) {
-	item := me.om.ReplaceOrInsert(newPrioritizedPeersItem(me.getPrio(p), p))
+	item := me.om.ReplaceOrInsert(me.newItem(p))
 	if item == nil {
 		return
 	}

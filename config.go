@@ -292,6 +292,12 @@ type ClientConfig struct {
 	// Enable BEP-14 Local Service Discovery by setting this. A nil value
 	// leaves LPD disabled.
 	LocalServiceDiscovery *LocalServiceDiscoveryConfig
+
+	// Prefer peers on loopback, link-local and private addresses: dial them first, drop them last,
+	// and let them take outstanding requests from remote peers. This keeps traffic on the local
+	// network when another client nearby already has the data. See
+	// https://github.com/anacrolix/torrent/issues/894.
+	PrioritizeLocalPeers bool
 }
 
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {

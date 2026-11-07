@@ -255,6 +255,11 @@ func (cl *Client) updateWebseedRequests() {
 				"webseedChunkIndex", request.sliceIndex)
 
 			begin := request.startIndex
+			// The plan can be stale by now: requests spawned earlier in this loop, or the piece
+			// being queued for hashing, can make the start chunk unwanted.
+			if !t.wantReceiveChunk(begin) {
+				continue
+			}
 			// TODO: Requests aren't limited by the pieces a peer has.
 			end := t.getWebseedRequestEnd(begin, request.sliceIndex, debugLogger)
 			panicif.LessThanOrEqual(end, begin)

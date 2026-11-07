@@ -88,10 +88,46 @@ func torrentRequestOffset(torrentLength, pieceSize int64, r Request) (off int64)
 	return
 }
 
+// The largest piece count we accept in an info. A v2 file tree declares file lengths, not a hash
+// per piece, so without this a tiny info can claim an astronomically large piece count and drive
+// unbounded allocation in setInfo. v1 is already bounded because each piece needs a 20-byte hash
+// in the info. This is a generous sanity bound, well above any real torrent.
+const maxInfoPieces = 1 << 24
+
 func validateInfo(info *metainfo.Info) error {
+	// A negative piece length later reaches Piece.V1Length, which panics.
+	if info.PieceLength < 0 {
+		return errors.New("negative piece length")
+	}
 	if info.HasV2() {
 		if err := info.FileTree.Validate(); err != nil {
 			return fmt.Errorf("bad v2 file tree: %w", err)
+		}
+		// BEP 52 requires a power-of-two piece length, and the v2 merkle hashing assumes it. This
+		// also rejects a zero piece length before anything divides by it.
+		if info.PieceLength < 1<<14 || info.PieceLength&(info.PieceLength-1) != 0 {
+			return fmt.Errorf("v2 piece length %v is not a power of two of at least 16 KiB", info.PieceLength)
+		}
+		var numPieces int64
+		var err error
+		info.FileTree.Walk(nil, func(path []string, ft *metainfo.FileTree) {
+			if err != nil || ft.IsDir() {
+				return
+			}
+			// File lengths are non-negative (checked by FileTree.Validate above).
+			numPieces += ft.File.Length / info.PieceLength
+			if ft.File.Length%info.PieceLength != 0 {
+				numPieces++
+			}
+			if numPieces > maxInfoPieces {
+				err = fmt.Errorf("file tree implies more than %v pieces", maxInfoPieces)
+			}
+		})
+		if err != nil {
+			return err
+		}
+		if info.HasV1() && int64(len(info.Pieces)/20) != numPieces {
+			return fmt.Errorf("hybrid info has %v v1 piece hashes for %v pieces", len(info.Pieces)/20, numPieces)
 		}
 	}
 	if len(info.Pieces)%20 != 0 {

@@ -3,6 +3,7 @@ package metainfo
 import (
 	"fmt"
 	"iter"
+	"sort"
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
@@ -20,6 +21,19 @@ func (p Piece) String() string {
 type PieceIndex = int
 
 func (p Piece) Length() int64 {
+	if spans := p.Info.v2Spans; spans != nil {
+		pieceLength := p.Info.PieceLength
+		k := sort.Search(len(spans), func(j int) bool { return spans[j].firstPiece > p.i }) - 1
+		lastFileEnd := int64(0)
+		if k >= 0 {
+			lastFileEnd = spans[k].end
+		}
+		ret := min(lastFileEnd-int64(p.i)*pieceLength, pieceLength)
+		if ret <= 0 {
+			panic(ret)
+		}
+		return ret
+	}
 	if p.Info.HasV2() {
 		var offset int64
 		pieceLength := p.Info.PieceLength

@@ -241,6 +241,9 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 	if t.dataDownloadDisallowed.Bool() {
 		return
 	}
+	if t.storage == nil {
+		return
+	}
 	requestHeap := desiredPeerRequests{
 		peer:           p,
 		pieceStates:    &t.requestPieceStates,

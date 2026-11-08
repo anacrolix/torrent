@@ -70,7 +70,7 @@ type (
 
 		// Stuff controlled by the local peer.
 		needRequestUpdate    updateRequestReason
-		updateRequestsTimer  *time.Timer
+		updateRequestsTimer  *releasedTimer
 		lastRequestUpdate    time.Time
 		peakRequests         maxRequests
 		lastBecameInterested time.Time

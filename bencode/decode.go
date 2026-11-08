@@ -239,32 +239,44 @@ func (d *Decoder) parseStringLength() (int, error) {
 	return int(length), err
 }
 
-// Reads a string of the given length into the empty slice b, using its capacity if there's room.
-// The length comes from the input, so unless the input is in memory and holds the whole string, b
-// grows in steps as the data arrives rather than all at once.
-func (d *Decoder) readString(b []byte, length int) []byte {
-	for len(b) < length {
-		n := length - len(b)
-		if r, ok := d.r.(*bytes.Reader); !ok || r.Len() < n {
-			n = min(n, max(len(b), bytes.MinRead))
+// Reads a string of the given length, into buf if it's set. The length comes from the input, so it's
+// only allocated up front if the input is in memory and holds the whole string, or if it's no more
+// than io.ReadAll would allocate anyway. Otherwise the string grows as the data arrives.
+func (d *Decoder) readString(length int, buf *bytes.Buffer) (b []byte) {
+	var n int
+	var err error
+	if r, ok := d.r.(*bytes.Reader); length <= bytes.MinRead || ok && r.Len() >= length {
+		if buf == nil {
+			b = make([]byte, length)
+		} else {
+			buf.Grow(length)
+			b = buf.AvailableBuffer()[:length]
 		}
-		if cap(b)-len(b) < n {
-			b = append(make([]byte, 0, len(b)+n), b...)
+		n, err = io.ReadFull(d.r, b)
+	} else {
+		lr := io.LimitReader(d.r, int64(length))
+		if buf == nil {
+			b, err = io.ReadAll(lr)
+		} else {
+			_, err = buf.ReadFrom(lr)
+			b = buf.Bytes()
 		}
-		b = b[:len(b)+n]
-		read, err := io.ReadFull(d.r, b[len(b)-n:])
-		d.Offset += int64(read)
-		if err == io.EOF && len(b) > n {
-			// Some of the string was read, so report it as reading the whole string at once would.
-			err = io.ErrUnexpectedEOF
+		n = len(b)
+		if err == nil && n < length {
+			// The limited reader hides EOF. Report the short read as io.ReadFull would.
+			err = io.EOF
+			if n > 0 {
+				err = io.ErrUnexpectedEOF
+			}
 		}
-		if err != nil {
-			checkForUnexpectedEOF(err, d.Offset)
-			panic(&SyntaxError{
-				Offset: d.Offset,
-				What:   errors.New("unexpected I/O error: " + err.Error()),
-			})
-		}
+	}
+	d.Offset += int64(n)
+	if err != nil {
+		checkForUnexpectedEOF(err, d.Offset)
+		panic(&SyntaxError{
+			Offset: d.Offset,
+			What:   errors.New("unexpected I/O error: " + err.Error()),
+		})
 	}
 	return b
 }
@@ -274,26 +286,26 @@ func (d *Decoder) parseString(v reflect.Value) error {
 	if err != nil {
 		return err
 	}
+	defer d.buf.Reset()
 
 	switch v.Kind() {
 	case reflect.String:
-		v.SetString(bytesAsString(d.readString(nil, length)))
+		v.SetString(bytesAsString(d.readString(length, nil)))
 		return nil
 	case reflect.Slice:
 		if v.Type().Elem().Kind() != reflect.Uint8 {
 			break
 		}
-		// Non-nil, so an empty string still decodes to an empty slice.
-		v.SetBytes(d.readString([]byte{}, length))
+		v.SetBytes(d.readString(length, nil))
 		return nil
 	case reflect.Array:
 		if v.Type().Elem().Kind() != reflect.Uint8 {
 			break
 		}
-		reflect.Copy(v, reflect.ValueOf(d.readString(d.buf.AvailableBuffer(), length)))
+		reflect.Copy(v, reflect.ValueOf(d.readString(length, &d.buf)))
 		return nil
 	case reflect.Bool:
-		x, err := strconv.ParseBool(bytesAsString(d.readString(d.buf.AvailableBuffer(), length)))
+		x, err := strconv.ParseBool(bytesAsString(d.readString(length, &d.buf)))
 		if err != nil {
 			x = length != 0
 		}
@@ -302,7 +314,7 @@ func (d *Decoder) parseString(v reflect.Value) error {
 	}
 	// Can't move this into default clause because some cases above fail through to here after
 	// additional checks.
-	d.readString(d.buf.AvailableBuffer(), length)
+	d.readString(length, &d.buf)
 	// I believe we return here to support "ignore_unmarshal_type_error".
 	return &UnmarshalTypeError{
 		BencodeTypeName:     "string",

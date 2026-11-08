@@ -1562,6 +1562,7 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 
 		ignoreUnverifiedPieceCompletion: opts.IgnoreUnverifiedPieceCompletion,
 		initialPieceCheckDisabled:       opts.DisableInitialPieceCheck,
+		deferStorageOpen:                opts.DeferStorageOpen,
 	}
 	g.MakeMap(&t.webSeeds)
 	t.closedCtx, t.closedCtxCancel = context.WithCancelCause(context.Background())
@@ -1699,6 +1700,11 @@ type AddTorrentOpts struct {
 	// Whether to initially allow data download or upload
 	DisallowDataUpload   bool
 	DisallowDataDownload bool
+	// Don't open storage when the info becomes available. Nothing is read from or written to
+	// storage until Torrent.OpenStorage is called, so the info can be inspected first, such as to
+	// check what files it would touch. Until then no piece is complete and no data is requested
+	// or served. Storage is still used to open the torrent if set.
+	DeferStorageOpen bool
 }
 
 // Add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also

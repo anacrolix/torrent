@@ -88,10 +88,12 @@ func torrentRequestOffset(torrentLength, pieceSize int64, r Request) (off int64)
 	return
 }
 
-// The largest piece count we accept in an info. A v2 file tree declares file lengths, not a hash
-// per piece, so without this a tiny info can claim an astronomically large piece count and drive
-// unbounded allocation in setInfo. v1 is already bounded because each piece needs a 20-byte hash
-// in the info. This is a generous sanity bound, well above any real torrent.
+// maxInfoPieces caps the number of pieces a v2 info may imply. A v2 file tree declares file
+// lengths, not a hash per piece, so without a cap a ~150-byte info can claim a petabyte-scale file
+// and make setInfo allocate for billions of pieces. v1 needs no cap: every piece costs a 20-byte
+// hash in the info itself. At 1<<24 the backing []Piece stays under 256 MiB (16 bytes each) while
+// still allowing, for example, a 4 TiB torrent at 256 KiB pieces or 256 TiB at 16 MiB pieces, far
+// beyond any real torrent. It is a tunable policy limit, not a protocol one.
 const maxInfoPieces = 1 << 24
 
 func validateInfo(info *metainfo.Info) error {
@@ -108,6 +110,9 @@ func validateInfo(info *metainfo.Info) error {
 		if info.PieceLength < 1<<14 || info.PieceLength&(info.PieceLength-1) != 0 {
 			return fmt.Errorf("v2 piece length %v is not a power of two of at least 16 KiB", info.PieceLength)
 		}
+		// Count pieces in int64 with an early bound. Info.NumPieces does the same ceiling division
+		// but returns int (which overflows on 32-bit for a huge declared length) and applies no
+		// cap, so counting it here is both safer and lets us stop as soon as the bound is passed.
 		var numPieces int64
 		var err error
 		info.FileTree.Walk(nil, func(path []string, ft *metainfo.FileTree) {
@@ -126,6 +131,8 @@ func validateInfo(info *metainfo.Info) error {
 		if err != nil {
 			return err
 		}
+		// A hybrid info carries both a v1 hash list and a v2 file tree. If their piece counts
+		// disagree, later code indexes the v1 hashes by the v2 count and slices out of range.
 		if info.HasV1() && int64(len(info.Pieces)/20) != numPieces {
 			return fmt.Errorf("hybrid info has %v v1 piece hashes for %v pieces", len(info.Pieces)/20, numPieces)
 		}

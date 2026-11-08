@@ -176,6 +176,8 @@ func (ft *FileTree) Validate() error {
 			return
 		}
 		n := len(node.File.PiecesRoot)
+		// A negative length makes the piece count negative and the merkle padding size invalid,
+		// which panics in bep52 when the pieces root is read.
 		if node.File.Length < 0 {
 			err = fmt.Errorf("file %q: negative length %d", path, node.File.Length)
 		} else if node.File.Length > 0 && n != 32 {

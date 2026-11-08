@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"os"
 	"sync"
 	"testing"
 
@@ -65,6 +66,8 @@ func TestSendBitfieldThenHave(t *testing.T) {
 
 type torrentStorage struct {
 	allChunksWritten sync.WaitGroup
+	// If set, chunks are also written here, to include the cost of a real write.
+	file *os.File
 }
 
 func (me *torrentStorage) Close() error { return nil }
@@ -89,9 +92,14 @@ func (me *torrentStorage) ReadAt([]byte, int64) (int, error) {
 	return 0, errors.New("not implemented")
 }
 
-func (me *torrentStorage) WriteAt(b []byte, _ int64) (int, error) {
+func (me *torrentStorage) WriteAt(b []byte, off int64) (int, error) {
 	if len(b) != defaultChunkSize {
 		panic(len(b))
+	}
+	if me.file != nil {
+		if _, err := me.file.WriteAt(b, off); err != nil {
+			panic(err)
+		}
 	}
 	me.allChunksWritten.Done()
 	return len(b), nil

@@ -88,10 +88,53 @@ func torrentRequestOffset(torrentLength, pieceSize int64, r Request) (off int64)
 	return
 }
 
+// maxInfoPieces caps the number of pieces a v2 info may imply. A v2 file tree declares file
+// lengths, not a hash per piece, so without a cap a ~150-byte info can claim a petabyte-scale file
+// and make setInfo allocate for billions of pieces. v1 needs no cap: every piece costs a 20-byte
+// hash in the info itself. At 1<<24 the backing []Piece stays under 256 MiB (16 bytes each) while
+// still allowing, for example, a 4 TiB torrent at 256 KiB pieces or 256 TiB at 16 MiB pieces, far
+// beyond any real torrent. It is a tunable policy limit, not a protocol one.
+const maxInfoPieces = 1 << 24
+
 func validateInfo(info *metainfo.Info) error {
+	// A negative piece length later reaches Piece.V1Length, which panics.
+	if info.PieceLength < 0 {
+		return errors.New("negative piece length")
+	}
 	if info.HasV2() {
 		if err := info.FileTree.Validate(); err != nil {
 			return fmt.Errorf("bad v2 file tree: %w", err)
+		}
+		// BEP 52 requires a power-of-two piece length, and the v2 merkle hashing assumes it. This
+		// also rejects a zero piece length before anything divides by it.
+		if info.PieceLength < 1<<14 || info.PieceLength&(info.PieceLength-1) != 0 {
+			return fmt.Errorf("v2 piece length %v is not a power of two of at least 16 KiB", info.PieceLength)
+		}
+		// Count pieces in int64 with an early bound. Info.NumPieces does the same ceiling division
+		// but returns int (which overflows on 32-bit for a huge declared length) and applies no
+		// cap, so counting it here is both safer and lets us stop as soon as the bound is passed.
+		var numPieces int64
+		var err error
+		info.FileTree.Walk(nil, func(path []string, ft *metainfo.FileTree) {
+			if err != nil || ft.IsDir() {
+				return
+			}
+			// File lengths are non-negative (checked by FileTree.Validate above).
+			numPieces += ft.File.Length / info.PieceLength
+			if ft.File.Length%info.PieceLength != 0 {
+				numPieces++
+			}
+			if numPieces > maxInfoPieces {
+				err = fmt.Errorf("file tree implies more than %v pieces", maxInfoPieces)
+			}
+		})
+		if err != nil {
+			return err
+		}
+		// A hybrid info carries both a v1 hash list and a v2 file tree. If their piece counts
+		// disagree, later code indexes the v1 hashes by the v2 count and slices out of range.
+		if info.HasV1() && int64(len(info.Pieces)/20) != numPieces {
+			return fmt.Errorf("hybrid info has %v v1 piece hashes for %v pieces", len(info.Pieces)/20, numPieces)
 		}
 	}
 	if len(info.Pieces)%20 != 0 {

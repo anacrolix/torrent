@@ -7,10 +7,14 @@ import (
 	"io"
 	rand "math/rand/v2"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"testing/iotest"
 	"time"
@@ -403,6 +407,41 @@ func TestAddTorrentSpecMerging(t *testing.T) {
 	qt.Assert(t, qt.IsNil(err))
 	qt.Assert(t, qt.IsFalse(new))
 	qt.Assert(t, qt.IsNotNil(tt.Info()))
+}
+
+// A magnet link's source (xs) is fetched in the background. If the info it returns doesn't decode,
+// the source must fail with an error rather than crash the whole client.
+func TestMagnetSourceUndecodableInfo(t *testing.T) {
+	for _, body := range []string{
+		"de",
+		"d4:infoi1ee",
+		"d4:infod12:piece length3:abcee",
+	} {
+		t.Run(body, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				io.WriteString(w, body)
+			}))
+			defer srv.Close()
+			cl, err := NewClient(TestingConfig(t))
+			qt.Assert(t, qt.IsNil(err))
+			defer cl.Close()
+			tor, err := cl.AddMagnet("magnet:?xt=urn:btih:" + strings.Repeat("f8", 20) + "&xs=" + url.QueryEscape(srv.URL))
+			qt.Assert(t, qt.IsNil(err))
+			// The source stores its error when it gives up.
+			deadline := time.Now().Add(10 * time.Second)
+			for {
+				if v, _ := tor.activeSources.Load(srv.URL); v != nil {
+					qt.Assert(t, qt.ErrorMatches(v.(error), "unmarshalling info: .*"))
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("source didn't finish")
+				}
+				time.Sleep(time.Millisecond)
+			}
+			qt.Assert(t, qt.IsNil(tor.Info()))
+		})
+	}
 }
 
 func TestTorrentDroppedBeforeGotInfo(t *testing.T) {

@@ -324,6 +324,7 @@ func (tc *TrackerClient) announce(event tracker.AnnounceEvent, infoHash [20]byte
 		Action:     "announce",
 		InfoHash:   binaryToJsonString(infoHash[:]),
 		PeerID:     tc.peerIdBinary(),
+		Offers:     make([]Offer, 0, len(offers)),
 	}
 	for _, offer := range offers {
 		req.Offers = append(req.Offers, Offer{

@@ -67,6 +67,9 @@ func TestTrackerAnnounceEventEncoding(t *testing.T) {
 				if err := json.Unmarshal(message, &fields); err != nil {
 					t.Fatal(err)
 				}
+				if got := string(fields["offers"]); got != "[]" {
+					t.Fatalf("announce without offers must encode an empty array, got %s", got)
+				}
 				rawEvent, present := fields["event"]
 				if test.event == tracker.None {
 					if present {

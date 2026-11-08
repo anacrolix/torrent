@@ -4,6 +4,8 @@
 package bencode
 
 import (
+	"bytes"
+	"fmt"
 	"math/big"
 	"strings"
 	"testing"
@@ -94,5 +96,32 @@ func FuzzDecodeDepthLimited(f *testing.F) {
 		qt.Assert(t, qt.IsNil(err))
 		var d0 interface{}
 		qt.Assert(t, qt.IsNil(Unmarshal(b0, &d0)))
+	})
+}
+
+// Long strings are read differently from memory and from a stream, and both must give the same
+// result.
+func FuzzDecodeStreamMatchesMemory(f *testing.F) {
+	long := strings.Repeat("x", bytes.MinRead+1)
+	f.Add([]byte("d1:a3:abc1:b0:1:c20:aaaaaaaaaaaaaaaaaaaa1:d4:true1:e1:xe"))
+	f.Add([]byte(fmt.Sprintf("d1:a%d:%se", len(long), long)))
+	f.Add([]byte(fmt.Sprintf("d1:b%d:%s", len(long)+1, long)))
+	f.Add([]byte(fmt.Sprintf("d1:c%d:", DefaultDecodeMaxStrLen)))
+	f.Fuzz(func(t *testing.T, b []byte) {
+		type target struct {
+			A string   `bencode:"a"`
+			B []byte   `bencode:"b"`
+			C [20]byte `bencode:"c"`
+			D bool     `bencode:"d"`
+			E int      `bencode:"e,ignore_unmarshal_type_error"`
+		}
+		var memV, streamV target
+		mem := Decoder{r: bytes.NewReader(b)}
+		stream := NewDecoder(bytes.NewReader(b))
+		memErr := mem.Decode(&memV)
+		streamErr := stream.Decode(&streamV)
+		qt.Assert(t, qt.Equals(fmt.Sprint(memErr), fmt.Sprint(streamErr)))
+		qt.Assert(t, qt.Equals(mem.Offset, stream.Offset))
+		qt.Assert(t, qt.DeepEquals(memV, streamV))
 	})
 }

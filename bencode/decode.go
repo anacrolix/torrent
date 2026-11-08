@@ -239,15 +239,25 @@ func (d *Decoder) parseStringLength() (int, error) {
 	return int(length), err
 }
 
-func (d *Decoder) parseString(v reflect.Value) error {
-	length, err := d.parseStringLength()
-	if err != nil {
-		return err
-	}
-	defer d.buf.Reset()
-	read := func(b []byte) {
-		n, err := io.ReadFull(d.r, b)
-		d.Offset += int64(n)
+// Reads a string of the given length into the empty slice b, using its capacity if there's room.
+// The length comes from the input, so unless the input is in memory and holds the whole string, b
+// grows in steps as the data arrives rather than all at once.
+func (d *Decoder) readString(b []byte, length int) []byte {
+	for len(b) < length {
+		n := length - len(b)
+		if r, ok := d.r.(*bytes.Reader); !ok || r.Len() < n {
+			n = min(n, max(len(b), bytes.MinRead))
+		}
+		if cap(b)-len(b) < n {
+			b = append(make([]byte, 0, len(b)+n), b...)
+		}
+		b = b[:len(b)+n]
+		read, err := io.ReadFull(d.r, b[len(b)-n:])
+		d.Offset += int64(read)
+		if err == io.EOF && len(b) > n {
+			// Some of the string was read, so report it as reading the whole string at once would.
+			err = io.ErrUnexpectedEOF
+		}
 		if err != nil {
 			checkForUnexpectedEOF(err, d.Offset)
 			panic(&SyntaxError{
@@ -256,35 +266,34 @@ func (d *Decoder) parseString(v reflect.Value) error {
 			})
 		}
 	}
+	return b
+}
+
+func (d *Decoder) parseString(v reflect.Value) error {
+	length, err := d.parseStringLength()
+	if err != nil {
+		return err
+	}
 
 	switch v.Kind() {
 	case reflect.String:
-		b := make([]byte, length)
-		read(b)
-		v.SetString(bytesAsString(b))
+		v.SetString(bytesAsString(d.readString(nil, length)))
 		return nil
 	case reflect.Slice:
 		if v.Type().Elem().Kind() != reflect.Uint8 {
 			break
 		}
-		b := make([]byte, length)
-		read(b)
-		v.SetBytes(b)
+		// Non-nil, so an empty string still decodes to an empty slice.
+		v.SetBytes(d.readString([]byte{}, length))
 		return nil
 	case reflect.Array:
 		if v.Type().Elem().Kind() != reflect.Uint8 {
 			break
 		}
-		d.buf.Grow(length)
-		b := d.buf.Bytes()[:length]
-		read(b)
-		reflect.Copy(v, reflect.ValueOf(b))
+		reflect.Copy(v, reflect.ValueOf(d.readString(d.buf.AvailableBuffer(), length)))
 		return nil
 	case reflect.Bool:
-		d.buf.Grow(length)
-		b := d.buf.Bytes()[:length]
-		read(b)
-		x, err := strconv.ParseBool(bytesAsString(b))
+		x, err := strconv.ParseBool(bytesAsString(d.readString(d.buf.AvailableBuffer(), length)))
 		if err != nil {
 			x = length != 0
 		}
@@ -293,8 +302,7 @@ func (d *Decoder) parseString(v reflect.Value) error {
 	}
 	// Can't move this into default clause because some cases above fail through to here after
 	// additional checks.
-	d.buf.Grow(length)
-	read(d.buf.Bytes()[:length])
+	d.readString(d.buf.AvailableBuffer(), length)
 	// I believe we return here to support "ignore_unmarshal_type_error".
 	return &UnmarshalTypeError{
 		BencodeTypeName:     "string",

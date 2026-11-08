@@ -12,6 +12,10 @@ on:
 
 jobs:
   claude-review:
+    # Fork PRs get no secrets and no OIDC token on pull_request events, so the
+    # action can only fail there. Review those by commenting @claude instead
+    # (claude.yml runs in the base repo's context).
+    if: github.event.pull_request.head.repo.full_name == github.repository
     # Optional: Filter by PR author
     # if: |
     #   github.event.pull_request.user.login == 'external-contributor' ||

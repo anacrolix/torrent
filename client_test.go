@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 	"testing/iotest"
 	"time"
@@ -409,29 +408,46 @@ func TestAddTorrentSpecMerging(t *testing.T) {
 	qt.Assert(t, qt.IsNotNil(tt.Info()))
 }
 
-// A magnet link's source (xs) is fetched in the background. If the info it returns doesn't decode,
-// the source must fail with an error rather than crash the whole client.
-func TestMagnetSourceUndecodableInfo(t *testing.T) {
-	for _, body := range []string{
-		"de",
-		"d4:infoi1ee",
-		"d4:infod12:piece length3:abcee",
+// A magnet link's source (xs) is fetched in the background and merged into the torrent. A good
+// source must give the torrent its info, and info that doesn't decode must fail the source with an
+// error rather than crash the whole client.
+func TestMagnetSourceMetainfo(t *testing.T) {
+	mi := testutil.GreetingMetaInfo()
+	good, err := bencode.Marshal(mi)
+	qt.Assert(t, qt.IsNil(err))
+	for _, tc := range []struct {
+		name    string
+		body    string
+		wantErr string // Empty if the source should give the torrent its info.
+	}{
+		{"valid", string(good), ""},
+		{"no info", "de", "unmarshalling info: EOF"},
+		{"info not a dict", "d4:infoi1ee", "unmarshalling info: .*"},
+		{"field of wrong type", "d4:infod12:piece length3:abcee", "unmarshalling info: .*"},
 	} {
-		t.Run(body, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				io.WriteString(w, body)
+				io.WriteString(w, tc.body)
 			}))
 			defer srv.Close()
 			cl, err := NewClient(TestingConfig(t))
 			qt.Assert(t, qt.IsNil(err))
 			defer cl.Close()
-			tor, err := cl.AddMagnet("magnet:?xt=urn:btih:" + strings.Repeat("f8", 20) + "&xs=" + url.QueryEscape(srv.URL))
+			tor, err := cl.AddMagnet("magnet:?xt=urn:btih:" + mi.HashInfoBytes().HexString() + "&xs=" + url.QueryEscape(srv.URL))
 			qt.Assert(t, qt.IsNil(err))
+			if tc.wantErr == "" {
+				select {
+				case <-tor.GotInfo():
+				case <-time.After(10 * time.Second):
+					t.Fatal("didn't get info from the source")
+				}
+				return
+			}
 			// The source stores its error when it gives up.
 			deadline := time.Now().Add(10 * time.Second)
 			for {
 				if v, _ := tor.activeSources.Load(srv.URL); v != nil {
-					qt.Assert(t, qt.ErrorMatches(v.(error), "unmarshalling info: .*"))
+					qt.Assert(t, qt.ErrorMatches(v.(error), tc.wantErr))
 					break
 				}
 				if time.Now().After(deadline) {

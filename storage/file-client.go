@@ -102,6 +102,11 @@ func (fs *fileClientImpl) OpenTorrent(
 			Info: info,
 			File: &fileInfo,
 		}))
+		if filepath.Clean(filePath) == filepath.Clean(dir) && !info.IsDir() {
+			// A single-file torrent with no usable name, such as "" or ".", would be stored at the
+			// torrent directory itself. Name the file after the infohash instead.
+			filePath = filepath.Join(dir, infoHash.HexString())
+		}
 		if !isSubFilepath(dir, filePath) {
 			err = fmt.Errorf("file %v: path %q is not sub path of %q", i, filePath, dir)
 			return

@@ -183,9 +183,9 @@ func TestOpenTorrentAllowsNonConflictingFilePaths(t *testing.T) {
 }
 
 // A single-file torrent whose name is empty or "." would otherwise be stored at the torrent
-// directory itself, with its part file beside it.
-func TestOpenTorrentRejectsFileAtTorrentDir(t *testing.T) {
-	for _, name := range []string{"", "."} {
+// directory itself, with its part file beside it. It's named after the infohash instead.
+func TestSingleFileTorrentWithoutName(t *testing.T) {
+	for _, name := range []string{"", ".", metainfo.NoName} {
 		t.Run(name, func(t *testing.T) {
 			parent := t.TempDir()
 			dir := filepath.Join(parent, "downloads")
@@ -196,13 +196,28 @@ func TestOpenTorrentRejectsFileAtTorrentDir(t *testing.T) {
 				PieceLength: 4,
 				Pieces:      make([]byte, 20),
 			}
-			_, err := openFileStorageForTest(t, dir, info, true)
-			qt.Assert(t, qt.IsNotNil(err))
+			ts, err := openFileStorageForTest(t, dir, info, true)
+			qt.Assert(t, qt.IsNil(err))
+			_, err = ts.Piece(info.Piece(0)).WriteAt([]byte("abc"), 0)
+			qt.Assert(t, qt.IsNil(err))
 			entries, err := os.ReadDir(parent)
 			qt.Assert(t, qt.IsNil(err))
 			qt.Assert(t, qt.HasLen(entries, 1))
+			assertFileContents(t, filepath.Join(dir, metainfo.Hash{}.HexString()+partFileSuffix), "abc")
 		})
 	}
+}
+
+// A custom path maker that puts a file at the torrent directory is rejected.
+func TestOpenTorrentRejectsFileAtTorrentDir(t *testing.T) {
+	dir := t.TempDir()
+	cl := NewFileOpts(NewFileClientOpts{
+		ClientBaseDir: dir,
+		FilePathMaker: func(FilePathMakerOpts) string { return "" },
+	})
+	defer cl.Close()
+	_, err := cl.OpenTorrent(context.Background(), multiFileInfo(metainfo.FileInfo{Path: []string{"a"}, Length: 1}), metainfo.Hash{})
+	qt.Assert(t, qt.IsNotNil(err))
 }
 
 func TestRenameNoReplace(t *testing.T) {

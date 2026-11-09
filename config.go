@@ -344,7 +344,11 @@ func NewDefaultClientConfig() *ClientConfig {
 	}
 	cc.PeriodicallyAnnounceTorrentsToDht = true
 	cc.MetainfoSourcesMerger = func(t *Torrent, info *metainfo.MetaInfo) error {
-		return t.MergeSpec(TorrentSpecFromMetaInfo(info))
+		spec, err := TorrentSpecFromMetaInfoErr(info)
+		if err != nil {
+			return err
+		}
+		return t.MergeSpec(spec)
 	}
 	return cc
 }

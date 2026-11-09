@@ -1,15 +1,17 @@
-//go:build go1.18
-// +build go1.18
-
 package peer_protocol
 
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"io"
+	"slices"
 	"testing"
 
 	qt "github.com/go-quicktest/qt"
+
+	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 func FuzzDecoder(f *testing.F) {
@@ -60,5 +62,56 @@ func FuzzMessageMarshalBinary(f *testing.F) {
 		}
 		b0 := m.MustMarshalBinary()
 		qt.Assert(t, qt.DeepEquals(b0, b))
+	})
+}
+
+// Handshakes are the first bytes read from any incoming or outgoing connection.
+func FuzzHandshake(f *testing.F) {
+	var b []byte
+	b = append(b, Protocol...)
+	b = append(b, make([]byte, 8+20+20)...)
+	f.Add(b, false)
+	f.Add(b, true)
+	f.Fuzz(func(t *testing.T, b []byte, knownInfohash bool) {
+		var ih *metainfo.Hash
+		if knownInfohash {
+			ih = &metainfo.Hash{}
+		}
+		sock := struct {
+			io.Reader
+			io.Writer
+		}{bytes.NewReader(b), io.Discard}
+		res, err := Handshake(context.Background(), sock, ih, [20]byte{}, PeerExtensionBits{})
+		if err != nil {
+			return
+		}
+		qt.Assert(t, qt.DeepEquals(b[len(Protocol):68], slices.Concat(
+			res.PeerExtensionBits[:], res.Hash[:], res.PeerID[:])))
+	})
+}
+
+func FuzzExtendedHandshakeMessage(f *testing.F) {
+	f.Add([]byte("d1:md11:ut_metadatai1e6:ut_pexi2ee13:metadata_sizei1024e1:pi6881e4:reqqi250e1:v7:test1.04:yourip4:\x01\x02\x03\x044:ipv616:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01e"))
+	f.Fuzz(func(t *testing.T, b []byte) {
+		var m ExtendedHandshakeMessage
+		if err := bencode.Unmarshal(b, &m); err != nil {
+			return
+		}
+		_, err := bencode.Marshal(m)
+		qt.Assert(t, qt.IsNil(err))
+	})
+}
+
+func FuzzPexMsg(f *testing.F) {
+	f.Add([]byte("d5:added6:\x01\x02\x03\x04\x1a\xe17:added.f1:\x016:added618:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x1a\xe18:added6.f1:\x007:dropped6:\x05\x06\x07\x08\x00\x01e"))
+	f.Fuzz(func(t *testing.T, b []byte) {
+		m, err := LoadPexMsg(b)
+		if err != nil {
+			return
+		}
+		for _, f := range m.AddedFlags {
+			f.Get(PexSupportsUtp)
+		}
+		_ = m.Message(1).MustMarshalBinary()
 	})
 }

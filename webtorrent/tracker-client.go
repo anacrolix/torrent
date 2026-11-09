@@ -155,6 +155,7 @@ func (tc *TrackerClient) doWebsocket() error {
 				cancel()
 				if err != nil {
 					tc.slogger().Debug("pinging tracker", "err", err)
+					c.CloseNow()
 					return
 				}
 			case <-closeChan:

@@ -2275,7 +2275,9 @@ func (t *Torrent) startScrapingTracker(_url string) {
 		t.startScrapingTracker(u.String())
 		return
 	}
-	announcerKey := trackerAnnouncerKey(_url)
+	// Key on the normalized form so it always matches u.String(), for example when the scheme
+	// has upper case letters.
+	announcerKey := trackerAnnouncerKey(u.String())
 	for ih := range t.iterShortInfohashes() {
 		t.startScrapingTrackerWithInfohash(u, announcerKey, ih)
 	}
@@ -2305,7 +2307,10 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr trackerAnn
 				return nil
 			}
 		}
-		t.cl.startTrackerAnnouncer(u, urlStr)
+		if err := t.cl.startTrackerAnnouncer(u, urlStr); err != nil {
+			t.slogger().Warn("error starting tracker announcer", "url", urlStr, "err", err)
+			return nil
+		}
 		t.initRegularTrackerAnnounceState(announcerKey)
 		return torrentRegularTrackerAnnouncer{
 			u: u,

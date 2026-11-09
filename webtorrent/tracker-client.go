@@ -24,7 +24,14 @@ const (
 	// Matches gorilla/websocket's DefaultDialer.HandshakeTimeout, which was used previously.
 	handshakeTimeout = 45 * time.Second
 	pingTimeout      = 30 * time.Second
+	// The largest message read from a tracker. Messages carry one SDP offer or answer each, which
+	// are a few KiB, and can exceed the websocket library's 32 KiB default.
+	maxTrackerMessageSize = 1 << 20
 )
+
+// A tracker that doesn't accept a message in this time is treated as gone: the write fails and the
+// connection is closed, which ends the read loop and starts a reconnect. A var for tests.
+var writeTimeout = 30 * time.Second
 
 type TrackerClientStats struct {
 	Dials                  int64
@@ -133,9 +140,7 @@ func (tc *TrackerClient) doWebsocket() error {
 		tc.OnDisconnected(err)
 		return fmt.Errorf("dialing tracker: %w", err)
 	}
-	// gorilla/websocket, which this used previously, has no read limit by default. Tracker
-	// messages carry SDP offers and answers which can exceed this library's 32 KiB default.
-	c.SetReadLimit(-1)
+	c.SetReadLimit(maxTrackerMessageSize)
 	defer c.CloseNow()
 	tc.slogger().Debug("connected")
 	tc.mu.Lock()
@@ -272,7 +277,6 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 	// save the leecher peer connections
 	tc.storePeerConnection(fmt.Sprintf("%x", randOfferId[:]), pc)
 
-
 	tc.slogger().Debug("announcing offer")
 	err = tc.announce(event, infoHash, []outboundOffer{{
 		offerId: offerIDBinary,
@@ -332,18 +336,25 @@ func (tc *TrackerClient) announce(event tracker.AnnounceEvent, infoHash [20]byte
 		return fmt.Errorf("marshalling request: %w", err)
 	}
 
+	// Store the offers before writing, so an answer can't arrive before they're known.
 	tc.mu.Lock()
-	err = tc.writeMessage(data)
-	if err != nil {
-		tc.mu.Unlock()
-		tc.OnAnnounceError(infohash.T(infoHash).HexString(), err)
-		return fmt.Errorf("write AnnounceRequest: %w", err)
+	if len(offers) != 0 {
+		g.MakeMapIfNil(&tc.outboundOffers)
 	}
-	g.MakeMapIfNil(&tc.outboundOffers)
 	for _, offer := range offers {
 		g.MapInsert(tc.outboundOffers, offer.offerId, offer.outboundOfferValue)
 	}
 	tc.mu.Unlock()
+	err = tc.writeMessage(data)
+	if err != nil {
+		tc.mu.Lock()
+		for _, offer := range offers {
+			delete(tc.outboundOffers, offer.offerId)
+		}
+		tc.mu.Unlock()
+		tc.OnAnnounceError(infohash.T(infoHash).HexString(), err)
+		return fmt.Errorf("write AnnounceRequest: %w", err)
+	}
 	tc.OnAnnounceSuccessful(infohash.T(infoHash).HexString())
 	return nil
 }
@@ -361,14 +372,23 @@ func (tc *TrackerClient) RtcPeerConnStats() map[string]webrtc.StatsReport {
 	return sr
 }
 
+// Waits for a connection and writes data to it. tc.mu must not be held: the write can take as long
+// as writeTimeout, and nothing else should wait on it.
 func (tc *TrackerClient) writeMessage(data []byte) error {
+	tc.mu.Lock()
 	for tc.wsConn == nil {
 		if tc.closed {
+			tc.mu.Unlock()
 			return fmt.Errorf("%T closed", tc)
 		}
 		tc.cond.Wait()
 	}
-	return tc.wsConn.Write(context.Background(), websocket.MessageText, data)
+	conn := tc.wsConn
+	tc.mu.Unlock()
+	// Writes are safe concurrently. If the context expires, the connection is closed.
+	ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
+	defer cancel()
+	return conn.Write(ctx, websocket.MessageText, data)
 }
 
 func (tc *TrackerClient) trackerReadLoop(tracker *websocket.Conn) error {
@@ -444,8 +464,6 @@ func (tc *TrackerClient) handleOffer(
 		peerConnection.Close()
 		return fmt.Errorf("marshalling response: %w", err)
 	}
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
 	if err := tc.writeMessage(data); err != nil {
 		peerConnection.Close()
 		return fmt.Errorf("writing response: %w", err)

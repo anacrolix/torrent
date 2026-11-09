@@ -55,6 +55,10 @@ jobs:
       # Separate to remove downloading spam and possible caching improvement.
       - run: go mod download
       - run: just test
+      # Modules under tests/ with their own go.mod are skipped by ./... and need
+      # manual setup to run, so at least check they compile against this checkout.
+      - name: Vet separate test modules
+        run: go vet $(for m in tests/*/go.mod; do echo "./${m%/go.mod}"; done)
         # Test on 386 for atomic alignment and other bad 64-bit assumptions
       - if: matrix.os != 'macos-latest'
         run: GOARCH=386 go test -run @ ./...

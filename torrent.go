@@ -3628,6 +3628,10 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 			torrent.Add("holepunch connects dropped at half-open limit", 1)
 			return nil
 		}
+		if !peerMayDirectDialTo(sender.bannableAddr, holepunchAddr.Addr()) {
+			torrent.Add("holepunch connects dropped for address scope", 1)
+			return nil
+		}
 		if g.MapContains(t.cl.undialableWithoutHolepunch, holepunchAddr) {
 			setAdd(&t.cl.undialableWithoutHolepunchDialedAfterHolepunchConnect, holepunchAddr)
 			if g.MapContains(t.cl.accepted, holepunchAddr) {

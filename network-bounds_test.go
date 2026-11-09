@@ -196,3 +196,24 @@ func TestPortMessagePingsOnce(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	qt.Check(t, qt.HasLen(ds.pings, 0))
 }
+
+// Repeated extended handshakes must not list the conn for PEX again, or replace its PEX timer.
+func TestRepeatedExtendedHandshakePex(t *testing.T) {
+	tt, c := newNetworkBoundsTestConn(t, TestingConfig(t), false)
+	c.RemoteAddr = &net.TCPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 5678}
+	c.Network = "tcp"
+	c.LocalLtepProtocolMap = &tt.cl.defaultLocalLtepProtocolMap
+	payload := bencode.MustMarshal(pp.ExtendedHandshakeMessage{
+		M:    map[pp.ExtensionName]pp.ExtensionNumber{pp.ExtensionNamePex: 1},
+		Port: 5678,
+	})
+	qt.Assert(t, qt.IsNil(c.onReadExtendedMsg(pp.HandshakeExtendedID, payload)))
+	qt.Assert(t, qt.IsTrue(c.pex.IsEnabled()))
+	timer := c.pex.timer
+	for range 10 {
+		qt.Assert(t, qt.IsNil(c.onReadExtendedMsg(pp.HandshakeExtendedID, payload)))
+	}
+	qt.Check(t, qt.Equals(c.pex.timer, timer))
+	qt.Check(t, qt.Equals(tt.pex.nc, 1))
+	qt.Check(t, qt.Equals(tt.pex.numPending(nil), 1))
+}

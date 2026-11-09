@@ -1262,7 +1262,10 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		}
 		c.requestPendingMetadata()
 		if !t.cl.config.DisablePEX {
-			t.pex.Add(c) // we learnt enough now
+			// The extended handshake can be repeated, only list the conn once.
+			if !c.pex.Listed {
+				t.pex.Add(c) // we learnt enough now
+			}
 			// This checks the extension is supported internally.
 			c.pex.Init(c)
 		}

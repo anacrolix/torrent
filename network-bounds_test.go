@@ -3,6 +3,7 @@ package torrent
 import (
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/netip"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/testutil"
+	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	utHolepunch "github.com/anacrolix/torrent/peer_protocol/ut-holepunch"
 )
@@ -133,4 +135,25 @@ func TestHolepunchConnectRespectsHalfOpenLimit(t *testing.T) {
 		qt.Assert(t, qt.IsNil(err))
 	}
 	qt.Check(t, qt.Equals(len(tt.halfOpen), 2))
+}
+
+// The hash request range check must not wrap: index+length is computed in uint32 on the wire.
+func TestHashRequestRangeDoesNotWrap(t *testing.T) {
+	mi, err := metainfo.LoadFromFile("testdata/v2-multi-piece.torrent")
+	qt.Assert(t, qt.IsNil(err))
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	tt, err := cl.AddTorrent(mi)
+	qt.Assert(t, qt.IsNil(err))
+	<-tt.GotInfo()
+	cl.lock()
+	defer cl.unlock()
+	c := cl.newConnection(nil, newConnectionOpts{network: "test"})
+	c.setTorrent(tt)
+	root := tt.Files()[0].piecesRoot.Unwrap()
+	_, err = c.getHashes(&pp.Message{PiecesRoot: root, Index: 0, Length: 2})
+	qt.Check(t, qt.IsNil(err))
+	_, err = c.getHashes(&pp.Message{PiecesRoot: root, Index: math.MaxUint32, Length: 2})
+	qt.Check(t, qt.IsNotNil(err))
 }

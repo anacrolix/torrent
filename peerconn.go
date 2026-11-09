@@ -992,6 +992,21 @@ func (c *PeerConn) mainReadLoop() (err error) {
 	}
 	defer flushChunkWrites()
 	for {
+		// Replies to the peer are buffered from here. Stop reading until the writer catches up.
+		if wait, taken := c.messageWriter.readLoopShouldWait(); wait {
+			flushChunkWrites()
+			lockedDecodes = 0
+			cl.unlock()
+			select {
+			case <-taken:
+			case <-c.closed.Done():
+			}
+			cl.lock()
+			if t.closed.IsSet() || c.closed.IsSet() {
+				return nil
+			}
+			continue
+		}
 		// Keep batching only while the next message is a Piece that will be decoded without
 		// releasing the lock. Anything else must see the batch's effects first.
 		if len(chunkWrites) != 0 && (len(chunkWrites) >= maxChunkWriteBatch ||
@@ -1656,7 +1671,8 @@ func (pc *PeerConn) getHashes(msg *pp.Message) ([][32]byte, error) {
 	beginPieceIndex := file.BeginPieceIndex()
 	endPieceIndex := file.EndPieceIndex()
 	length := merkle.RoundUpToPowerOfTwo(uint(endPieceIndex - beginPieceIndex))
-	if uint(msg.Index+msg.Length) > length {
+	// Widen before adding so the sum can't wrap.
+	if uint64(msg.Index)+uint64(msg.Length) > uint64(length) {
 		return nil, errors.New("invalid hash range")
 	}
 

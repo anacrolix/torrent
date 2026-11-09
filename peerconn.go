@@ -1360,7 +1360,14 @@ func (cn *PeerConn) drop() {
 }
 
 func (cn *PeerConn) providedBadData() {
-	cn.t.cl.banPeerIP(cn.remoteIp())
+	ip := cn.remoteIp()
+	if ip == nil {
+		// Without an IP there's nothing to ban, so at least drop this connection.
+		cn.t.slogger().Debug("can't ban peer without ip, dropping it", "peer", cn)
+		cn.drop()
+		return
+	}
+	cn.t.cl.banPeerIP(ip)
 }
 
 // This is called when something has changed that should wake the writer, such as putting stuff into

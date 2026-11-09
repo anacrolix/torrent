@@ -102,6 +102,8 @@ type Client struct {
 
 	acceptLimiter map[ipStr]int
 	numHalfOpen   int
+	// Accepted connections that are still in the handshake phase.
+	pendingIncomingHandshakes pendingIncomingHandshakes
 
 	websocketTrackers                websocketTrackers
 	regularTrackerAnnounceDispatcher regularTrackerAnnounceDispatcher
@@ -721,9 +723,15 @@ func (cl *Client) acceptConnections(l Listener) {
 					return log.Fmsg("rejecting accepted conn: %v", reject)
 				})
 				conn.Close()
-			} else {
-				go cl.incomingConnection(conn)
+				return
 			}
+			releaseHandshake, ok := cl.reservePendingIncomingHandshake(conn.RemoteAddr())
+			if !ok {
+				torrent.Add("accepted connections dropped at pending handshake limit", 1)
+				conn.Close()
+				return
+			}
+			go cl.incomingConnection(conn, releaseHandshake)
 			cl.logger.LazyLog(log.Debug, func() log.Msg {
 				return log.Fmsg("accepted %q connection at %q from %q",
 					l.Addr().Network(),
@@ -743,7 +751,9 @@ func regularNetConnPeerConnConnString(nc net.Conn) string {
 	return fmt.Sprintf("%s-%s", nc.LocalAddr(), nc.RemoteAddr())
 }
 
-func (cl *Client) incomingConnection(nc net.Conn) {
+// releaseHandshake is called when the handshake phase ends.
+func (cl *Client) incomingConnection(nc net.Conn, releaseHandshake func()) {
+	defer releaseHandshake()
 	defer nc.Close()
 	if tc, ok := nc.(*net.TCPConn); ok {
 		tc.SetLinger(0)
@@ -759,7 +769,7 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 			connString:      regularNetConnPeerConnConnString(nc),
 		})
 	c.Discovery = PeerSourceIncoming
-	cl.runReceivedConn(c)
+	cl.runReceivedConn(c, releaseHandshake)
 
 	cl.lock()
 	c.close()
@@ -1243,12 +1253,13 @@ func (cl *Client) connBtHandshake(ctx context.Context, c *PeerConn, ih *metainfo
 	return
 }
 
-func (cl *Client) runReceivedConn(c *PeerConn) {
+func (cl *Client) runReceivedConn(c *PeerConn, releaseHandshake func()) {
 	err := c.conn.SetDeadline(time.Now().Add(cl.config.HandshakesTimeout))
 	if err != nil {
 		panic(err)
 	}
 	t, err := cl.receiveHandshakes(c)
+	releaseHandshake()
 	if err != nil {
 		cl.logger.LazyLog(log.Debug, func() log.Msg {
 			return log.Fmsg(
@@ -1258,9 +1269,11 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 			)
 		})
 		torrent.Add("error receiving handshake", 1)
-		cl.lock()
-		cl.onBadAccept(c.RemoteAddr)
-		cl.unlock()
+		if acceptedConnSourceVerified(c) {
+			cl.lock()
+			cl.onBadAccept(c.RemoteAddr)
+			cl.unlock()
+		}
 		return
 	}
 	if t == nil {

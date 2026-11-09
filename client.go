@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	"expvar"
 	"fmt"
 	"io"
 	"log/slog"
@@ -1228,7 +1227,8 @@ func (cl *Client) receiveHandshakes(c *PeerConn) (t *Torrent, err error) {
 	return
 }
 
-var successfulPeerWireProtocolHandshakePeerReservedBytes expvar.Map
+// Keyed by the peer's reserved bytes, which it can choose freely.
+var successfulPeerWireProtocolHandshakePeerReservedBytes boundedExpvarMap
 
 func init() {
 	torrent.Set(
@@ -1241,8 +1241,8 @@ func (cl *Client) connBtHandshake(ctx context.Context, c *PeerConn, ih *metainfo
 	if err != nil {
 		return
 	}
-	successfulPeerWireProtocolHandshakePeerReservedBytes.Add(
-		hex.EncodeToString(res.PeerExtensionBits[:]), 1)
+	successfulPeerWireProtocolHandshakePeerReservedBytes.addSafeKey(
+		hex.EncodeToString(res.PeerExtensionBits[:]))
 	ret = res.Hash
 	c.PeerExtensionBytes = res.PeerExtensionBits
 	c.PeerID = res.PeerID

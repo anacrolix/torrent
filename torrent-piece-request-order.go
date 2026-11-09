@@ -98,6 +98,11 @@ func (t *Torrent) checkPendingPiecesMatchesRequestOrder() {
 	if !amortize.Try() {
 		return
 	}
+	t.assertPendingPiecesMatchRequestOrder()
+}
+
+// Panics if the pending pieces aren't the pieces wanted from the piece request order.
+func (t *Torrent) assertPendingPiecesMatchRequestOrder() {
 	if t.dataDownloadDisallowed.IsSet() {
 		// Pending pieces are tracked by priority, but dataDownloadDisallowed makes
 		// ignorePieceForRequests true for all of them, so they're dropped from the request
@@ -123,10 +128,18 @@ func (t *Torrent) checkPendingPiecesMatchesRequestOrder() {
 		}
 		proBitmap.Add(uint32(item.Key.Index))
 	}
-	if !proBitmap.Equals(&t._pendingPieces.Bitmap) {
-		intersection := roaring.And(&proBitmap, &t._pendingPieces.Bitmap)
+	// Pieces without a hash stay pending so their v2 hashes are fetched, but can't be requested.
+	pending := t._pendingPieces.Clone()
+	t._pendingPieces.Iterate(func(i pieceIndex) bool {
+		if !t.piece(i).haveHash() {
+			pending.Remove(i)
+		}
+		return true
+	})
+	if !proBitmap.Equals(&pending.Bitmap) {
+		intersection := roaring.And(&proBitmap, &pending.Bitmap)
 		exclPro := roaring.AndNot(&proBitmap, intersection)
-		exclPending := roaring.AndNot(&t._pendingPieces.Bitmap, intersection)
+		exclPending := roaring.AndNot(&pending.Bitmap, intersection)
 		panic(fmt.Sprintf("piece request order has %v and pending pieces has %v", exclPro.String(), exclPending.String()))
 	}
 }

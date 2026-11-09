@@ -974,9 +974,10 @@ func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 	}
 	tc, err := tracker.NewClient(string(urlStr), tracker.NewClientOpts{
 		Http: trHttp.NewClientOpts{
-			Proxy:       config.HTTPProxy,
-			DialContext: config.TrackerDialContext,
-			ServerName:  u.Hostname(),
+			Proxy:              config.HTTPProxy,
+			DialContext:        config.TrackerDialContext,
+			ServerName:         u.Hostname(),
+			InsecureSkipVerify: config.TrackerInsecureSkipVerify,
 		},
 		UdpNetwork:   u.Scheme,
 		Slogger:      logger.With("trackerUrl", string(urlStr)),

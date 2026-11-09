@@ -31,6 +31,8 @@ type ClientTrackerConfig struct {
 	DisableTrackers bool `long:"disable-trackers"`
 	// Defines DialContext func to use for HTTP tracker announcements
 	TrackerDialContext func(ctx context.Context, network, addr string) (net.Conn, error)
+	// Don't verify HTTPS tracker certificates. Certificates are verified by default.
+	TrackerInsecureSkipVerify bool
 	// Defines ListenPacket func to use for UDP tracker announcements
 	TrackerListenPacket func(network, addr string) (net.PacketConn, error)
 	// Deprecated. Takes a tracker's hostname and requests DNS A and AAAA records. Used in case DNS lookups

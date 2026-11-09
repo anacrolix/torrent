@@ -208,7 +208,13 @@ func (cl *Client) request(
 ) (respBody []byte, addr net.Addr, err error) {
 	respChan := make(chan DispatchedResponse, 1)
 	t := cl.Dispatcher.NewTransaction(func(dr DispatchedResponse) {
-		respChan <- dr
+		// Only the first response is used. Don't block on later ones (a tracker can send the same
+		// response more than once), as this runs on the socket's read loop with the dispatcher
+		// lock held.
+		select {
+		case respChan <- dr:
+		default:
+		}
 	})
 	defer t.End()
 	ctx, cancel := context.WithCancel(ctx)

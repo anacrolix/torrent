@@ -1,0 +1,33 @@
+name: Go test cache
+description: >-
+  Persist the Go build cache (which also holds go test results) and module
+  cache across workflow runs, so tests of packages whose inputs haven't changed
+  report "(cached)" instead of running again. Use after actions/setup-go (with
+  its own cache disabled) and checkout.
+
+runs:
+  using: composite
+  steps:
+    - name: Set file mtimes from content
+      shell: bash
+      run: perl "$GITHUB_ACTION_PATH/set-mtimes.pl"
+    - name: Locate Go caches
+      id: go-env
+      shell: bash
+      run: |
+        echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+        echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+        echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+    # Cache entries are immutable, so a fixed key would be saved once and then
+    # only ever restored, never picking up newer test results. Give every run
+    # its own key and restore the most recent one by prefix. GOCACHE is content
+    # addressed, so stale entries are harmless, and go trims entries unused for
+    # 5 days.
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ${{ steps.go-env.outputs.gocache }}
+          ${{ steps.go-env.outputs.gomodcache }}
+        key: go-test-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-env.outputs.goversion }}-${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: |
+          go-test-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-env.outputs.goversion }}-${{ github.job }}-

@@ -1051,7 +1051,55 @@ func (cl *Client) incomingPeerPort() int {
 	return cl.LocalPort()
 }
 
+// The infohash identity presented in an outgoing handshake. The Torrent's infohashes can change
+// while a handshake is in flight: when info arrives for a hybrid torrent that was added by its v2
+// infohash, the v1 infohash is filled in and becomes canonical. The MSE secret key, the infohash
+// we send, and the check on the peer's reply must all agree, so they're taken from one snapshot.
+type outgoingHandshakeInfohash struct {
+	// Sent as the MSE secret key and in the BitTorrent handshake.
+	sent infohash.T
+	// The truncated v2 infohash, if known when the handshake started.
+	v2Short g.Option[infohash.T]
+}
+
+// Must be called with the Client lock held.
+func (t *Torrent) outgoingHandshakeInfohash() (ret outgoingHandshakeInfohash) {
+	ret.sent = *t.canonicalShortInfohash()
+	if t.infoHashV2.Ok {
+		ret.v2Short.Set(*t.infoHashV2.Value.ToShort())
+	}
+	return
+}
+
+// BEP 52: when initiating with the v1 infohash of a hybrid torrent, set the upgrade bit so the peer
+// may respond with the truncated v2 infohash.
+func (me outgoingHandshakeInfohash) upgradeBit() bool {
+	return me.v2Short.Ok && me.sent != me.v2Short.Value
+}
+
+// Checks the infohash in the peer's handshake reply. BEP 3 requires the same value we sent; the
+// only alternative is the BEP 52 upgrade to the truncated v2 infohash.
+func (me outgoingHandshakeInfohash) checkReply(reply infohash.T) error {
+	if reply == me.sent {
+		return nil
+	}
+	if me.upgradeBit() && reply == me.v2Short.Value {
+		return nil
+	}
+	return errors.New("bittorrent protocol handshake: peer infohash didn't match")
+}
+
+// Whether ih is the Torrent's truncated v2 infohash. This only ever goes from false to true (when a
+// 20-byte infohash turns out to be a truncated v2 infohash), so it's safe to check after the
+// handshake. Must be called with the Client lock held.
+func (t *Torrent) isTruncatedV2Infohash(ih infohash.T) bool {
+	return t.infoHashV2.Ok && *t.infoHashV2.Value.ToShort() == ih
+}
+
 func (cl *Client) initiateHandshakes(ctx context.Context, c *PeerConn, t *Torrent) (err error) {
+	cl.rLock()
+	ih := t.outgoingHandshakeInfohash()
+	cl.rUnlock()
 	if c.headerEncrypted {
 		var rw io.ReadWriter
 		rw, c.cryptoMethod, err = mse.InitiateHandshakeContext(
@@ -1060,7 +1108,7 @@ func (cl *Client) initiateHandshakes(ctx context.Context, c *PeerConn, t *Torren
 				io.Reader
 				io.Writer
 			}{c.r, c.w},
-			t.canonicalShortInfohash().Bytes(),
+			ih.sent.Bytes(),
 			nil,
 			cl.config.CryptoProvides,
 		)
@@ -1070,23 +1118,22 @@ func (cl *Client) initiateHandshakes(ctx context.Context, c *PeerConn, t *Torren
 		}
 	}
 	localReservedBits := cl.config.Extensions
-	handshakeIh := *t.canonicalShortInfohash()
-	// If we're sending the v1 infohash, and we know the v2 infohash, set the v2 upgrade bit. This
-	// means the peer can send the v2 infohash in the handshake to upgrade the connection.
-	localReservedBits.SetBit(pp.ExtensionBitV2Upgrade, g.Some(handshakeIh) == t.infoHash && t.infoHashV2.Ok)
-	ih, err := cl.connBtHandshake(context.TODO(), c, &handshakeIh, localReservedBits)
+	localReservedBits.SetBit(pp.ExtensionBitV2Upgrade, ih.upgradeBit())
+	sent := ih.sent
+	reply, err := cl.connBtHandshake(context.TODO(), c, &sent, localReservedBits)
 	if err != nil {
 		return fmt.Errorf("bittorrent protocol handshake: %w", err)
 	}
-	if g.Some(ih) == t.infoHash {
-		return nil
+	err = ih.checkReply(reply)
+	if err != nil {
+		return
 	}
-	if t.infoHashV2.Ok && *t.infoHashV2.Value.ToShort() == ih {
+	if reply != ih.sent {
 		torrent.Add("initiated handshakes upgraded to v2", 1)
-		c.v2 = true
-		return nil
 	}
-	err = errors.New("bittorrent protocol handshake: peer infohash didn't match")
+	cl.rLock()
+	c.v2 = t.isTruncatedV2Infohash(reply)
+	cl.rUnlock()
 	return
 }
 
@@ -1158,7 +1205,7 @@ func (cl *Client) receiveHandshakes(c *PeerConn) (t *Torrent, err error) {
 
 	cl.lock()
 	t = cl.torrentsByShortHash[ih]
-	if t != nil && t.infoHashV2.Ok && *t.infoHashV2.Value.ToShort() == ih {
+	if t != nil && t.isTruncatedV2Infohash(ih) {
 		torrent.Add("v2 handshakes received", 1)
 		c.v2 = true
 	}
@@ -1296,7 +1343,7 @@ func (p *PeerConn) initUpdateRequestsTimer() {
 		}
 	}
 	if enableUpdateRequestsTimer {
-		p.updateRequestsTimer = time.AfterFunc(math.MaxInt64, p.updateRequestsTimerFunc)
+		p.updateRequestsTimer = newReleasedTimer(math.MaxInt64, p.updateRequestsTimerFunc)
 	}
 }
 
@@ -1399,6 +1446,9 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 		return fmt.Errorf("error unmarshalling bencode: %s", err)
 	}
 	piece := d.Piece
+	if piece < 0 {
+		return fmt.Errorf("invalid metadata piece index %d", piece)
+	}
 	switch d.Type {
 	case pp.DataMetadataExtensionMsgType:
 		c.modifyRelevantConnStats(add(1, func(cs *ConnStats) *Count { return &cs.MetadataChunksRead }))
@@ -1513,6 +1563,7 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 
 		ignoreUnverifiedPieceCompletion: opts.IgnoreUnverifiedPieceCompletion,
 		initialPieceCheckDisabled:       opts.DisableInitialPieceCheck,
+		deferStorageOpen:                opts.DeferStorageOpen,
 	}
 	g.MakeMap(&t.webSeeds)
 	t.closedCtx, t.closedCtxCancel = context.WithCancelCause(context.Background())
@@ -1650,6 +1701,11 @@ type AddTorrentOpts struct {
 	// Whether to initially allow data download or upload
 	DisallowDataUpload   bool
 	DisallowDataDownload bool
+	// Don't open storage when the info becomes available. Nothing is read from or written to
+	// storage until Torrent.OpenStorage is called, so the info can be inspected first, such as to
+	// check what files it would touch. Until then no piece is complete and no data is requested
+	// or served. Storage is still used to open the torrent if set.
+	DeferStorageOpen bool
 }
 
 // Add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also

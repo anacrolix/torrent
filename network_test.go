@@ -69,8 +69,20 @@ func dialClosure(f func(net, addr string) (net.Conn, error), network string) fun
 	}
 }
 
+// Reports whether the host can open IPv6 sockets at all. Some sandboxes and containers can't.
+func hostSupportsIpv6() bool {
+	l, err := net.Listen("tcp6", "[::1]:0")
+	if err != nil {
+		return false
+	}
+	l.Close()
+	return true
+}
+
 func TestListenLocalhostNetwork(t *testing.T) {
-	testListenerNetwork(t, net.Listen, "tcp", "tcp", "0.0.0.0:0", false)
+	// With IPv6 available, Go listens dual-stack on "::" for "tcp" and "0.0.0.0". Without it, it
+	// falls back to an IPv4 socket.
+	testListenerNetwork(t, net.Listen, "tcp", "tcp", "0.0.0.0:0", !hostSupportsIpv6())
 	testListenerNetwork(t, net.Listen, "tcp", "tcp", "[::1]:0", false)
 	testListenerNetwork(t, listenUtpListener, "udp", "udp6", "[::1]:0", false)
 	testListenerNetwork(t, listenUtpListener, "udp", "udp6", "[::]:0", false)
@@ -83,4 +95,22 @@ func TestListenLocalhostNetwork(t *testing.T) {
 		dialClosure(net.Dial, "tcp"),
 		listenClosure(net.Listen, "tcp4", "localhost:0"),
 	)
+}
+
+func TestIsUnsupportedNetworkError(t *testing.T) {
+	// 192.0.2.0/24 is reserved for documentation (RFC 5737), so no interface should have it.
+	l, err := net.Listen("tcp4", "192.0.2.1:0")
+	if err == nil {
+		l.Close()
+		t.Skip("host can bind 192.0.2.1")
+	}
+	qt.Check(t, qt.IsTrue(isUnsupportedNetworkError(err)), qt.Commentf("%v", err))
+	qt.Check(t, qt.IsFalse(isUnsupportedNetworkError(nil)))
+	// A port that's in use is a real failure, not an unsupported network.
+	l, err = net.Listen("tcp4", "127.0.0.1:0")
+	qt.Assert(t, qt.IsNil(err))
+	defer l.Close()
+	_, err = net.Listen("tcp4", l.Addr().String())
+	qt.Assert(t, qt.IsNotNil(err))
+	qt.Check(t, qt.IsFalse(isUnsupportedNetworkError(err)), qt.Commentf("%v", err))
 }

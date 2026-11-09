@@ -1,6 +1,17 @@
 name: Go
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs when a PR gets new commits. Pushes to master and tags
+# always run to completion.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -20,6 +31,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
+          # Replaced by go-test-cache, which also saves updated test results.
+          cache: false
+      - uses: ./.github/actions/go-test-cache
       - run: brew install macfuse fuse-t && echo 'FUSE_FORCE_BACKEND=fuse-t' >> $GITHUB_ENV
         if: matrix.os == 'macos-latest'
       - run: |
@@ -27,8 +41,13 @@ jobs:
           sudo apt install -y fuse
         if: matrix.os == 'ubuntu-latest'
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install just
-        run: cargo install just
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: storage/possum/lib
+      # Prebuilt binary, rather than compiling just from source every run.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
       - name: Build possum
         run: |
           cd storage/possum/lib
@@ -36,6 +55,10 @@ jobs:
       # Separate to remove downloading spam and possible caching improvement.
       - run: go mod download
       - run: just test
+      # Modules under tests/ with their own go.mod are skipped by ./... and need
+      # manual setup to run, so at least check they compile against this checkout.
+      - name: Vet separate test modules
+        run: go vet $(for m in tests/*/go.mod; do echo "./${m%/go.mod}"; done)
         # Test on 386 for atomic alignment and other bad 64-bit assumptions
       - if: matrix.os != 'macos-latest'
         run: GOARCH=386 go test -run @ ./...

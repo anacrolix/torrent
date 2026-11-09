@@ -656,9 +656,10 @@ func (me *regularTrackerAnnounceDispatcher) singleAnnounce(
 			state.consecutiveFailures = 0
 			state.lastOk = lastAnnounceOk{
 				AnnouncedEvent: req.Event,
-				Interval:       time.Duration(resp.Interval) * time.Second,
-				NumPeers:       len(resp.Peers),
-				Completed:      now,
+				// The tracker controls this. Don't let it make us reannounce in a tight loop.
+				Interval:  max(time.Duration(resp.Interval)*time.Second, minAnnounceInterval),
+				NumPeers:  len(resp.Peers),
+				Completed: now,
 			}
 			if req.Event == tracker.Completed {
 				state.sentCompleted = true
@@ -853,6 +854,9 @@ func (me *regularTrackerAnnounceDispatcher) nextAnnounceEvent(key torrentTracker
 	return tracker.None, lastOk.Completed.Add(lastOk.Interval)
 }
 
+// The shortest reannounce interval we accept from a tracker.
+const minAnnounceInterval = time.Minute
+
 type lastAnnounceOk struct {
 	AnnouncedEvent tracker.AnnounceEvent
 	Interval       time.Duration
@@ -985,5 +989,11 @@ func (me *regularTrackerAnnounceDispatcher) pendTorrentInputUpdate(t *Torrent) {
 	if t.cl.config.DisableTrackers {
 		return
 	}
+	if g.MapContains(me.pendingTorrentInputUpdates, t) {
+		return
+	}
 	me.pendingTorrentInputUpdates[t] = struct{}{}
+	// The timer may be waiting for a regular announce far in the future. Bring it forward so the
+	// update, such as a dropped torrent's Stopped announce, isn't held back until then.
+	me.updateTimer()
 }

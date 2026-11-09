@@ -173,8 +173,13 @@ func (cl *Client) LocalPort() (port int) {
 // paths — they must not receive peers via local discovery.
 func (cl *Client) OnLPDAnnouncement(addr string, infohashes []string) {
 	announced := make(map[*Torrent]struct{}, len(infohashes))
-	for _, ih := range infohashes {
-		if t, ok := cl.Torrent(metainfo.NewHashFromHex(ih)); ok {
+	for _, ihHex := range infohashes {
+		var ih metainfo.Hash
+		if err := ih.FromHexString(ihHex); err != nil {
+			cl.slogger.Debug("ignoring bad infohash in local peer discovery announce", "addr", addr, "err", err)
+			continue
+		}
+		if t, ok := cl.Torrent(ih); ok {
 			if t.isPrivate() {
 				continue
 			}

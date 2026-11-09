@@ -1,6 +1,8 @@
 package torrent
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -133,4 +135,25 @@ func TestHolepunchConnectRespectsHalfOpenLimit(t *testing.T) {
 		qt.Assert(t, qt.IsNil(err))
 	}
 	qt.Check(t, qt.Equals(len(tt.halfOpen), 2))
+}
+
+// Peers choose their reserved bytes freely, and each distinct value was a new expvar key.
+func TestReservedBytesExpvarBounded(t *testing.T) {
+	var m boundedExpvarMap
+	for i := range maxBoundedExpvarMapKeys + 10 {
+		m.addSafeKey(fmt.Sprintf("%016x", i))
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	qt.Check(t, qt.Equals(len(m.keys), maxBoundedExpvarMapKeys))
+	qt.Check(t, qt.Equals(m.Get("other").String(), "10"))
+}
+
+// A length prefix of 0xffffffff overflowed int on 32-bit platforms, so the message was reported
+// as fully buffered. Run with GOARCH=386 to cover that.
+func TestFullMessageBufferedMaxLength(t *testing.T) {
+	r := bufio.NewReader(bytes.NewReader([]byte{0xff, 0xff, 0xff, 0xff, byte(pp.Piece)}))
+	r.Peek(5)
+	qt.Check(t, qt.IsFalse(fullMessageBuffered(r)))
+	qt.Check(t, qt.IsFalse(bufferedMessageIsPiece(r)))
 }

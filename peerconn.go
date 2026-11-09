@@ -2120,7 +2120,8 @@ func fullMessageBuffered(r *bufio.Reader) bool {
 		return false
 	}
 	b, _ := r.Peek(4)
-	return r.Buffered() >= 4+int(binary.BigEndian.Uint32(b))
+	// Compare as uint64: on 32-bit platforms int(length) can be negative.
+	return uint64(r.Buffered()) >= 4+uint64(binary.BigEndian.Uint32(b))
 }
 
 // Reports whether the next message is a Piece that's wholly in the buffer.

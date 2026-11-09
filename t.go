@@ -13,9 +13,10 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-// The Torrent's infohash. This is fixed and cannot change. It uniquely
-// identifies a torrent. TODO: If this doesn't change, should we stick to
-// referring to a Torrent by the original infohash given to us?
+// The Torrent's canonical short infohash: the v1 infohash if known, otherwise the truncated v2
+// infohash. This can change once: when info arrives for a hybrid torrent that was added by its v2
+// infohash (or by a truncated v2 infohash passed as a v1 infohash), the v1 infohash becomes known and
+// is returned from then on. Every infohash the Torrent has been known by still identifies it.
 func (t *Torrent) InfoHash() metainfo.Hash {
 	return *t.canonicalShortInfohash()
 }

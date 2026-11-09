@@ -39,7 +39,7 @@ func (cl Client) Scrape(ctx context.Context, ihs []infohash.T) (out udp.ScrapeRe
 	}
 	defer resp.Body.Close()
 	var decodedResp scrapeResponse
-	err = bencode.NewDecoder(resp.Body).Decode(&decodedResp)
+	err = bencode.NewDecoder(cl.limitBody(resp.Body)).Decode(&decodedResp)
 	for _, ih := range ihs {
 		out = append(out, decodedResp.Files[ih.AsString()])
 	}

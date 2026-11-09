@@ -246,3 +246,11 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	tt.Drop()
 	tt.assertAllPiecesRelativeAvailabilityZero()
 }
+
+func TestAppendMissingStringsSkipsRepeats(t *testing.T) {
+	qt.Check(t, qt.DeepEquals(
+		appendMissingStrings(
+			[]string{"http://existing"},
+			[]string{"http://a", "http://b", "http://a", "http://existing"}),
+		[]string{"http://existing", "http://a", "http://b"}))
+}

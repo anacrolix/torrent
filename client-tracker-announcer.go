@@ -650,12 +650,16 @@ func (me *regularTrackerAnnounceDispatcher) singleAnnounce(
 	me.updateAnnounceState(key, func(state *announceState) {
 		state.Err = err
 		state.lastAttemptCompleted = now
-		if err == nil {
+		if err != nil {
+			state.consecutiveFailures++
+		} else {
+			state.consecutiveFailures = 0
 			state.lastOk = lastAnnounceOk{
 				AnnouncedEvent: req.Event,
-				Interval:       time.Duration(resp.Interval) * time.Second,
-				NumPeers:       len(resp.Peers),
-				Completed:      now,
+				// The tracker controls this. Don't let it make us reannounce in a tight loop.
+				Interval:  max(time.Duration(resp.Interval)*time.Second, minAnnounceInterval),
+				NumPeers:  len(resp.Peers),
+				Completed: now,
 			}
 			if req.Event == tracker.Completed {
 				state.sentCompleted = true
@@ -833,7 +837,8 @@ func (me *regularTrackerAnnounceDispatcher) nextAnnounceEvent(key torrentTracker
 		if state.Err == nil || when.IsZero() {
 			return
 		}
-		minWhen := state.lastAttemptCompleted.Add(time.Minute)
+		minWhen := state.lastAttemptCompleted.Add(
+			me.torrentClient.config.failedAnnounceInterval(state.consecutiveFailures))
 		if when.Before(minWhen) {
 			when = minWhen
 		}
@@ -849,6 +854,9 @@ func (me *regularTrackerAnnounceDispatcher) nextAnnounceEvent(key torrentTracker
 	return tracker.None, lastOk.Completed.Add(lastOk.Interval)
 }
 
+// The shortest reannounce interval we accept from a tracker.
+const minAnnounceInterval = time.Minute
+
 type lastAnnounceOk struct {
 	AnnouncedEvent tracker.AnnounceEvent
 	Interval       time.Duration
@@ -860,6 +868,8 @@ type announceState struct {
 	lastOk               lastAnnounceOk
 	Err                  error
 	lastAttemptCompleted time.Time
+	// Announces that failed in a row, for the retry interval. Reset by the next one that works.
+	consecutiveFailures int
 	// Has ever sent completed event. Should only be sent once.
 	sentCompleted bool
 }

@@ -268,8 +268,11 @@ func (r *reader) torrentOffset(readerPos int64) int64 {
 	return r.offset + readerPos
 }
 
-// Performs at most one successful read to torrent storage.
-func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, err error) {
+// Performs at most one successful read to torrent storage. retryable reports that err came from
+// reading storage on a live Torrent, the only failure readAt's retries can fix. A failure waiting
+// for the data (the context is done, the Torrent closed, downloading or networking disabled) is
+// final.
+func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, retryable bool, err error) {
 	var avail int64
 	avail, err = r.waitAvailable(ctx, pos, int64(len(b)), n == 0)
 	if avail == 0 || err != nil {
@@ -304,21 +307,30 @@ func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, er
 	} else {
 		r.slogger().Error("error reading", attrs[:]...)
 	}
+	retryable = true
 	return
 }
 
 // Performs at most one successful read to torrent storage. Try reading, first with the storage
 // reader we already have, then after resetting it (in case data moved for
 // completed/incomplete/promoted etc.). Then try resetting the piece completions. Then after all
-// that if the storage is supposed to be flaky, try all over again. TODO: Filter errors and set log
-// levels appropriately.
+// that if the storage is supposed to be flaky, try all over again. Only storage failures are
+// retried: a failure waiting for the data is returned as is, since retrying it cannot succeed, and
+// with capped storage the retry recursed until the stack overflowed.
 func (r *reader) readAt(ctx context.Context, b []byte, pos int64) (n int, err error) {
 	if pos >= r.length {
 		err = io.EOF
 		return
 	}
-	n, err = r.readOnceAt(ctx, b, pos)
-	if err == nil {
+	// Storage is piece-addressed and knows nothing of this reader's extent, so
+	// a buffer longer than what remains would come back holding the next
+	// file's bytes. Clip it to the extent; readContext turns the boundary into
+	// io.EOF.
+	if remaining := r.length - pos; int64(len(b)) > remaining {
+		b = b[:remaining]
+	}
+	n, retryable, err := r.readOnceAt(ctx, b, pos)
+	if err == nil || !retryable {
 		return
 	}
 	r.slogger().Error("initial read failed", "err", err)
@@ -330,24 +342,22 @@ func (r *reader) readAt(ctx context.Context, b []byte, pos int64) (n int, err er
 	}
 	r.storageReader = nil
 
-	n, err = r.readOnceAt(ctx, b, pos)
-	if err == nil {
+	n, retryable, err = r.readOnceAt(ctx, b, pos)
+	if err == nil || !retryable {
 		return
 	}
 	r.slogger().Error("read failed after reader reset", "err", err)
 
 	r.updatePieceCompletion(pos)
 
-	n, err = r.readOnceAt(ctx, b, pos)
-	if err == nil {
+	n, retryable, err = r.readOnceAt(ctx, b, pos)
+	if err == nil || !retryable {
 		return
 	}
 	r.slogger().Error("read failed after completion resync", "err", err)
 
 	if r.t.hasStorageCap() {
-		// Ensure params weren't modified (Go sux). Recurse to detect infinite loops. TODO: I expect
-		// only some errors should pass through here, this might cause us to get stuck if we retry
-		// for any error.
+		// Ensure params weren't modified (Go sux). Recurse to detect infinite loops.
 		return r.readAt(ctx, b, pos)
 	}
 

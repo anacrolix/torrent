@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"sort"
 	"sync"
 )
 
@@ -21,13 +22,18 @@ func newClassicFileIo() fileIo {
 func (me *classicFileIo) Close() error {
 	me.mu.Lock()
 	defer me.mu.Unlock()
-	var err error
-	for name, f := range me.writers {
-		err = errors.Join(err, f.Close())
-		delete(me.writers, name)
-	}
+	_, _, err := me.closeWritersLocked()
 	me.closed = true
 	return err
+}
+
+func (me *classicFileIo) closeWriters() (closedPaths []string, remaining int, err error) {
+	me.mu.Lock()
+	defer me.mu.Unlock()
+	if err := me.closedErr(); err != nil {
+		return nil, 0, err
+	}
+	return me.closeWritersLocked()
 }
 
 func (me *classicFileIo) rename(from, to string) error {
@@ -106,6 +112,23 @@ func (me *classicFileIo) closeWriterLocked(name string) error {
 	}
 	delete(me.writers, name)
 	return f.Close()
+}
+
+func (me *classicFileIo) closeWritersLocked() (closedPaths []string, remaining int, err error) {
+	if me.writers == nil {
+		return nil, 0, nil
+	}
+	closedPaths = make([]string, 0, len(me.writers))
+	for name := range me.writers {
+		closedPaths = append(closedPaths, name)
+	}
+	sort.Strings(closedPaths)
+	for _, name := range closedPaths {
+		f := me.writers[name]
+		delete(me.writers, name)
+		err = errors.Join(err, f.Close())
+	}
+	return closedPaths, len(me.writers), err
 }
 
 func (me *classicFileIo) closedErr() error {

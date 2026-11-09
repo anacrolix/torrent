@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
 	qt "github.com/go-quicktest/qt"
-	"github.com/gorilla/websocket"
 
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/tracker"
@@ -57,16 +57,14 @@ func TestClientInvalidTracker(t *testing.T) {
 	to.Drop()
 }
 
-var upgrader = websocket.Upgrader{}
-
 func testtracker(w http.ResponseWriter, r *http.Request) {
-	c, err := upgrader.Upgrade(w, r, nil)
+	c, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		return
 	}
-	defer c.Close()
+	defer c.CloseNow()
 	for {
-		_, _, err := c.ReadMessage()
+		_, _, err := c.Read(r.Context())
 		if err != nil {
 			break
 		}

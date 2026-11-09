@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/anacrolix/log"
-	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v4"
 
 	"github.com/anacrolix/torrent/tracker"
@@ -69,19 +68,20 @@ func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.Tra
 	defer me.mu.Unlock()
 	value, ok := me.clients[url]
 	if !ok {
-		dialer := &websocket.Dialer{
-			Proxy:            me.Proxy,
-			NetDialContext:   me.DialContext,
-			HandshakeTimeout: websocket.DefaultDialer.HandshakeTimeout,
+		httpClient := &netHttp.Client{
+			Transport: &netHttp.Transport{
+				Proxy:       me.Proxy,
+				DialContext: me.DialContext,
+			},
 		}
 		value = &refCountedWebtorrentTrackerClient{
 			TrackerClient: webtorrent.TrackerClient{
-				Dialer:             dialer,
-				Url:                url,
-				GetAnnounceRequest: me.GetAnnounceRequest,
-				PeerId:             me.PeerId,
-				OnConn:             me.OnConn,
-				Slogger: me.slogger().With("trackerClientUrl", url),
+				HTTPClient:                 httpClient,
+				Url:                        url,
+				GetAnnounceRequest:         me.GetAnnounceRequest,
+				PeerId:                     me.PeerId,
+				OnConn:                     me.OnConn,
+				Slogger:                    me.slogger().With("trackerClientUrl", url),
 				WebsocketTrackerHttpHeader: me.WebsocketTrackerHttpHeader,
 				ICEServers:                 me.ICEServers,
 				OnConnected: func(err error) {

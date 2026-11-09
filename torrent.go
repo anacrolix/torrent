@@ -110,6 +110,10 @@ type Torrent struct {
 
 	// The storage to open when the info dict becomes available.
 	storageOpener *storage.Client
+	// Don't open storage when the info arrives, wait for OpenStorage.
+	deferStorageOpen bool
+	// OpenStorage is opening storage with the client lock released.
+	storageOpening bool
 	// Storage for torrent data.
 	storage *storage.Torrent
 	// Read-locked for using storage, and write-locked for Closing.
@@ -410,7 +414,7 @@ func (t *Torrent) saveMetadataPiece(index int, data []byte) {
 	if t.haveInfo() {
 		return
 	}
-	if index >= len(t.metadataCompletedChunks) {
+	if index < 0 || index >= len(t.metadataCompletedChunks) {
 		t.logger.Printf("%s: ignoring metadata piece %d", t, index)
 		return
 	}
@@ -423,8 +427,13 @@ func (t *Torrent) metadataPieceCount() int {
 }
 
 func (t *Torrent) haveMetadataPiece(piece int) bool {
+	if piece < 0 {
+		return false
+	}
 	if t.haveInfo() {
-		return (1<<14)*piece < len(t.metadataBytes)
+		// Compare against the piece count rather than multiplying the index by the piece size,
+		// which can overflow for peer-supplied indexes.
+		return piece < t.metadataPieceCount()
 	} else {
 		return piece < len(t.metadataCompletedChunks) && t.metadataCompletedChunks[piece]
 	}
@@ -531,7 +540,7 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 	if err := validateInfo(info); err != nil {
 		return fmt.Errorf("bad info: %w", err)
 	}
-	if t.storageOpener != nil {
+	if t.storageOpener != nil && !t.deferStorageOpen {
 		var err error
 		ctx := log.ContextWithLogger(context.Background(), t.logger)
 		t.storage, err = t.storageOpener.OpenTorrent(ctx, info, *t.canonicalShortInfohash())
@@ -563,7 +572,6 @@ func (t *Torrent) pieceRequestOrderKey(i int) request_strategy.PieceRequestOrder
 // This seems to be all the follow-up tasks after info is set, that can't fail.
 func (t *Torrent) onSetInfo() {
 	t.pieceRequestOrder = rand.Perm(t.numPieces())
-	t.initPieceRequestOrder()
 	t.requestPieceStates.Reset()
 	for i := range t.pieces {
 		p := &t.pieces[i]
@@ -573,19 +581,91 @@ func (t *Torrent) onSetInfo() {
 			panic(p.relativeAvailability)
 		}
 		p.relativeAvailability = int32(t.selectivePieceAvailabilityFromPeers(i))
-		t.addRequestOrderPiece(i)
-		t.setInitialPieceCompletionFromStorage(i)
-		t.queueInitialPieceCheck(i)
+	}
+	t.requestState = make(map[RequestIndex]requestState)
+	if t.storage != nil {
+		t.onStorageOpened()
 	}
 	t.cl.event.Broadcast()
 	close(t.gotMetainfoC)
 	t.updateWantPeersEvent()
-	t.requestState = make(map[RequestIndex]requestState)
-	panicif.Err(t.startPieceHashers())
 	t.iterPeers(func(p *Peer) {
 		p.onGotInfo(t.info)
 		p.onNeedUpdateRequests("onSetInfo")
 	})
+}
+
+// Sets up the state that depends on storage, once there is both info and storage.
+func (t *Torrent) onStorageOpened() {
+	t.initPieceRequestOrder()
+	for i := range t.pieces {
+		t.addRequestOrderPiece(i)
+		t.setInitialPieceCompletionFromStorage(i)
+		t.queueInitialPieceCheck(i)
+	}
+	panicif.Err(t.startPieceHashers())
+}
+
+// Opens storage for a Torrent added with AddTorrentOpts.DeferStorageOpen. The info must be
+// available, see Torrent.GotInfo. If impl is nil, the storage the Torrent was added with is used
+// (AddTorrentOpts.Storage, or the Client's default). The storage is opened without holding the
+// Client lock. It's an error to call this more than once successfully, or on a Torrent that
+// doesn't defer opening storage.
+func (t *Torrent) OpenStorage(ctx context.Context, impl storage.ClientImpl) (err error) {
+	t.cl.lock()
+	err = t.checkCanOpenStorage()
+	if err != nil {
+		t.cl.unlock()
+		return
+	}
+	opener := t.storageOpener
+	if impl != nil {
+		opener = storage.NewClient(impl)
+	}
+	info := t.info
+	infoHash := *t.canonicalShortInfohash()
+	t.storageOpening = true
+	t.cl.unlock()
+	ctx = log.ContextWithLogger(ctx, t.logger)
+	ts, err := opener.OpenTorrent(ctx, info, infoHash)
+	t.cl.lock()
+	defer t.cl.unlock()
+	t.storageOpening = false
+	if err != nil {
+		return fmt.Errorf("opening torrent storage: %w", err)
+	}
+	if t.closed.IsSet() {
+		if ts.Close != nil {
+			err = ts.Close()
+		}
+		return errors.Join(errTorrentClosed, err)
+	}
+	t.storage = ts
+	t.onStorageOpened()
+	t.iterPeers(func(p *Peer) {
+		p.onNeedUpdateRequests("OpenStorage")
+	})
+	t.cl.event.Broadcast()
+	return nil
+}
+
+func (t *Torrent) checkCanOpenStorage() error {
+	if t.closed.IsSet() {
+		return errTorrentClosed
+	}
+	if !t.deferStorageOpen {
+		return errors.New("torrent doesn't defer opening storage")
+	}
+	if !t.haveInfo() {
+		return errors.New("torrent info not available")
+	}
+	if t.storage != nil || t.storageOpening {
+		return errors.New("storage already opened")
+	}
+	if t.storageOpener == nil {
+		return errors.New("no storage")
+	}
+	return nil
 }
 
 // Checks the info bytes hash to expected values. Fills in any missing infohashes. TODO: Add a test
@@ -610,6 +690,8 @@ func (t *Torrent) hashInfoBytes(b []byte, info *metainfo.Info) error {
 				cl.torrentsByShortHash[v1Hash] = t
 				t.infoHash.Set(v1Hash)
 			}
+		} else {
+			return errors.New("info bytes don't match v1 infohash or truncated v2 infohash")
 		}
 	} else if t.infoHash.Ok && t.infoHashV2.Ok {
 		if v1Hash != t.infoHash.Value {
@@ -697,7 +779,9 @@ func (t *Torrent) setMetadataSize(size int) (err error) {
 		// We already know the correct metadata size.
 		return
 	}
-	if uint32(size) > maxMetadataSize {
+	// Compare as int: converting to uint32 first truncates sizes >= 1<<32 (and wraps negatives) so
+	// they would pass, then make() below either panics or allocates gigabytes.
+	if size < 0 || size > int(maxMetadataSize) {
 		return log.WithLevel(log.Warning, errors.New("bad size"))
 	}
 	if len(t.metadataBytes) == size {
@@ -1174,6 +1258,9 @@ func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
 }
 
 func (t *Torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
+	if t.storage == nil {
+		return errStorageNotOpen
+	}
 	n, err := t.piece(piece).Storage().WriteAt(data, begin)
 	if err == nil && n != len(data) {
 		err = io.ErrShortWrite
@@ -1908,7 +1995,7 @@ func appendMissingStrings(old, new []string) (ret []string) {
 	ret = old
 new:
 	for _, n := range new {
-		for _, o := range old {
+		for _, o := range ret {
 			if o == n {
 				continue new
 			}
@@ -3358,6 +3445,9 @@ func (t *Torrent) numActivePeers() int {
 
 // Specifically, whether we can expect data to vanish while trying to read.
 func (t *Torrent) hasStorageCap() bool {
+	if t.storage == nil {
+		return false
+	}
 	f := t.storage.Capacity
 	if f == nil {
 		return false
@@ -3413,10 +3503,11 @@ func (t *Torrent) checkValidReceiveChunk(r Request) error {
 	if r.Begin >= pieceLength {
 		return fmt.Errorf("chunk begins beyond end of piece (%v >= %v)", r.Begin, pieceLength)
 	}
-	// We could check chunk lengths here, but chunk request size is not changed often, and tricky
-	// for peers to manipulate as they need to send potentially large buffers to begin with. There
-	// should be considerable checks elsewhere for this case due to the network overhead. We should
-	// catch most of the overflow manipulation stuff by checking index and begin above.
+	// The chunk must be exactly the one we would request: misaligned or oversized chunks would be
+	// written past the end of the chunk, or the piece, which the storage layer panics on.
+	if expected := t.requestIndexToRequest(t.requestIndexFromRequest(r)); r != expected {
+		return fmt.Errorf("chunk %v doesn't match expected request %v", r, expected)
+	}
 	return nil
 }
 
@@ -3519,6 +3610,13 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 	case utHolepunch.Connect:
 		holepunchAddr := msg.AddrPort
 		t.logger.Printf("got holepunch connect request for %v from %p", holepunchAddr, sender)
+		// Connects skip the dial rate limiter so the punch is timely, and any peer can send them
+		// for any address. Respect the half-open limits so a peer can't make us dial without bound.
+		if len(t.halfOpen) >= t.cl.config.HalfOpenConnsPerTorrent ||
+			t.cl.numHalfOpen >= t.cl.config.TotalHalfOpenConns {
+			torrent.Add("holepunch connects dropped at half-open limit", 1)
+			return nil
+		}
 		if g.MapContains(t.cl.undialableWithoutHolepunch, holepunchAddr) {
 			setAdd(&t.cl.undialableWithoutHolepunchDialedAfterHolepunchConnect, holepunchAddr)
 			if g.MapContains(t.cl.accepted, holepunchAddr) {
@@ -3595,6 +3693,15 @@ func (t *Torrent) canonicalShortInfohash() *infohash.T {
 		return &t.infoHash.Value
 	}
 	return t.infoHashV2.UnwrapPtr().ToShort()
+}
+
+func (t *Torrent) CloseWriters() error {
+	t.storageLock.RLock()
+	defer t.storageLock.RUnlock()
+	if t.storage == nil {
+		return nil
+	}
+	return t.storage.CloseWriters()
 }
 
 func (t *Torrent) iterShortInfohashes() iter.Seq[shortInfohash] {

@@ -70,7 +70,7 @@ type (
 
 		// Stuff controlled by the local peer.
 		needRequestUpdate    updateRequestReason
-		updateRequestsTimer  *time.Timer
+		updateRequestsTimer  *releasedTimer
 		lastRequestUpdate    time.Time
 		peakRequests         maxRequests
 		lastBecameInterested time.Time
@@ -337,26 +337,69 @@ func (c *Peer) doChunkReadStats(size int64) {
 }
 
 // Handle a received chunk from a peer. TODO: Break this out into non-wire protocol specific
-// handling. Avoid shoehorning into a pp.Message.
+// handling. Avoid shoehorning into a pp.Message. Called with the Client lock held, which is released
+// while the chunk is written to storage.
 func (c *Peer) receiveChunk(msg *pp.Message) error {
+	w, err := c.receiveChunkPrologue(msg)
+	if err != nil || w == nil {
+		return err
+	}
+	cl := c.t.cl
+	cl.unlock()
+	writeErr := w.write()
+	cl.lock()
+	c.receiveChunkEpilogue(w, writeErr)
+	return nil
+}
+
+// A received chunk that has been accepted and must be written to storage. Created by
+// receiveChunkPrologue, and finished with receiveChunkEpilogue once write has returned. The chunk
+// data is borrowed from the message, so it must stay valid until the epilogue.
+type pendingChunkWrite struct {
+	t     *Torrent
+	req   RequestIndex
+	piece Piece
+	index int
+	begin int64
+	data  []byte
+	// Holds the pending-write reference until the epilogue, so hashing and storage readers wait for
+	// the write, and the tracking struct can't be reclaimed while the write is in flight.
+	pw                     *piecePendingWrites
+	recordBlockForSmartBan func()
+}
+
+// Writes the chunk to storage. Must be called without the Client lock.
+func (w *pendingChunkWrite) write() error {
+	// Opportunistically do this here while we aren't holding the client lock.
+	w.recordBlockForSmartBan()
+	concurrentChunkWrites.Add(1)
+	defer concurrentChunkWrites.Add(-1)
+	return w.t.writeChunk(w.index, w.begin, w.data)
+}
+
+// Validates a received chunk and updates state as though it's already written, so it isn't
+// requested from anyone else while the write is in flight. Returns nil if the chunk doesn't need
+// writing. Called with the Client lock held. Every non-nil result must be passed to
+// receiveChunkEpilogue after its write.
+func (c *Peer) receiveChunkPrologue(msg *pp.Message) (_ *pendingChunkWrite, err error) {
 	ChunksReceived.Add("total", 1)
 
 	ppReq := newRequestFromMessage(msg)
 	t := c.t
-	err := t.checkValidReceiveChunk(ppReq)
+	err = t.checkValidReceiveChunk(ppReq)
 	if err != nil {
 		err = log.WithLevel(log.Warning, err)
-		return err
+		return
 	}
 	req := c.t.requestIndexFromRequest(ppReq)
 
+	// This needs to occur for every valid chunk, but we try to do it when the client is unlocked
+	// (in pendingChunkWrite.write). It can't be done before checking if chunks are valid because
+	// they won't be deallocated from the smart ban cache by piece hashing if they're out of bounds.
+	data := msg.Piece
 	recordBlockForSmartBan := sync.OnceFunc(func() {
-		c.recordBlockForSmartBan(req, msg.Piece)
+		c.recordBlockForSmartBan(req, data)
 	})
-	// This needs to occur before we return, but we try to do it when the client is unlocked. It
-	// can't be done before checking if chunks are valid because they won't be deallocated from the
-	// smart ban cache by piece hashing if they're out of bounds.
-	defer recordBlockForSmartBan()
 
 	if c.peerChoking {
 		ChunksReceived.Add("while choked", 1)
@@ -364,17 +407,17 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 
 	intended, err := c.peerImpl.checkReceivedChunk(req, msg, ppReq)
 	if err != nil {
-		return err
+		recordBlockForSmartBan()
+		return
 	}
-
-	cl := t.cl
 
 	// Do we actually want this chunk?
 	if t.haveChunk(ppReq) {
 		// panic(fmt.Sprintf("%+v", ppReq))
 		ChunksReceived.Add("redundant", 1)
 		c.modifyRelevantConnStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
-		return nil
+		recordBlockForSmartBan()
+		return
 	}
 
 	piece := t.piece(ppReq.Index.Int())
@@ -389,64 +432,62 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	}
 	c.lastUsefulChunkReceived = time.Now()
 
-	// Record that the chunk hasn't been written yet before we do anything with it, holding a
-	// pending-write reference across the write below so the tracking struct can't be reclaimed while
-	// this write is in flight.
-	err = piece.withPendingWriteRef(func() error {
-		// Record that we have the chunk, so we aren't trying to download it while
-		// waiting for it to be written to storage.
-		piece.unpendChunkIndex(chunkIndexFromChunkSpec(ppReq.ChunkSpec, t.chunkSize))
+	// Record that the chunk hasn't been written yet before we do anything with it.
+	pw := piece.incrementPendingWrites()
+	// Record that we have the chunk, so we aren't trying to download it while waiting for it to be
+	// written to storage.
+	piece.unpendChunkIndex(chunkIndexFromChunkSpec(ppReq.ChunkSpec, t.chunkSize))
 
-		// Cancel pending requests for this chunk from *other* peers.
-		if p := t.requestingPeer(req); p != nil {
-			if p.peerPtr() == c {
-				p.logger.Slogger().Error("received chunk but still pending request", "peer", p, "req", req)
-				panic("should not be pending request from conn that just received it")
-			}
-			p.cancel(req)
+	// Cancel pending requests for this chunk from *other* peers.
+	if p := t.requestingPeer(req); p != nil {
+		if p.peerPtr() == c {
+			p.logger.Slogger().Error("received chunk but still pending request", "peer", p, "req", req)
+			panic("should not be pending request from conn that just received it")
 		}
+		p.cancel(req)
+	}
 
-		cl.unlock()
-		defer cl.lock()
-		// Opportunistically do this here while we aren't holding the client lock.
-		recordBlockForSmartBan()
-		concurrentChunkWrites.Add(1)
-		defer concurrentChunkWrites.Add(-1)
-		// Write the chunk out. Note that the upper bound on chunk writing concurrency will be the
-		// number of connections. We write inline with receiving the chunk (with this lock dance),
-		// because we want to handle errors synchronously and I haven't thought of a nice way to
-		// defer any concurrency to the storage and have that notify the client of errors. TODO: Do
-		// that instead.
-		return t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
-	})
+	return &pendingChunkWrite{
+		t:                      t,
+		req:                    req,
+		piece:                  piece,
+		index:                  int(msg.Index),
+		begin:                  int64(msg.Begin),
+		data:                   data,
+		pw:                     pw,
+		recordBlockForSmartBan: recordBlockForSmartBan,
+	}, nil
+}
 
+// Applies the result of writing a chunk. Called with the Client lock held.
+func (c *Peer) receiveChunkEpilogue(w *pendingChunkWrite, err error) {
+	t := w.t
+	w.pw.decrementPendingWrites()
 	if err != nil {
-		c.logger.WithDefaultLevel(log.Error).Printf("writing received chunk %v: %v", req, err)
-		t.pendRequest(req)
+		c.logger.WithDefaultLevel(log.Error).Printf("writing received chunk %v: %v", w.req, err)
+		t.pendRequest(w.req)
 		// Necessary to pass TestReceiveChunkStorageFailureSeederFastExtensionDisabled. I think a
 		// request update runs while we're writing the chunk that just failed. Then we never do a
 		// fresh update after pending the failed request.
 		c.onNeedUpdateRequests("Peer.receiveChunk error writing chunk")
 		t.onWriteChunkErr(err)
-		return nil
+		return
 	}
 
-	c.onDirtiedPiece(pieceIndex(ppReq.Index))
+	c.onDirtiedPiece(w.index)
 
 	// We need to ensure the piece is only queued once, so only the last chunk writer gets this job.
-	if t.pieceAllDirty(pieceIndex(ppReq.Index)) && piece.pendingWritesCount() == 0 {
-		t.queuePieceCheck(pieceIndex(ppReq.Index))
+	if t.pieceAllDirty(w.index) && w.piece.pendingWritesCount() == 0 {
+		t.queuePieceCheck(w.index)
 		// We don't pend all chunks here anymore because we don't want code dependent on the dirty
 		// chunk status (such as the haveChunk call above) to have to check all the various other
 		// piece states like queued for hash, hashing etc. This does mean that we need to be sure
 		// that chunk pieces are pended at an appropriate time later however.
 	}
 
-	cl.event.Broadcast()
+	t.cl.event.Broadcast()
 	// We do this because we've written a chunk, and may change PieceState.Partial.
-	t.deferPublishPieceStateChange(pieceIndex(ppReq.Index))
-
-	return nil
+	t.deferPublishPieceStateChange(w.index)
 }
 
 func (c *Peer) onDirtiedPiece(piece pieceIndex) {

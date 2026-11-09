@@ -90,6 +90,105 @@ func TestValidateInfoValidV2(t *testing.T) {
 	}
 }
 
+// Malformed info dicts that would otherwise divide by zero, index out of range or allocate without
+// bound in setInfo must be rejected by validateInfo first.
+func TestValidateInfoRejectsMalformed(t *testing.T) {
+	valid32 := strings.Repeat("x", 32)
+	for _, c := range []struct {
+		name string
+		info metainfo.Info
+		want string
+	}{
+		{
+			"v1 negative piece length",
+			metainfo.Info{Name: "x", PieceLength: -1, Length: 1, Pieces: make([]byte, 20)},
+			"negative piece length",
+		},
+		{
+			"v2 zero piece length",
+			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 0, FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{"a": {File: metainfo.FileTreeFile{Length: 0}}},
+			}},
+			"not a power of two",
+		},
+		{
+			"v2 non-power-of-two piece length",
+			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 3 * 16384, FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{"a": {File: metainfo.FileTreeFile{Length: 16384, PiecesRoot: valid32}}},
+			}},
+			"not a power of two",
+		},
+		{
+			"v2 negative file length",
+			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 16384, FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{"a": {File: metainfo.FileTreeFile{Length: -1, PiecesRoot: valid32}}},
+			}},
+			"negative length",
+		},
+		{
+			"v2 directory node with file properties",
+			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 16384, FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{"d": {
+					File: metainfo.FileTreeFile{Length: 16384},
+					Dir:  map[string]metainfo.FileTree{"a": {File: metainfo.FileTreeFile{Length: 16384, PiecesRoot: valid32}}},
+				}},
+			}},
+			"file properties",
+		},
+		{
+			"v2 file tree implies too many pieces",
+			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 16384, FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{"a": {File: metainfo.FileTreeFile{Length: 1 << 50, PiecesRoot: valid32}}},
+			}},
+			"more than",
+		},
+		{
+			"hybrid with too few v1 piece hashes",
+			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 16384, Length: 5 * 16384, Pieces: make([]byte, 20), FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{"x": {File: metainfo.FileTreeFile{Length: 5 * 16384, PiecesRoot: valid32}}},
+			}},
+			"v1 piece hashes",
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			err := validateInfo(&c.info)
+			if err == nil {
+				t.Fatal("expected validateInfo to reject malformed info")
+			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("error %q does not contain %q", err, c.want)
+			}
+		})
+	}
+}
+
+// The stricter validation must still accept well-formed v1 and hybrid infos (valid v2 is covered by
+// TestValidateInfoValidV2).
+func TestValidateInfoAcceptsWellFormed(t *testing.T) {
+	valid32 := strings.Repeat("x", 32)
+	for _, c := range []struct {
+		name string
+		info metainfo.Info
+	}{
+		{
+			"v1",
+			metainfo.Info{Name: "x", PieceLength: 16384, Length: 16385, Pieces: make([]byte, 40)},
+		},
+		{
+			"hybrid single piece",
+			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 16384, Length: 16384, Pieces: make([]byte, 20), FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{"x": {File: metainfo.FileTreeFile{Length: 16384, PiecesRoot: valid32}}},
+			}},
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if err := validateInfo(&c.info); err != nil {
+				t.Fatalf("expected well-formed info to pass, got: %v", err)
+			}
+		})
+	}
+}
+
 // End-to-end: AddTorrentSpec with a crafted v2 info dict containing a short pieces root
 // must return an error instead of panicking through PiecesRootAsByteArray.
 func TestAddTorrentSpecBadV2Root(t *testing.T) {

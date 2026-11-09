@@ -8,7 +8,7 @@ There is support for [protocol encryption, DHT, PEX, uTP, WebTorrent, WebSeeds, 
 
 Some noteworthy package dependencies that can be used for other purposes include:
 
- * [go-libutp](https://github.com/anacrolix/go-libutp)
+ * [go-utp](https://github.com/anacrolix/go-utp)
  * [dht](https://github.com/anacrolix/dht)
  * [bencode](https://pkg.go.dev/github.com/anacrolix/torrent/bencode)
  * [tracker](https://pkg.go.dev/github.com/anacrolix/torrent/tracker)

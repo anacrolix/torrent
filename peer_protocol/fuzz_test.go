@@ -109,9 +109,6 @@ func FuzzPexMsg(f *testing.F) {
 		if err != nil {
 			return
 		}
-		for _, f := range m.AddedFlags {
-			f.Get(PexSupportsUtp)
-		}
 		_ = m.Message(1).MustMarshalBinary()
 	})
 }

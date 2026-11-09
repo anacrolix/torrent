@@ -92,6 +92,7 @@ func (fs *fileClientImpl) OpenTorrent(
 	fs.opts.Logger.DebugContext(ctx, "opened file torrent storage", slog.String("dir", dir))
 	metainfoFileInfos := info.UpvertedFiles()
 	files := make([]fileExtra, len(metainfoFileInfos))
+	filePaths := make([]string, len(metainfoFileInfos))
 	for i, fileInfo := range metainfoFileInfos {
 		filePath := filepath.Join(dir, fs.opts.FilePathMaker(FilePathMakerOpts{
 			Info: info,
@@ -102,8 +103,15 @@ func (fs *fileClientImpl) OpenTorrent(
 			return
 		}
 		files[i].safeOsPath = filePath
-		if metainfoFileInfos[i].Length == 0 {
-			err = CreateNativeZeroLengthFile(filePath)
+		filePaths[i] = filePath
+	}
+	err = checkTorrentFilePaths(dir, filePaths, metainfoFileInfos, fs.opts.partFiles())
+	if err != nil {
+		return
+	}
+	for i, fileInfo := range metainfoFileInfos {
+		if fileInfo.Length == 0 {
+			err = CreateNativeZeroLengthFile(files[i].safeOsPath)
 			if err != nil {
 				err = fmt.Errorf("creating zero length file: %w", err)
 				return

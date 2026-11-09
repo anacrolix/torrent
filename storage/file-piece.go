@@ -279,6 +279,15 @@ func (me *filePieceImpl) promotePartFile(f file) (err error) {
 	defer f.mu.Unlock()
 	f.race++
 	renamed, err := me.exclRenameIfExists(f.partFilePath(), f.safeOsPath)
+	if errors.Is(err, fs.ErrExist) && isPaddingFile(f.FileInfo) {
+		// Padding files of the same length can share a path, and another one got there first. It
+		// holds the same zeroes, so the part file isn't needed.
+		err = os.Remove(f.partFilePath())
+		if errors.Is(err, fs.ErrNotExist) {
+			err = nil
+		}
+		return
+	}
 	if err != nil {
 		return
 	}
@@ -293,7 +302,8 @@ func (me *filePieceImpl) promotePartFile(f file) (err error) {
 	return
 }
 
-// Rename from if exists, and if so, to must not exist.
+// Rename from if it exists. Fails with an error matching fs.ErrExist if to exists too, rather than
+// replacing it.
 func (me *filePieceImpl) exclRenameIfExists(from, to string) (renamed bool, err error) {
 	err = me.t.io.rename(from, to)
 	if err != nil {

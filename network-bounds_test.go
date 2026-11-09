@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"testing"
+	"time"
 
 	"github.com/go-quicktest/qt"
 
@@ -156,4 +157,42 @@ func TestHashRequestRangeDoesNotWrap(t *testing.T) {
 	qt.Check(t, qt.IsNil(err))
 	_, err = c.getHashes(&pp.Message{PiecesRoot: root, Index: math.MaxUint32, Length: 2})
 	qt.Check(t, qt.IsNotNil(err))
+}
+
+type pingCountingDhtServer struct {
+	DhtServer
+	pings chan *net.UDPAddr
+}
+
+func (me pingCountingDhtServer) Ping(addr *net.UDPAddr) {
+	me.pings <- addr
+}
+
+// Each Port message used to start a DHT ping. Only the first on a conn should.
+func TestPortMessagePingsOnce(t *testing.T) {
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	ds := pingCountingDhtServer{pings: make(chan *net.UDPAddr, 10)}
+	tt, _ := cl.AddTorrentInfoHash(testutil.GreetingMetaInfo().HashInfoBytes())
+	cl.lock()
+	defer cl.unlock()
+	cl.dhtServers = append(cl.dhtServers, ds)
+	defer func() { cl.dhtServers = nil }()
+	c := cl.newConnection(nil, newConnectionOpts{
+		network:    "tcp",
+		remoteAddr: &net.TCPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 5678},
+	})
+	c.setTorrent(tt)
+	for range 3 {
+		c.onPeerSentPort(6881)
+	}
+	select {
+	case addr := <-ds.pings:
+		qt.Check(t, qt.Equals(addr.String(), "1.2.3.4:6881"))
+	case <-time.After(5 * time.Second):
+		t.Fatal("no ping")
+	}
+	time.Sleep(50 * time.Millisecond)
+	qt.Check(t, qt.HasLen(ds.pings, 0))
 }

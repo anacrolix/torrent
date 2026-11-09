@@ -16,6 +16,7 @@ import (
 	"net/netip"
 	"net/url"
 	"slices"
+	stdsync "sync"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -2029,8 +2030,22 @@ func (t *Torrent) addTrackers(announceList [][]string) {
 }
 
 func (t *Torrent) modifyTrackers(announceList [][]string) {
+	remaining := make(map[trackerAnnouncerKey]bool)
+	for _, tier := range announceList {
+		for _, trackerURL := range tier {
+			remaining[trackerAnnouncerKey(trackerURL)] = true
+		}
+	}
 	var workers errgroup.Group
-	for _, v := range t.trackerAnnouncers {
+	for key, v := range t.trackerAnnouncers {
+		if _, websocket := v.(websocketTrackerStatus); websocket {
+			if remaining[key.url] {
+				continue
+			}
+			v.Stop()
+			delete(t.trackerAnnouncers, key)
+			continue
+		}
 		workers.Go(func() error {
 			v.Stop()
 			return nil
@@ -2241,8 +2256,9 @@ func (t *Torrent) startWebsocketAnnouncer(u url.URL, shortInfohash [20]byte) tor
 	wtc, release := t.cl.websocketTrackers.Get(u.String(), shortInfohash)
 	// This needs to run before the Torrent is dropped from the Client, to prevent a new
 	// webtorrent.TrackerClient for the same info hash before the old one is cleaned up.
+	release = stdsync.OnceFunc(release)
 	t.onClose = append(t.onClose, release)
-	wst := websocketTrackerStatus{u, wtc}
+	wst := websocketTrackerStatus{url: u, tc: wtc, release: release}
 	go func() {
 		err := wtc.Announce(tracker.Started, shortInfohash)
 		if err != nil {

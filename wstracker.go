@@ -18,8 +18,9 @@ import (
 )
 
 type websocketTrackerStatus struct {
-	url url.URL
-	tc  *webtorrent.TrackerClient
+	url     url.URL
+	tc      *webtorrent.TrackerClient
+	release func()
 }
 
 func (me websocketTrackerStatus) statusLine() string {
@@ -31,6 +32,9 @@ func (me websocketTrackerStatus) URL() *url.URL {
 }
 
 func (me websocketTrackerStatus) Stop() {
+	if me.release != nil {
+		me.release()
+	}
 }
 
 type refCountedWebtorrentTrackerClient struct {

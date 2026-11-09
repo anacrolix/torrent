@@ -253,3 +253,60 @@ func TestPexDisabledWhenInfoIsPrivate(t *testing.T) {
 	}))))
 	qt.Check(t, qt.IsFalse(c.pex.IsEnabled()))
 }
+
+// One peer claiming a different metadata_size must not discard metadata progress made at the size
+// other peers agree on.
+func TestMetadataSizeNotResetByOnePeer(t *testing.T) {
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	mi := testutil.GreetingMetaInfo()
+	tt, _ := cl.AddTorrentInfoHash(mi.HashInfoBytes())
+	cl.lock()
+	defer cl.unlock()
+	port := 1000
+	newConn := func() *PeerConn {
+		ours, theirs := net.Pipe()
+		t.Cleanup(func() { theirs.Close() })
+		go io.Copy(io.Discard, theirs)
+		port++
+		c := cl.newConnection(ours, newConnectionOpts{
+			network:    "tcp",
+			remoteAddr: &net.TCPAddr{IP: net.IPv4(1, 2, 3, 4), Port: port},
+		})
+		c.setTorrent(tt)
+		c.startMessageWriter()
+		c.LocalLtepProtocolMap = &cl.defaultLocalLtepProtocolMap
+		tt.conns[c] = struct{}{}
+		return c
+	}
+	handshake := func(c *PeerConn, size int) {
+		qt.Assert(t, qt.IsNil(c.onReadExtendedMsg(pp.HandshakeExtendedID, bencode.MustMarshal(pp.ExtendedHandshakeMessage{
+			M:            map[pp.ExtensionName]pp.ExtensionNumber{pp.ExtensionNameMetadata: 1},
+			MetadataSize: size,
+		}))))
+	}
+	realSize := len(mi.InfoBytes)
+	a := newConn()
+	handshake(a, realSize)
+	qt.Assert(t, qt.HasLen(tt.metadataBytes, realSize))
+	// Receive the only metadata piece but don't complete it yet.
+	tt.saveMetadataPiece(0, mi.InfoBytes)
+	b := newConn()
+	handshake(b, realSize+1)
+	qt.Check(t, qt.HasLen(tt.metadataBytes, realSize))
+	qt.Check(t, qt.IsTrue(tt.haveMetadataPiece(0)))
+	// Data for b's size isn't mixed into ours.
+	b.metadataRequests = []bool{true}
+	payload := append(bencode.MustMarshal(pp.ExtendedMetadataRequestMsg{
+		Piece:     0,
+		TotalSize: realSize + 1,
+		Type:      pp.DataMetadataExtensionMsgType,
+	}), make([]byte, realSize+1)...)
+	qt.Check(t, qt.IsNil(cl.gotMetadataExtensionMsg(payload, tt, b)))
+	qt.Check(t, qt.DeepEquals(tt.metadataBytes, mi.InfoBytes))
+	// Once more peers agree on another size, use it.
+	handshake(newConn(), realSize+1)
+	qt.Check(t, qt.HasLen(tt.metadataBytes, realSize+1))
+	qt.Check(t, qt.IsFalse(tt.haveMetadataPiece(0)))
+}

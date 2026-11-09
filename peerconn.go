@@ -102,6 +102,8 @@ type PeerConn struct {
 	peerSentHaveAll bool
 	// Whether we've pinged the peer's DHT node in response to a Port message.
 	sentDhtPing bool
+	// The metadata_size from the peer's extended handshake, or 0.
+	peerMetadataSize int
 
 	requestState requestStrategy.PeerRequestState
 
@@ -1260,9 +1262,11 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 			c.PeerExtensionIDs[name] = id
 		}
 		if d.MetadataSize != 0 {
-			if err = t.setMetadataSize(d.MetadataSize); err != nil {
+			if err = checkMetadataSize(d.MetadataSize); err != nil {
 				return fmt.Errorf("setting metadata size to %d: %w", d.MetadataSize, err)
 			}
+			c.peerMetadataSize = d.MetadataSize
+			t.updateMetadataSize()
 		}
 		c.requestPendingMetadata()
 		if !t.cl.config.DisablePEX {

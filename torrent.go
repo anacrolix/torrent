@@ -3300,6 +3300,10 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	if _, ok := t.webSeeds[urlKey]; ok {
 		return false
 	}
+	if _, err := parseUrl(url); err != nil {
+		t.slogger().Warn("ignoring webseed with bad url", "url", url, "err", err)
+		return false
+	}
 	// I don't think Go http supports pipelining requests. However, we can have more ready to go
 	// right away. This value should be some multiple of the number of connections to a host. This
 	// number is based on keeping at least one connection actively downloading while another request
@@ -3354,6 +3358,11 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	g.MapMustAssignNew(t.webSeeds, urlKey, &ws)
 	ws.peer.onNeedUpdateRequests("Torrent.addWebSeed")
 	return true
+}
+
+// For use where a variable shadows the url package.
+func parseUrl(s string) (*url.URL, error) {
+	return url.Parse(s)
 }
 
 func (t *Torrent) deriveWebSeedHostKey(urlStr string) (ret webseedHostKeyHandle) {

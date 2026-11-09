@@ -2,7 +2,9 @@ package torrent
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"net/http"
 	"time"
@@ -85,6 +87,43 @@ func getTorrentSource(ctx context.Context, source string, hc *http.Client) (mi m
 		err = fmt.Errorf("unexpected response status code: %v", resp.StatusCode)
 		return
 	}
-	err = bencode.NewDecoder(resp.Body).Decode(&mi)
+	if resp.ContentLength > maxMetainfoSourceSize {
+		err = fmt.Errorf("response content length %v: %w", resp.ContentLength, errMetainfoSourceTooLarge)
+		return
+	}
+	// The body may be transparently decompressed, so the content length alone isn't enough.
+	r := &maxSizeReader{r: resp.Body, n: maxMetainfoSourceSize}
+	d := bencode.NewDecoder(r)
+	d.MaxStrLen = maxMetainfoSourceSize
+	err = d.Decode(&mi)
+	if r.exceeded {
+		err = fmt.Errorf("%w: %w", errMetainfoSourceTooLarge, err)
+	}
+	return
+}
+
+// The most metainfo bytes read from a source. Info is limited to maxMetadataSize, and v2 piece
+// layers can be about as large again.
+const maxMetainfoSourceSize = 4 * int64(maxMetadataSize)
+
+var errMetainfoSourceTooLarge = errors.New("metainfo source response too large")
+
+// Like io.LimitReader, but returns errMetainfoSourceTooLarge instead of EOF at the limit.
+type maxSizeReader struct {
+	r        io.Reader
+	n        int64
+	exceeded bool
+}
+
+func (me *maxSizeReader) Read(b []byte) (n int, err error) {
+	if me.n <= 0 {
+		me.exceeded = true
+		return 0, errMetainfoSourceTooLarge
+	}
+	if int64(len(b)) > me.n {
+		b = b[:me.n]
+	}
+	n, err = me.r.Read(b)
+	me.n -= int64(n)
 	return
 }

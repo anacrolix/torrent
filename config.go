@@ -236,6 +236,13 @@ type ClientConfig struct {
 	// impact of a few bad apples. 4s loses 1% of successful handshakes that
 	// are obtained with 60s timeout, and 5% of unsuccessful handshakes.
 	HandshakesTimeout time.Duration
+	// Maximum number of accepted connections that may be in the handshake phase at once. Further
+	// accepted connections are closed until some handshakes complete or time out. Zero or less is
+	// unlimited.
+	MaxPendingIncomingHandshakes int
+	// Maximum number of accepted connections from a single IP that may be in the handshake phase at
+	// once. Zero or less is unlimited.
+	MaxPendingIncomingHandshakesPerIp int
 	// How long between writes before sending a keep alive message on a peer connection that we want
 	// to maintain.
 	KeepAliveTimeout time.Duration
@@ -342,6 +349,9 @@ func NewDefaultClientConfig() *ClientConfig {
 		StealRequestGrace:      initDurationFromEnv(stealRequestGraceEnvKey, defaultStealRequestGrace),
 		DialRateLimiter:        rate.NewLimiter(10, 10),
 		PieceHashersPerTorrent: 2,
+
+		MaxPendingIncomingHandshakes:      128,
+		MaxPendingIncomingHandshakesPerIp: 8,
 	}
 	cc.DhtStartingNodes = func(network string) dht.StartingNodesGetter {
 		return func() ([]dht.Addr, error) { return dht.GlobalBootstrapAddrs(network) }

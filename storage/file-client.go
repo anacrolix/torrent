@@ -36,7 +36,11 @@ type NewFileClientOpts struct {
 	// returning an error. Set this where something else writes the same files, such as another
 	// downloader for the same content or a sync tool.
 	DisableMmap bool
-	Logger      *slog.Logger
+	// By default, OpenTorrent fails if a torrent's file path that already exists goes through a
+	// symlink that resolves outside the torrent's directory. Set this to follow such symlinks, for
+	// example where directories under the download directory are symlinks to other disks.
+	FollowSymlinksOutOfTorrentDir bool
+	Logger                        *slog.Logger
 }
 
 // The specific part-files option or the default.
@@ -108,6 +112,12 @@ func (fs *fileClientImpl) OpenTorrent(
 	err = checkTorrentFilePaths(dir, filePaths, metainfoFileInfos, fs.opts.partFiles())
 	if err != nil {
 		return
+	}
+	if !fs.opts.FollowSymlinksOutOfTorrentDir {
+		err = checkTorrentFileLinks(dir, filePaths, fs.opts.partFiles())
+		if err != nil {
+			return
+		}
 	}
 	for i, fileInfo := range metainfoFileInfos {
 		if fileInfo.Length == 0 {

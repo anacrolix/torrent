@@ -169,6 +169,12 @@ func (s *pexConnState) Recv(payload []byte) error {
 	return nil
 }
 
+// Stops PEX on the conn, for when we learn the torrent is private after PEX was enabled.
+func (s *pexConnState) disable() {
+	s.Close()
+	s.enabled = false
+}
+
 func (s *pexConnState) Close() {
 	if s.timer != nil {
 		s.timer.Stop()

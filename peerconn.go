@@ -216,6 +216,10 @@ func (cn *PeerConn) peerHasAllPieces() (all, known bool) {
 
 func (cn *PeerConn) onGotInfo(info *metainfo.Info) {
 	cn.setNumPieces(info.NumPieces())
+	// PEX may have been enabled before we knew the torrent was private (BEP 27).
+	if cn.t.isPrivate() && cn.pex.IsEnabled() {
+		cn.pex.disable()
+	}
 }
 
 // Correct the PeerPieces slice length. Return false if the existing slice is invalid, such as by

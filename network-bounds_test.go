@@ -217,3 +217,39 @@ func TestRepeatedExtendedHandshakePex(t *testing.T) {
 	qt.Check(t, qt.Equals(tt.pex.nc, 1))
 	qt.Check(t, qt.Equals(tt.pex.numPending(nil), 1))
 }
+
+// PEX enabled on a magnet's conn before the info arrives must be stopped if the info turns out to
+// be private (BEP 27).
+func TestPexDisabledWhenInfoIsPrivate(t *testing.T) {
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	info, err := testutil.GreetingMetaInfo().UnmarshalInfo()
+	qt.Assert(t, qt.IsNil(err))
+	info.Private = new(bool)
+	*info.Private = true
+	infoBytes, err := bencode.Marshal(info)
+	qt.Assert(t, qt.IsNil(err))
+	tt, _ := cl.AddTorrentInfoHash(metainfo.HashBytes(infoBytes))
+	cl.lock()
+	defer cl.unlock()
+	c := cl.newConnection(nil, newConnectionOpts{
+		network:    "tcp",
+		remoteAddr: &net.TCPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 5678},
+	})
+	c.setTorrent(tt)
+	c.initMessageWriter()
+	c.LocalLtepProtocolMap = &cl.defaultLocalLtepProtocolMap
+	qt.Assert(t, qt.IsNil(tt.addPeerConn(c)))
+	qt.Assert(t, qt.IsNil(c.onReadExtendedMsg(pp.HandshakeExtendedID, bencode.MustMarshal(pp.ExtendedHandshakeMessage{
+		M: map[pp.ExtensionName]pp.ExtensionNumber{pp.ExtensionNamePex: 1},
+	}))))
+	qt.Assert(t, qt.IsTrue(c.pex.IsEnabled()))
+	qt.Assert(t, qt.IsNil(tt.setInfoBytesLocked(infoBytes, nil)))
+	qt.Check(t, qt.IsFalse(c.pex.IsEnabled()))
+	// A later handshake doesn't turn it back on.
+	qt.Assert(t, qt.IsNil(c.onReadExtendedMsg(pp.HandshakeExtendedID, bencode.MustMarshal(pp.ExtendedHandshakeMessage{
+		M: map[pp.ExtensionName]pp.ExtensionNumber{pp.ExtensionNamePex: 1},
+	}))))
+	qt.Check(t, qt.IsFalse(c.pex.IsEnabled()))
+}

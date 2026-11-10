@@ -100,6 +100,10 @@ type PeerConn struct {
 	// The peer has everything. This can occur due to a special message, when
 	// we may not even know the number of pieces in the torrent yet.
 	peerSentHaveAll bool
+	// Whether we've pinged the peer's DHT node in response to a Port message.
+	sentDhtPing bool
+	// The metadata_size from the peer's extended handshake, or 0.
+	peerMetadataSize int
 
 	requestState requestStrategy.PeerRequestState
 
@@ -214,6 +218,10 @@ func (cn *PeerConn) peerHasAllPieces() (all, known bool) {
 
 func (cn *PeerConn) onGotInfo(info *metainfo.Info) {
 	cn.setNumPieces(info.NumPieces())
+	// PEX may have been enabled before we knew the torrent was private (BEP 27).
+	if cn.t.isPrivate() && cn.pex.IsEnabled() {
+		cn.pex.disable()
+	}
 }
 
 // Correct the PeerPieces slice length. Return false if the existing slice is invalid, such as by
@@ -599,9 +607,8 @@ func (cn *PeerConn) onPeerSentHaveAll() error {
 }
 
 func (cn *PeerConn) peerSentHaveNone() error {
-	if !cn.peerSentHaveAll {
-		cn.t.decPeerPieceAvailability(&cn.Peer)
-	}
+	// This also removes the conn from the set of conns with all pieces if it sent HaveAll.
+	cn.t.decPeerPieceAvailability(&cn.Peer)
 	cn._peerPieces.Clear()
 	cn.peerSentHaveAll = false
 	cn.peerPiecesChanged()
@@ -947,6 +954,29 @@ func (c *PeerConn) logProtocolBehaviour(level log.Level, format string, arg ...i
 
 // Processes incoming BitTorrent wire-protocol messages. The client lock is held upon entry and
 // exit. Returning will end the connection.
+// Pings the peer's DHT node. Only the first Port message on a conn is acted on, so a peer can't
+// make us send a ping per message.
+func (c *PeerConn) onPeerSentPort(port uint16) {
+	if c.sentDhtPing {
+		return
+	}
+	ipa, ok := tryIpPortFromNetAddr(c.RemoteAddr)
+	if !ok {
+		return
+	}
+	c.sentDhtPing = true
+	pingAddr := net.UDPAddr{
+		IP:   ipa.IP,
+		Port: ipa.Port,
+	}
+	if port != 0 {
+		pingAddr.Port = int(port)
+	}
+	c.t.cl.eachDhtServer(func(s DhtServer) {
+		go s.Ping(&pingAddr)
+	})
+}
+
 func (c *PeerConn) mainReadLoop() (err error) {
 	defer func() {
 		if err != nil {
@@ -993,6 +1023,21 @@ func (c *PeerConn) mainReadLoop() (err error) {
 	}
 	defer flushChunkWrites()
 	for {
+		// Replies to the peer are buffered from here. Stop reading until the writer catches up.
+		if wait, taken := c.messageWriter.readLoopShouldWait(); wait {
+			flushChunkWrites()
+			lockedDecodes = 0
+			cl.unlock()
+			select {
+			case <-taken:
+			case <-c.closed.Done():
+			}
+			cl.lock()
+			if t.closed.IsSet() || c.closed.IsSet() {
+				return nil
+			}
+			continue
+		}
 		// Keep batching only while the next message is a Piece that will be decoded without
 		// releasing the lock. Anything else must see the batch's effects first.
 		if len(chunkWrites) != 0 && (len(chunkWrites) >= maxChunkWriteBatch ||
@@ -1122,20 +1167,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			req := newRequestFromMessage(&msg)
 			c.onPeerSentCancel(req)
 		case pp.Port:
-			ipa, ok := tryIpPortFromNetAddr(c.RemoteAddr)
-			if !ok {
-				break
-			}
-			pingAddr := net.UDPAddr{
-				IP:   ipa.IP,
-				Port: ipa.Port,
-			}
-			if msg.Port != 0 {
-				pingAddr.Port = int(msg.Port)
-			}
-			cl.eachDhtServer(func(s DhtServer) {
-				go s.Ping(&pingAddr)
-			})
+			c.onPeerSentPort(msg.Port)
 		case pp.Suggest:
 			torrent.Add("suggests received", 1)
 			log.Fmsg("peer suggested piece %d", msg.Index).AddValues(c, msg.Index).LogLevel(log.Debug, c.t.logger)
@@ -1230,13 +1262,18 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 			c.PeerExtensionIDs[name] = id
 		}
 		if d.MetadataSize != 0 {
-			if err = t.setMetadataSize(d.MetadataSize); err != nil {
+			if err = checkMetadataSize(d.MetadataSize); err != nil {
 				return fmt.Errorf("setting metadata size to %d: %w", d.MetadataSize, err)
 			}
+			c.peerMetadataSize = d.MetadataSize
+			t.updateMetadataSize()
 		}
 		c.requestPendingMetadata()
 		if !t.cl.config.DisablePEX {
-			t.pex.Add(c) // we learnt enough now
+			// The extended handshake can be repeated, only list the conn once.
+			if !c.pex.Listed {
+				t.pex.Add(c) // we learnt enough now
+			}
 			// This checks the extension is supported internally.
 			c.pex.Init(c)
 		}
@@ -1657,7 +1694,8 @@ func (pc *PeerConn) getHashes(msg *pp.Message) ([][32]byte, error) {
 	beginPieceIndex := file.BeginPieceIndex()
 	endPieceIndex := file.EndPieceIndex()
 	length := merkle.RoundUpToPowerOfTwo(uint(endPieceIndex - beginPieceIndex))
-	if uint(msg.Index+msg.Length) > length {
+	// Widen before adding so the sum can't wrap.
+	if uint64(msg.Index)+uint64(msg.Length) > uint64(length) {
 		return nil, errors.New("invalid hash range")
 	}
 

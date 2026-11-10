@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	qt "github.com/go-quicktest/qt"
 
+	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 )
@@ -103,6 +105,33 @@ func TestValidateInfoRejectsMalformed(t *testing.T) {
 			"v1 negative piece length",
 			metainfo.Info{Name: "x", PieceLength: -1, Length: 1, Pieces: make([]byte, 20)},
 			"negative piece length",
+		},
+		{
+			"piece length too large",
+			metainfo.Info{Name: "x", PieceLength: 1 << 32, Length: 1, Pieces: make([]byte, 20)},
+			"piece length",
+		},
+		{
+			"v1 negative file length",
+			metainfo.Info{Name: "x", PieceLength: 16384, Pieces: make([]byte, 20), Files: []metainfo.FileInfo{
+				{Path: []string{"a"}, Length: -1},
+				{Path: []string{"b"}, Length: 17},
+			}},
+			"negative file length",
+		},
+		{
+			"v1 negative single file length",
+			metainfo.Info{Name: "x", PieceLength: 16384, Length: -1},
+			"negative file length",
+		},
+		{
+			"v1 file lengths overflow",
+			metainfo.Info{Name: "x", PieceLength: 16384, Pieces: make([]byte, 20), Files: []metainfo.FileInfo{
+				{Path: []string{"a"}, Length: math.MaxInt64},
+				{Path: []string{"b"}, Length: math.MaxInt64},
+				{Path: []string{"c"}, Length: 3},
+			}},
+			"overflows",
 		},
 		{
 			"v2 zero piece length",
@@ -266,4 +295,29 @@ func TestAddHybridAndV1OnlyMagnetsStillWork(t *testing.T) {
 	qt.Assert(t, qt.IsNil(err))
 	qt.Assert(t, qt.IsTrue(torHybrid.infoHash.Ok))
 	qt.Assert(t, qt.IsTrue(torHybrid.infoHashV2.Ok))
+}
+
+// End-to-end: AddTorrentSpec with a v1 info whose file lengths are negative must return an error.
+func TestAddTorrentSpecNegativeFileLength(t *testing.T) {
+	info := metainfo.Info{
+		Name:        "x",
+		PieceLength: 16384,
+		Pieces:      make([]byte, 20),
+		Files: []metainfo.FileInfo{
+			{Path: []string{"a"}, Length: -1},
+			{Path: []string{"b"}, Length: 17},
+		},
+	}
+	infoBytes, err := bencode.Marshal(info)
+	qt.Assert(t, qt.IsNil(err))
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	_, _, err = cl.AddTorrentSpec(&TorrentSpec{
+		AddTorrentOpts: AddTorrentOpts{
+			InfoHash:  metainfo.HashBytes(infoBytes),
+			InfoBytes: infoBytes,
+		},
+	})
+	qt.Assert(t, qt.ErrorMatches(err, ".*negative file length.*"))
 }

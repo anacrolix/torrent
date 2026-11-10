@@ -34,8 +34,33 @@ jobs:
           # Replaced by go-test-cache, which also saves updated test results.
           cache: false
       - uses: ./.github/actions/go-test-cache
-      - run: brew install macfuse fuse-t && echo 'FUSE_FORCE_BACKEND=fuse-t' >> $GITHUB_ENV
+      # The FUSE casks download installers from GitHub releases, which
+      # intermittently return 504s. Cache the downloads per cask version, and
+      # retry the install, so a flaky download doesn't fail the job.
+      - name: Resolve FUSE cask versions
+        id: fuse-casks
         if: matrix.os == 'macos-latest'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+        run: |
+          echo "key=$(brew info --cask --json=v2 macfuse fuse-t | jq -r '[.casks[] | .token + "-" + .version] | join("_")')" >> "$GITHUB_OUTPUT"
+          echo "cache=$(brew --cache)/downloads" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        if: matrix.os == 'macos-latest'
+        with:
+          path: ${{ steps.fuse-casks.outputs.cache }}
+          key: brew-casks-${{ runner.os }}-${{ runner.arch }}-${{ steps.fuse-casks.outputs.key }}
+      - name: Install FUSE
+        if: matrix.os == 'macos-latest'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+        run: |
+          for attempt in 1 2 3 4; do
+            brew install macfuse fuse-t && break
+            if [ "$attempt" = 4 ]; then exit 1; fi
+            sleep $((attempt * 30))
+          done
+          echo 'FUSE_FORCE_BACKEND=fuse-t' >> "$GITHUB_ENV"
       - run: |
           sudo apt update
           sudo apt install -y fuse

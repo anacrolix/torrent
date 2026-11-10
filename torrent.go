@@ -773,16 +773,48 @@ func (t *Torrent) haveAllMetadataPieces() bool {
 	return true
 }
 
-// TODO: Propagate errors to disconnect peer.
+func checkMetadataSize(size int) error {
+	// Compare as int: converting to uint32 first truncates sizes >= 1<<32 (and wraps negatives) so
+	// they would pass, then make() would either panic or allocate gigabytes.
+	if size < 0 || size > int(maxMetadataSize) {
+		return log.WithLevel(log.Warning, errors.New("bad size"))
+	}
+	return nil
+}
+
+// Picks the metadata size claimed by the most conns. Changing size discards metadata progress, so
+// the current size is kept unless another size has strictly more support, rather than whichever
+// peer spoke last.
+func (t *Torrent) updateMetadataSize() {
+	if t.haveInfo() || t.closed.IsSet() {
+		return
+	}
+	counts := make(map[int]int)
+	for c := range t.conns {
+		if c.peerMetadataSize != 0 {
+			counts[c.peerMetadataSize]++
+		}
+	}
+	best := len(t.metadataBytes)
+	for size, count := range counts {
+		if count > counts[best] {
+			best = size
+		}
+	}
+	if best == 0 {
+		return
+	}
+	// Sizes are checked before being recorded on conns.
+	panicif.Err(t.setMetadataSize(best))
+}
+
 func (t *Torrent) setMetadataSize(size int) (err error) {
 	if t.haveInfo() {
 		// We already know the correct metadata size.
 		return
 	}
-	// Compare as int: converting to uint32 first truncates sizes >= 1<<32 (and wraps negatives) so
-	// they would pass, then make() below either panics or allocates gigabytes.
-	if size < 0 || size > int(maxMetadataSize) {
-		return log.WithLevel(log.Warning, errors.New("bad size"))
+	if err = checkMetadataSize(size); err != nil {
+		return
 	}
 	if len(t.metadataBytes) == size {
 		return
@@ -2068,6 +2100,10 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 	}
 	_, ret = t.conns[c]
 	delete(t.conns, c)
+	if ret && c.peerMetadataSize != 0 {
+		// The conn no longer counts towards the metadata size.
+		t.updateMetadataSize()
+	}
 	// Avoid adding a drop event more than once. Probably we should track whether we've generated
 	// the drop event against the PexConnState instead.
 	if ret {
@@ -2275,7 +2311,9 @@ func (t *Torrent) startScrapingTracker(_url string) {
 		t.startScrapingTracker(u.String())
 		return
 	}
-	announcerKey := trackerAnnouncerKey(_url)
+	// Key on the normalized form so it always matches u.String(), for example when the scheme
+	// has upper case letters.
+	announcerKey := trackerAnnouncerKey(u.String())
 	for ih := range t.iterShortInfohashes() {
 		t.startScrapingTrackerWithInfohash(u, announcerKey, ih)
 	}
@@ -2305,7 +2343,10 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr trackerAnn
 				return nil
 			}
 		}
-		t.cl.startTrackerAnnouncer(u, urlStr)
+		if err := t.cl.startTrackerAnnouncer(u, urlStr); err != nil {
+			t.slogger().Warn("error starting tracker announcer", "url", urlStr, "err", err)
+			return nil
+		}
 		t.initRegularTrackerAnnounceState(announcerKey)
 		return torrentRegularTrackerAnnouncer{
 			u: u,
@@ -3275,6 +3316,17 @@ func (t *Torrent) AddWebSeeds(urls []string, opts ...AddWebSeedsOpt) {
 	}
 }
 
+// RemoveWebSeeds closes the torrent's web seeds and forgets them, cancelling
+// what they have in flight. AddWebSeeds brings them back.
+func (t *Torrent) RemoveWebSeeds() {
+	t.cl.lock()
+	defer t.cl.unlock()
+	for key, ws := range t.webSeeds {
+		ws.peer.close()
+		delete(t.webSeeds, key)
+	}
+}
+
 // Returns true if the WebSeed was newly added with the provided configuration.
 func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	if t.cl.config.DisableWebseeds {
@@ -3282,6 +3334,10 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	}
 	urlKey := webseedUrlKey(unique.Make(url))
 	if _, ok := t.webSeeds[urlKey]; ok {
+		return false
+	}
+	if _, err := parseUrl(url); err != nil {
+		t.slogger().Warn("ignoring webseed with bad url", "url", url, "err", err)
 		return false
 	}
 	// I don't think Go http supports pipelining requests. However, we can have more ready to go
@@ -3338,6 +3394,11 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	g.MapMustAssignNew(t.webSeeds, urlKey, &ws)
 	ws.peer.onNeedUpdateRequests("Torrent.addWebSeed")
 	return true
+}
+
+// For use where a variable shadows the url package.
+func parseUrl(s string) (*url.URL, error) {
+	return url.Parse(s)
 }
 
 func (t *Torrent) deriveWebSeedHostKey(urlStr string) (ret webseedHostKeyHandle) {

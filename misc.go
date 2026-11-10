@@ -3,6 +3,7 @@ package torrent
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net"
 
 	"github.com/RoaringBitmap/roaring/v2"
@@ -96,10 +97,30 @@ func torrentRequestOffset(torrentLength, pieceSize int64, r Request) (off int64)
 // beyond any real torrent. It is a tunable policy limit, not a protocol one.
 const maxInfoPieces = 1 << 24
 
+// maxPieceLength caps the piece length so that offsets within a piece fit the 32-bit peer protocol
+// integers used for chunk arithmetic. Real torrents use far smaller pieces.
+const maxPieceLength = 1 << 30
+
 func validateInfo(info *metainfo.Info) error {
 	// A negative piece length later reaches Piece.V1Length, which panics.
 	if info.PieceLength < 0 {
 		return errors.New("negative piece length")
+	}
+	// Offsets within a piece are 32-bit on the wire and in chunk arithmetic.
+	if info.PieceLength > maxPieceLength {
+		return fmt.Errorf("piece length %v exceeds %v", info.PieceLength, maxPieceLength)
+	}
+	// v1 file lengths are used for storage offsets and the piece count check below, so they must be
+	// non-negative and their sum must not overflow.
+	var v1Total int64
+	for fi := range info.UpvertedV1Files() {
+		if fi.Length < 0 {
+			return fmt.Errorf("negative file length %v", fi.Length)
+		}
+		if fi.Length > math.MaxInt64-v1Total {
+			return errors.New("total file length overflows")
+		}
+		v1Total += fi.Length
 	}
 	if info.HasV2() {
 		if err := info.FileTree.Validate(); err != nil {

@@ -247,6 +247,33 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	tt.assertAllPiecesRelativeAvailabilityZero()
 }
 
+// A peer can go from having all pieces, to none, to some. Its availability must still be fully
+// removed when the conn goes away.
+func TestRelativeAvailabilityHaveAllHaveNoneHave(t *testing.T) {
+	cl := newTestingClient(t)
+	mi, _ := testutil.Greeting.Generate(5)
+	tt := cl.newTorrentOpt(AddTorrentOpts{InfoHash: mi.HashInfoBytes()})
+	tt.setChunkSize(2)
+	g.MakeMapIfNil(&tt.conns)
+	qt.Assert(t, qt.IsNil(tt.SetInfoBytes(mi.InfoBytes)))
+	pc := PeerConn{}
+	pc.t = tt
+	pc.legacyPeerImpl = &pc
+	pc.initRequestState()
+	g.InitNew(&pc.callbacks)
+	tt.cl.lock()
+	tt.conns[&pc] = struct{}{}
+	qt.Assert(t, qt.IsNil(pc.onPeerSentHaveAll()))
+	qt.Assert(t, qt.IsNil(pc.peerSentHaveNone()))
+	qt.Check(t, qt.HasLen(tt.connsWithAllPieces, 0))
+	qt.Assert(t, qt.IsNil(pc.peerSentHave(0)))
+	qt.Check(t, qt.Equals(tt.piece(0).availability(), 1))
+	qt.Check(t, qt.Equals(tt.piece(1).availability(), 0))
+	tt.cl.unlock()
+	// Dropping asserts all relative availability returns to zero.
+	tt.Drop()
+}
+
 func TestAppendMissingStringsSkipsRepeats(t *testing.T) {
 	qt.Check(t, qt.DeepEquals(
 		appendMissingStrings(

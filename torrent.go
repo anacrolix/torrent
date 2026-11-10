@@ -446,11 +446,14 @@ func (t *Torrent) metadataSize() int {
 func (t *Torrent) makePieces() {
 	t.pieces = make([]pieceState, t.info.NumPieces())
 	files := *t.files
+	// The hash and end file index are derived on demand from the info and the following piece, so
+	// only the begin file index is stored here. Piece offsets and file offsets both increase, so a
+	// piece's begin file is never before the previous piece's: carry the index forward instead of
+	// rescanning from the first file every time, which is O(pieces * files) for a torrent with many
+	// leading empty files.
+	beginFile := 0
 	for i := range t.pieces {
-		// The hash and end file index are derived on demand from the info and the following piece, so
-		// only the begin file index is stored here.
-		// TODO: This can be done more efficiently by retaining a file iterator between loops.
-		beginFile := pieceFirstFileIndex(t.piece(i).torrentBeginOffset(), files)
+		beginFile = pieceFirstFileIndex(t.piece(i).torrentBeginOffset(), files, beginFile)
 		t.pieces[i].beginFile = int32(beginFile)
 	}
 }
@@ -515,11 +518,12 @@ func (t *Torrent) AddPieceLayers(layers map[string]string) (errs []error) {
 	return t.addPieceLayersLocked(layers)
 }
 
-// Returns the index of the first file containing the piece. files must be
-// ordered by offset.
-func pieceFirstFileIndex(pieceOffset int64, files []*File) int {
-	for i, f := range files {
-		if f.offset+f.length > pieceOffset {
+// Returns the index of the first file containing the piece at pieceOffset. files must be ordered by
+// offset. The scan starts at from, which callers advance across increasing piece offsets since the
+// result never decreases; 0 is always a safe value for from.
+func pieceFirstFileIndex(pieceOffset int64, files []*File, from int) int {
+	for i := from; i < len(files); i++ {
+		if files[i].offset+files[i].length > pieceOffset {
 			return i
 		}
 	}

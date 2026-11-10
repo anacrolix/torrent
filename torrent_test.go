@@ -281,3 +281,38 @@ func TestAppendMissingStringsSkipsRepeats(t *testing.T) {
 			[]string{"http://a", "http://b", "http://a", "http://existing"}),
 		[]string{"http://existing", "http://a", "http://b"}))
 }
+
+// A torrent with many leading empty files before a data file: a valid shape (empty files are
+// common as padding/placeholders) that made makePieces rescan the empty files for every piece.
+func benchmarkMakePiecesInfo(n int) *metainfo.Info {
+	const pieceLength = 1 << 14
+	files := make([]metainfo.FileInfo, 0, n+1)
+	for i := 0; i < n; i++ {
+		files = append(files, metainfo.FileInfo{Length: 0, Path: []string{"pad", fmt.Sprintf("%d", i)}})
+	}
+	files = append(files, metainfo.FileInfo{Length: int64(n) * pieceLength, Path: []string{"data"}})
+	return &metainfo.Info{
+		Name:        "x",
+		PieceLength: pieceLength,
+		Pieces:      make([]byte, 20*n),
+		Files:       files,
+	}
+}
+
+func BenchmarkMakePieces(b *testing.B) {
+	cl, err := NewClient(TestingConfig(b))
+	qt.Assert(b, qt.IsNil(err))
+	defer cl.Close()
+	info := benchmarkMakePiecesInfo(20000)
+	tt := cl.newTorrentForTesting()
+	cl.lock()
+	defer cl.unlock()
+	tt.info = info
+	tt.fileSegmentsIndex.Set(info.FileSegmentsIndex())
+	tt.initFiles()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		tt.makePieces()
+	}
+}

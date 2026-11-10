@@ -2311,7 +2311,9 @@ func (t *Torrent) startScrapingTracker(_url string) {
 		t.startScrapingTracker(u.String())
 		return
 	}
-	announcerKey := trackerAnnouncerKey(_url)
+	// Key on the normalized form so it always matches u.String(), for example when the scheme
+	// has upper case letters.
+	announcerKey := trackerAnnouncerKey(u.String())
 	for ih := range t.iterShortInfohashes() {
 		t.startScrapingTrackerWithInfohash(u, announcerKey, ih)
 	}
@@ -2341,7 +2343,10 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr trackerAnn
 				return nil
 			}
 		}
-		t.cl.startTrackerAnnouncer(u, urlStr)
+		if err := t.cl.startTrackerAnnouncer(u, urlStr); err != nil {
+			t.slogger().Warn("error starting tracker announcer", "url", urlStr, "err", err)
+			return nil
+		}
 		t.initRegularTrackerAnnounceState(announcerKey)
 		return torrentRegularTrackerAnnouncer{
 			u: u,
@@ -3331,6 +3336,10 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	if _, ok := t.webSeeds[urlKey]; ok {
 		return false
 	}
+	if _, err := parseUrl(url); err != nil {
+		t.slogger().Warn("ignoring webseed with bad url", "url", url, "err", err)
+		return false
+	}
 	// I don't think Go http supports pipelining requests. However, we can have more ready to go
 	// right away. This value should be some multiple of the number of connections to a host. This
 	// number is based on keeping at least one connection actively downloading while another request
@@ -3385,6 +3394,11 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	g.MapMustAssignNew(t.webSeeds, urlKey, &ws)
 	ws.peer.onNeedUpdateRequests("Torrent.addWebSeed")
 	return true
+}
+
+// For use where a variable shadows the url package.
+func parseUrl(s string) (*url.URL, error) {
+	return url.Parse(s)
 }
 
 func (t *Torrent) deriveWebSeedHostKey(urlStr string) (ret webseedHostKeyHandle) {

@@ -876,8 +876,8 @@ type announceState struct {
 	sentCompleted bool
 }
 
-func (cl *Client) startTrackerAnnouncer(u *url.URL, urlStr trackerAnnouncerKey) {
-	cl.regularTrackerAnnounceDispatcher.initTrackerClient(u, urlStr, cl.config, cl.slogger)
+func (cl *Client) startTrackerAnnouncer(u *url.URL, urlStr trackerAnnouncerKey) error {
+	return cl.regularTrackerAnnounceDispatcher.initTrackerClient(u, urlStr, cl.config, cl.slogger)
 }
 
 func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
@@ -885,10 +885,14 @@ func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 	urlStr trackerAnnouncerKey,
 	config *ClientConfig,
 	logger *slog.Logger,
-) {
+) error {
 	panicif.NotEq(u.String(), string(urlStr))
 	if g.MapContains(me.trackerClients, urlStr) {
-		return
+		return nil
+	}
+	// Need deep copy
+	if u.User != nil {
+		return errors.New("tracker urls with user info are not supported")
 	}
 	// Parts of the old Announce code, here for reference, to help with mapping configuration to the
 	// new global client tracker implementation.
@@ -950,9 +954,9 @@ func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 		Slogger:      logger.With("trackerUrl", string(urlStr)),
 		ListenPacket: config.TrackerListenPacket,
 	})
-	panicif.Err(err)
-	// Need deep copy
-	panicif.NotNil(u.User)
+	if err != nil {
+		return err
+	}
 	//ta := &regularTrackerAnnounceDispatcher{
 	//	trackerClient: tc,
 	//	torrentClient: cl,
@@ -967,6 +971,7 @@ func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 	g.MakeMapIfNil(&me.trackerClients)
 	// TODO: Put the urlHost from here.
 	g.MapMustAssignNew(me.trackerClients, urlStr, &value)
+	return nil
 }
 
 // Returns nil if the Torrent has been GCd. Use this lazily as a way to stop caring about announcing

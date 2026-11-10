@@ -173,8 +173,13 @@ func (cl *Client) LocalPort() (port int) {
 // paths — they must not receive peers via local discovery.
 func (cl *Client) OnLPDAnnouncement(addr string, infohashes []string) {
 	announced := make(map[*Torrent]struct{}, len(infohashes))
-	for _, ih := range infohashes {
-		if t, ok := cl.Torrent(metainfo.NewHashFromHex(ih)); ok {
+	for _, ihHex := range infohashes {
+		var ih metainfo.Hash
+		if err := ih.FromHexString(ihHex); err != nil {
+			cl.slogger.Debug("ignoring bad infohash in local peer discovery announce", "addr", addr, "err", err)
+			continue
+		}
+		if t, ok := cl.Torrent(ih); ok {
 			if t.isPrivate() {
 				continue
 			}
@@ -1869,7 +1874,10 @@ func (cl *Client) banPeerIP(ip net.IP) {
 	// We can't take this from string, because it will lose netip's v4on6. net.ParseIP parses v4
 	// addresses directly to v4on6, which doesn't compare equal with v4.
 	ipAddr, ok := netip.AddrFromSlice(ip)
-	panicif.False(ok)
+	if !ok {
+		cl.slogger.Warn("can't ban peer with unknown ip", "ip", ip)
+		return
+	}
 	g.MakeMapIfNil(&cl.badPeerIPs)
 	cl.badPeerIPs[ipAddr] = struct{}{}
 	for t := range cl.torrents {

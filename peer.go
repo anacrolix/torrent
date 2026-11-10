@@ -526,6 +526,8 @@ func (c *Peer) peerPriority() (peerPriority, error) {
 
 func (c *Peer) remoteIp() net.IP {
 	host, _, _ := net.SplitHostPort(c.RemoteAddr.String())
+	// Link-local IPv6 addresses can carry a zone, which net.ParseIP doesn't accept.
+	host, _, _ = strings.Cut(host, "%")
 	return net.ParseIP(host)
 }
 

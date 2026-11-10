@@ -2,7 +2,6 @@ package httpTracker
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"net/url"
 
@@ -28,7 +27,6 @@ func (cl Client) Scrape(ctx context.Context, ihs []infohash.T) (out udp.ScrapeRe
 		query.Add("info_hash", ih.AsString())
 	}
 	_url.RawQuery = query.Encode()
-	log.Printf("%q", _url.String())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, _url.String(), nil)
 	if err != nil {
 		return

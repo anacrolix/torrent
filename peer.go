@@ -255,6 +255,10 @@ func (cn *Peer) peerHasPiece(piece pieceIndex) bool {
 const (
 	writeBufferHighWaterLen = 1 << 15
 	writeBufferLowWaterLen  = writeBufferHighWaterLen / 2
+	// The read loop stops reading while more than this is waiting to be written. Replies to peer
+	// messages are buffered from the read loop, so this bounds what a peer that doesn't read can
+	// make us hold.
+	maxReadLoopWriteBufferLen = 4 * writeBufferHighWaterLen
 )
 
 var (
@@ -522,6 +526,8 @@ func (c *Peer) peerPriority() (peerPriority, error) {
 
 func (c *Peer) remoteIp() net.IP {
 	host, _, _ := net.SplitHostPort(c.RemoteAddr.String())
+	// Link-local IPv6 addresses can carry a zone, which net.ParseIP doesn't accept.
+	host, _, _ = strings.Cut(host, "%")
 	return net.ParseIP(host)
 }
 

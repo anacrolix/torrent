@@ -155,6 +155,7 @@ func (tc *TrackerClient) doWebsocket() error {
 				cancel()
 				if err != nil {
 					tc.slogger().Debug("pinging tracker", "err", err)
+					c.CloseNow()
 					return
 				}
 			case <-closeChan:
@@ -272,12 +273,6 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 	// save the leecher peer connections
 	tc.storePeerConnection(fmt.Sprintf("%x", randOfferId[:]), pc)
 
-	// Register handler in another package.
-	pc.OnClose(func() {
-		// Asynchronous because we might hold the current lock here, depending on where Close is
-		// called from.
-		go tc.removePeerConn(offerIDBinary)
-	})
 
 	tc.slogger().Debug("announcing offer")
 	err = tc.announce(event, infoHash, []outboundOffer{{
@@ -483,6 +478,9 @@ func (tc *TrackerClient) handleAnswer(offerId string, answer webrtc.SessionDescr
 func (tc *TrackerClient) storePeerConnection(offerId string, pc *wrappedPeerConnection) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+	pc.OnClose(func() {
+		go tc.removePeerConn(offerId)
+	})
 	g.MakeMapIfNil(&tc.rtcPeerConns)
 	tc.rtcPeerConns[offerId] = pc
 }

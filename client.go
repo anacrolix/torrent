@@ -1455,6 +1455,11 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 			return fmt.Errorf("got unexpected piece %d", piece)
 		}
 		c.metadataRequests[piece] = false
+		if d.TotalSize != len(t.metadataBytes) {
+			// The peer has a different idea of the metadata. Don't mix its data into ours.
+			c.protocolLogger.Levelf(log.Debug, "ignoring metadata piece for total size %v", d.TotalSize)
+			return nil
+		}
 		begin := len(payload) - d.PieceSize()
 		if begin < 0 || begin >= len(payload) {
 			return fmt.Errorf("data has bad offset in payload: %d", begin)

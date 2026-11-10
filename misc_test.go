@@ -187,6 +187,24 @@ func TestValidateInfoRejectsMalformed(t *testing.T) {
 			}},
 			"v1 file lengths",
 		},
+		{
+			// No v1 length at all with the v2 tree spanning two pieces: the last piece's v1 length is
+			// negative.
+			"hybrid v1 length missing",
+			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 16384, Pieces: make([]byte, 40), FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{"x": {File: metainfo.FileTreeFile{Length: 2 * 16384, PiecesRoot: valid32}}},
+			}},
+			"v1 file lengths",
+		},
+		{
+			// v1 files cover more pieces than the v2 tree. The last piece's v1 length then exceeds the
+			// piece length, which also panics.
+			"hybrid v1 file lengths longer than v2 file tree",
+			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 16384, Length: 3 * 16384, Pieces: make([]byte, 40), FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{"x": {File: metainfo.FileTreeFile{Length: 2 * 16384, PiecesRoot: valid32}}},
+			}},
+			"v1 file lengths",
+		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			err := validateInfo(&c.info)

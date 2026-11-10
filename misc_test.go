@@ -178,6 +178,15 @@ func TestValidateInfoRejectsMalformed(t *testing.T) {
 			}},
 			"v1 piece hashes",
 		},
+		{
+			// v1 files cover fewer pieces than the v2 tree. The last piece's v1 length comes out
+			// negative and panics the piece hasher if this isn't rejected.
+			"hybrid v1 file lengths shorter than v2 file tree",
+			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 16384, Length: 16384, Pieces: make([]byte, 40), FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{"x": {File: metainfo.FileTreeFile{Length: 2 * 16384, PiecesRoot: valid32}}},
+			}},
+			"v1 file lengths",
+		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			err := validateInfo(&c.info)
@@ -207,6 +216,27 @@ func TestValidateInfoAcceptsWellFormed(t *testing.T) {
 			"hybrid single piece",
 			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 16384, Length: 16384, Pieces: make([]byte, 20), FileTree: metainfo.FileTree{
 				Dir: map[string]metainfo.FileTree{"x": {File: metainfo.FileTreeFile{Length: 16384, PiecesRoot: valid32}}},
+			}},
+		},
+		{
+			"hybrid multiple pieces",
+			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 16384, Length: 3 * 16384, Pieces: make([]byte, 60), FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{"x": {File: metainfo.FileTreeFile{Length: 3 * 16384, PiecesRoot: valid32}}},
+			}},
+		},
+		{
+			// A padded hybrid: file "a" plus a pad file fills the first piece, then file "b" fills
+			// the second. Two v2 pieces, and the v1 lengths (including the pad) span two pieces too.
+			"hybrid multiple files with padding",
+			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 16384, Pieces: make([]byte, 40), Files: []metainfo.FileInfo{
+				{Path: []string{"a"}, Length: 100},
+				{Path: []string{".pad", "16284"}, Length: 16284},
+				{Path: []string{"b"}, Length: 16384},
+			}, FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{
+					"a": {File: metainfo.FileTreeFile{Length: 100, PiecesRoot: valid32}},
+					"b": {File: metainfo.FileTreeFile{Length: 16384, PiecesRoot: valid32}},
+				},
 			}},
 		},
 	} {
@@ -270,4 +300,36 @@ func TestAddTorrentSpecNegativeFileLength(t *testing.T) {
 		},
 	})
 	qt.Assert(t, qt.ErrorMatches(err, ".*negative file length.*"))
+}
+
+// End-to-end: a hybrid info whose v1 file lengths cover fewer pieces than its v2 file tree must be
+// rejected by AddTorrentSpec. Otherwise it is accepted, and the initial piece check hashes the last
+// piece, where metainfo.Piece.V1Length computes a negative length and panics the hasher goroutine,
+// taking down the whole process. Reachable from a remote peer over ut_metadata after a magnet add.
+func TestAddTorrentSpecHybridV1LengthTooShort(t *testing.T) {
+	// The v2 file tree says file "x" is two pieces, but the v1 "length" is only one piece.
+	infoBytes, err := bencode.Marshal(map[string]any{
+		"name":         "x",
+		"piece length": int64(16384),
+		"meta version": int64(2),
+		"length":       int64(16384),               // v1: one piece
+		"pieces":       strings.Repeat("\x00", 40), // but two v1 piece hashes
+		"file tree": map[string]any{
+			"x": map[string]any{"": map[string]any{
+				"length":      int64(2 * 16384), // v2: two pieces
+				"pieces root": strings.Repeat("\x00", 32),
+			}},
+		},
+	})
+	qt.Assert(t, qt.IsNil(err))
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	_, _, err = cl.AddTorrentSpec(&TorrentSpec{
+		AddTorrentOpts: AddTorrentOpts{
+			InfoHash:  metainfo.HashBytes(infoBytes),
+			InfoBytes: infoBytes,
+		},
+	})
+	qt.Assert(t, qt.ErrorMatches(err, ".*v1 file lengths.*"))
 }

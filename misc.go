@@ -154,8 +154,17 @@ func validateInfo(info *metainfo.Info) error {
 		}
 		// A hybrid info carries both a v1 hash list and a v2 file tree. If their piece counts
 		// disagree, later code indexes the v1 hashes by the v2 count and slices out of range.
-		if info.HasV1() && int64(len(info.Pieces)/20) != numPieces {
-			return fmt.Errorf("hybrid info has %v v1 piece hashes for %v pieces", len(info.Pieces)/20, numPieces)
+		if info.HasV1() {
+			if int64(len(info.Pieces)/20) != numPieces {
+				return fmt.Errorf("hybrid info has %v v1 piece hashes for %v pieces", len(info.Pieces)/20, numPieces)
+			}
+			// The v1 file lengths must span the same pieces as the v2 file tree. Otherwise the last
+			// piece's v1 length (metainfo.Piece.V1Length) comes out zero or negative and panics the
+			// piece hasher.
+			if (v1Total+info.PieceLength-1)/info.PieceLength != numPieces {
+				return fmt.Errorf("hybrid info v1 file lengths span %v pieces, not %v",
+					(v1Total+info.PieceLength-1)/info.PieceLength, numPieces)
+			}
 		}
 	}
 	if len(info.Pieces)%20 != 0 {

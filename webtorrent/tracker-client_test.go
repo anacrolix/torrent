@@ -93,3 +93,46 @@ func TestTrackerAnnounceEventEncoding(t *testing.T) {
 		})
 	}
 }
+
+func TestUnansweredTrackerPingClosesConnection(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.CloseNow()
+		// Deliberately do not read frames, so the client never receives a pong.
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	tc := &TrackerClient{
+		Url:           "ws" + strings.TrimPrefix(server.URL, "http"),
+		OnConnected:   func(error) {},
+		OnDisconnected: func(error) {},
+	}
+	tc.cond.L = &tc.mu
+	tc.pingTicker = time.NewTicker(time.Millisecond)
+	defer tc.pingTicker.Stop()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- tc.doWebsocket()
+	}()
+	defer func() {
+		tc.mu.Lock()
+		if tc.wsConn != nil {
+			tc.wsConn.CloseNow()
+		}
+		tc.mu.Unlock()
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected read loop to exit after unanswered ping")
+		}
+	case <-time.After(pingTimeout + 5*time.Second):
+		t.Fatal("tracker read loop did not exit after unanswered ping")
+	}
+}

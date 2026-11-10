@@ -351,6 +351,13 @@ func (r *reader) readAt(ctx context.Context, b []byte, pos int64) (n int, err er
 	r.slogger().Error("read failed after reader reset", "err", err)
 
 	r.updatePieceCompletion(pos)
+	// The storage reader may hold a piece reader opened before the piece completion changed (for
+	// example chunks that have since been moved to completed storage), so open a fresh one.
+	err = r.clearStorageReader()
+	if err != nil {
+		err = fmt.Errorf("closing storage reader after completion resync: %w", err)
+		return
+	}
 
 	n, retryable, err = r.readOnceAt(ctx, b, pos)
 	if err == nil || !retryable {

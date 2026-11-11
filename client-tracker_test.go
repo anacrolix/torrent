@@ -300,3 +300,42 @@ func TestAddTrackersWhileAnnouncing(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 }
+
+func TestRemovedWebsocketTrackerIsReleased(t *testing.T) {
+	s, trackerURL := startTestTracker()
+	defer s.Close()
+
+	cfg := TestingConfig(t)
+	cfg.DisableTrackers = false
+	cl, err := NewClient(cfg)
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+
+	dir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(dir)
+	mi.AnnounceList = [][]string{{trackerURL}}
+	to, err := cl.AddTorrent(mi)
+	qt.Assert(t, qt.IsNil(err))
+	defer to.Drop()
+
+	cl.websocketTrackers.mu.Lock()
+	_, registered := cl.websocketTrackers.clients[trackerURL]
+	cl.websocketTrackers.mu.Unlock()
+	qt.Assert(t, qt.IsTrue(registered))
+
+	otherHash := [20]byte(to.InfoHash())
+	otherHash[0] ^= 0x80
+	_, releaseOther := cl.websocketTrackers.Get(trackerURL, otherHash)
+
+	to.ModifyTrackers(nil)
+	cl.websocketTrackers.mu.Lock()
+	_, stillRegistered := cl.websocketTrackers.clients[trackerURL]
+	cl.websocketTrackers.mu.Unlock()
+	qt.Check(t, qt.IsTrue(stillRegistered))
+
+	releaseOther()
+	cl.websocketTrackers.mu.Lock()
+	_, stillRegistered = cl.websocketTrackers.clients[trackerURL]
+	cl.websocketTrackers.mu.Unlock()
+	qt.Check(t, qt.IsFalse(stillRegistered))
+}

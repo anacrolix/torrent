@@ -98,3 +98,79 @@ func TestIOFSConformance(t *testing.T) {
 	_, err = f.Read(make([]byte, 1))
 	qt.Check(t, qt.ErrorIs(err, fs.ErrClosed))
 }
+
+// Malformed metadata can list a path as both a file and a directory prefix of another file. The
+// client accepts it (the file list comes from a remote peer over ut_metadata), so the io/fs
+// traversal must not panic. The file wins and the shadowed descendants are not reachable, matching
+// how the directory listing presents them.
+func TestIOFSDirFileConflict(t *testing.T) {
+	addConflict := func(t *testing.T, paths ...[]string) fs.FS {
+		var files []any
+		for _, p := range paths {
+			comps := make([]any, len(p))
+			for i, c := range p {
+				comps[i] = c
+			}
+			files = append(files, map[string]any{"length": int64(1), "path": comps})
+		}
+		ib, err := bencode.Marshal(map[string]any{
+			"name": "root", "piece length": int64(16384),
+			"pieces": string(make([]byte, 20)), "files": files,
+		})
+		qt.Assert(t, qt.IsNil(err))
+		cfg := torrent.TestingConfig(t)
+		cfg.DisableTCP = true
+		cfg.DisableUTP = true
+		cl, err := torrent.NewClient(cfg)
+		qt.Assert(t, qt.IsNil(err))
+		t.Cleanup(func() { cl.Close() })
+		tt, err := cl.AddTorrent(&metainfo.MetaInfo{InfoBytes: ib})
+		qt.Assert(t, qt.IsNil(err))
+		qt.Assert(t, qt.IsNotNil(tt.Info())) // accepted despite the conflict
+		tfs := torrentfs.New(cl)
+		t.Cleanup(tfs.Destroy)
+		return tfs.IOFS()
+	}
+
+	// The conflicting name resolves to the file in each of these shapes, and the shadowed child is
+	// not reachable through it. The listing and the lookup agree, and a full walk never panics.
+	for _, c := range []struct {
+		name  string
+		paths [][]string
+	}{
+		{"file before subdir", [][]string{{"a"}, {"a", "b"}}},
+		{"subdir before file", [][]string{{"a", "b"}, {"a"}}},
+		{"deeply nested child", [][]string{{"a"}, {"a", "b", "c"}}},
+		{"multiple shadowed children", [][]string{{"a"}, {"a", "b"}, {"a", "c"}}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			iofs := addConflict(t, c.paths...)
+
+			des, err := fs.ReadDir(iofs, "root")
+			qt.Assert(t, qt.IsNil(err))
+			qt.Assert(t, qt.HasLen(des, 1))
+			qt.Check(t, qt.Equals(des[0].Name(), "a"))
+			qt.Check(t, qt.IsFalse(des[0].IsDir()))
+
+			st, err := fs.Stat(iofs, "root/a")
+			qt.Assert(t, qt.IsNil(err))
+			qt.Check(t, qt.IsFalse(st.IsDir()))
+
+			_, err = iofs.Open("root/a/b")
+			qt.Check(t, qt.IsNotNil(err))
+
+			qt.Check(t, qt.IsNil(fs.WalkDir(iofs, "root", func(string, fs.DirEntry, error) error { return nil })))
+		})
+	}
+
+	// A real directory (no file shares the name) still lists and resolves as a directory.
+	t.Run("plain directory still works", func(t *testing.T) {
+		iofs := addConflict(t, []string{"d", "x"}, []string{"d", "y"})
+		st, err := fs.Stat(iofs, "root/d")
+		qt.Assert(t, qt.IsNil(err))
+		qt.Check(t, qt.IsTrue(st.IsDir()))
+		des, err := fs.ReadDir(iofs, "root/d")
+		qt.Assert(t, qt.IsNil(err))
+		qt.Check(t, qt.HasLen(des, 2))
+	})
+}

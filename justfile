@@ -1,4 +1,7 @@
 export CGO_LDFLAGS := env_var_or_default('CGO_LDFLAGS', '') + ' -Lstorage/possum/lib/target/debug'
+# possum links its static library with -l:libpossum.a. Newer Go toolchains reject that flag unless
+# it is allowed explicitly.
+export CGO_LDFLAGS_ALLOW := env_var_or_default('CGO_LDFLAGS_ALLOW', '-l:libpossum\.a')
 
 check:
     go test -run @ -failfast ./... > /dev/null

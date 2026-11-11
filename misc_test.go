@@ -205,6 +205,13 @@ func TestValidateInfoRejectsMalformed(t *testing.T) {
 			}},
 			"v1 file lengths",
 		},
+		{
+			// A zero piece length with piece hashes is contradictory: the piece count comes from the
+			// hashes, but the last piece's v1 length is zero and panics the piece hasher.
+			"v1 zero piece length with piece hashes",
+			metainfo.Info{Name: "x", PieceLength: 0, Pieces: make([]byte, 40)},
+			"zero piece length",
+		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			err := validateInfo(&c.info)
@@ -229,6 +236,11 @@ func TestValidateInfoAcceptsWellFormed(t *testing.T) {
 		{
 			"v1",
 			metainfo.Info{Name: "x", PieceLength: 16384, Length: 16385, Pieces: make([]byte, 40)},
+		},
+		{
+			// An empty torrent has no content and no pieces, so a zero piece length is fine here.
+			"v1 empty torrent with zero piece length",
+			metainfo.Info{Name: "x", PieceLength: 0},
 		},
 		{
 			"hybrid single piece",
@@ -350,4 +362,24 @@ func TestAddTorrentSpecHybridV1LengthTooShort(t *testing.T) {
 		},
 	})
 	qt.Assert(t, qt.ErrorMatches(err, ".*v1 file lengths.*"))
+}
+
+// End-to-end: a v1 info with a zero piece length but non-empty piece hashes must be rejected when
+// its info bytes are set. Otherwise it is accepted, and the initial piece check hashes the last
+// piece, where metainfo.Piece.V1Length computes a zero length and panics the hasher goroutine,
+// taking down the whole process. Reachable from a remote peer over ut_metadata after a magnet add,
+// which is what SetInfoBytes models here.
+func TestSetInfoBytesZeroPieceLength(t *testing.T) {
+	infoBytes, err := bencode.Marshal(map[string]any{
+		"name":         "x",
+		"piece length": int64(0),
+		"pieces":       strings.Repeat("\x00", 40), // two piece hashes, so two pieces
+	})
+	qt.Assert(t, qt.IsNil(err))
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	tt, _ := cl.AddTorrentOpt(AddTorrentOpts{InfoHash: metainfo.HashBytes(infoBytes)})
+	err = tt.SetInfoBytes(infoBytes)
+	qt.Assert(t, qt.ErrorMatches(err, ".*zero piece length.*"))
 }

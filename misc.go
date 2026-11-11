@@ -171,7 +171,10 @@ func validateInfo(info *metainfo.Info) error {
 		return errors.New("pieces has invalid length")
 	}
 	if info.PieceLength == 0 {
-		if info.TotalLength() != 0 {
+		// A zero piece length only fits an empty torrent with no pieces. Content or piece hashes
+		// make the piece count nonzero, and hashing the last piece then reaches Piece.V1Length with
+		// a zero length, which panics.
+		if info.TotalLength() != 0 || len(info.Pieces) != 0 {
 			return errors.New("zero piece length")
 		}
 	} else if !info.HasV2() {

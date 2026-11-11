@@ -20,6 +20,7 @@ import (
 	"github.com/anacrolix/torrent/internal/mytimer"
 	"github.com/anacrolix/torrent/tracker"
 	trHttp "github.com/anacrolix/torrent/tracker/http"
+	"github.com/anacrolix/torrent/tracker/udp"
 )
 
 // Designed in a way to allow switching to an event model if required. If multiple slots are allowed
@@ -31,6 +32,9 @@ type regularTrackerAnnounceDispatcher struct {
 	slow          amortize.Value
 
 	trackerClients map[trackerAnnouncerKey]*trackerClientsValue
+	// UDP trackers share a socket per network, rather than holding one each for the life of the
+	// Client.
+	udpSockets     map[string]*udp.Socket
 	announceStates map[torrentTrackerAnnouncerKey]*announceState
 	// Save torrents so we can fetch announce request fields even when the torrent Client has
 	// dropped it. We should just prefer to remember the fields we need. Ideally this would map all
@@ -91,6 +95,29 @@ func (me *regularTrackerAnnounceDispatcher) init(client *Client) {
 	me.initTables()
 	g.MakeMap(&me.pendingTorrentInputUpdates)
 	me.initTimer()
+	client.onClose = append(client.onClose, me.closeUdpSockets)
+}
+
+// Returns the shared socket for UDP trackers on the given network, creating it if necessary. The
+// socket doesn't open a conn until it's used.
+func (me *regularTrackerAnnounceDispatcher) udpSocket(network string, config *ClientConfig, logger *slog.Logger) *udp.Socket {
+	if s, ok := me.udpSockets[network]; ok {
+		return s
+	}
+	s := &udp.Socket{
+		Network:      network,
+		ListenPacket: config.TrackerListenPacket,
+		Logger:       logger.With("udpTrackerNetwork", network),
+	}
+	g.MakeMapIfNil(&me.udpSockets)
+	me.udpSockets[network] = s
+	return s
+}
+
+func (me *regularTrackerAnnounceDispatcher) closeUdpSockets() {
+	for _, s := range me.udpSockets {
+		s.Close()
+	}
 }
 
 func (me *regularTrackerAnnounceDispatcher) initTables() {
@@ -944,15 +971,22 @@ func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 			HttpRequestDirector: me.HttpRequestDirector,
 		})
 	*/
+	var udpSocket *udp.Socket
+	switch u.Scheme {
+	case "udp", "udp4", "udp6":
+		udpSocket = me.udpSocket(u.Scheme, config, logger)
+	}
 	tc, err := tracker.NewClient(string(urlStr), tracker.NewClientOpts{
 		Http: trHttp.NewClientOpts{
-			Proxy:       config.HTTPProxy,
-			DialContext: config.TrackerDialContext,
-			ServerName:  u.Hostname(),
+			Proxy:              config.HTTPProxy,
+			DialContext:        config.TrackerDialContext,
+			ServerName:         u.Hostname(),
+			InsecureSkipVerify: config.TrackerInsecureSkipVerify,
 		},
 		UdpNetwork:   u.Scheme,
 		Slogger:      logger.With("trackerUrl", string(urlStr)),
 		ListenPacket: config.TrackerListenPacket,
+		UdpSocket:    udpSocket,
 	})
 	if err != nil {
 		return err

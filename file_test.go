@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"math/rand"
 	"testing"
 
 	"github.com/RoaringBitmap/roaring/v2"
@@ -115,4 +116,58 @@ func TestFileBytesLeft(t *testing.T) {
 		}(),
 		name: "ThreePiecesCompletedAll",
 	}.Run(t)
+}
+
+// makePieces carries a file cursor forward across pieces instead of rescanning from the first file.
+// This checks the cursored pieceFirstFileIndex returns exactly what the original always-from-zero
+// scan did, for every piece, across many file layouts including empty files and a zero piece length.
+func TestMakePiecesBeginFileEquivalence(t *testing.T) {
+	// The original scan, always from the first file.
+	origFrom0 := func(pieceOffset int64, files []*File) int {
+		for i, f := range files {
+			if f.offset+f.length > pieceOffset {
+				return i
+			}
+		}
+		return 0
+	}
+	rng := rand.New(rand.NewSource(1))
+	for trial := 0; trial < 5000; trial++ {
+		// Build a contiguous file layout with a random mix of lengths, heavy on empty files.
+		n := rng.Intn(14) + 1
+		var files []*File
+		var offset int64
+		for i := 0; i < n; i++ {
+			var length int64
+			switch rng.Intn(3) {
+			case 0:
+				length = 0 // empty file
+			default:
+				length = int64(rng.Intn(9))
+			}
+			files = append(files, &File{offset: offset, length: length})
+			offset += length
+		}
+		total := offset
+		// Piece length 0 (degenerate, all piece offsets 0) and a few positive ones.
+		for _, pieceLength := range []int64{0, 1, 3, 4} {
+			var numPieces int
+			if pieceLength == 0 {
+				numPieces = rng.Intn(4) // matches NumPieces using len(Pieces)/20 for a 0-length torrent
+			} else {
+				numPieces = int((total + pieceLength - 1) / pieceLength)
+			}
+			// The cursored sweep, exactly as makePieces runs it.
+			cursor := 0
+			for i := 0; i < numPieces; i++ {
+				pieceOffset := int64(i) * pieceLength
+				cursor = pieceFirstFileIndex(pieceOffset, files, cursor)
+				want := origFrom0(pieceOffset, files)
+				if cursor != want {
+					t.Fatalf("trial %d pieceLen %d piece %d (offset %d): cursor=%d orig=%d files=%v",
+						trial, pieceLength, i, pieceOffset, cursor, want, files)
+				}
+			}
+		}
+	}
 }

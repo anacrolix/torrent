@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	_ "github.com/anacrolix/envpprof"
@@ -44,7 +46,7 @@ func main() {
 			<-t.GotInfo()
 			mi := t.Metainfo()
 			t.Drop()
-			f, err := os.Create(t.Info().BestName() + ".torrent")
+			f, err := os.Create(metainfoFileName(t.Info().BestName(), t.InfoHash().HexString()))
 			if err != nil {
 				log.Fatalf("error creating torrent metainfo file: %s", err)
 			}
@@ -56,4 +58,16 @@ func main() {
 		}()
 	}
 	wg.Wait()
+}
+
+// The file name to write a torrent's metainfo to in the current directory. The info name comes from
+// the torrent, so it's only used if it's a plain file name. Otherwise the infohash is used.
+func metainfoFileName(infoName, infoHashHex string) string {
+	if infoName == "" ||
+		infoName == "." ||
+		strings.ContainsAny(infoName, `/\`) ||
+		!filepath.IsLocal(infoName) {
+		infoName = infoHashHex
+	}
+	return infoName + ".torrent"
 }

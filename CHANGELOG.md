@@ -156,6 +156,7 @@ Changes:
 - `metainfo`: Add `ChoosePieceLengthEx` with configurable piece size and count bounds (`83a4fbaf`)
 - Fix "panic: is zero" when adding pure v2 torrents (#1090, `478ed739`), and register v2-only
   torrents under their real short hash (`fa9ca951`)
+- Fix panic in `Client.AddTorrentOpt` when adding a v2-only (no v1 infohash) torrent or magnet (#1089, #1090, #1091)
 - Apply piece layers before computing initial piece priorities (`0a4bb8e3`)
 - Fix a panic requesting hashes for files with 512n+1 pieces (#1066, `ea4b3b58`)
 - Fix a `servePeerRequest` panic when the torrent is closed during a storage read (`0aa61207`)

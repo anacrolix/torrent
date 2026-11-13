@@ -9,7 +9,6 @@ import (
 	"github.com/anacrolix/log"
 	possum "github.com/anacrolix/possum/go"
 	possumResource "github.com/anacrolix/possum/go/resource"
-	_ "github.com/anacrolix/possum/go/testlink"
 
 	"github.com/anacrolix/torrent/storage"
 	test_storage "github.com/anacrolix/torrent/storage/test"

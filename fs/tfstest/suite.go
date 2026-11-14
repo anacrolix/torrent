@@ -1,12 +1,14 @@
 //go:build !windows
 
 // Package tfstest provides a shared test suite for torrentfs Backend
-// implementations (e.g. hanwen-torrentfs, og-torrentfs).
+// implementations (e.g. hanwen-torrentfs, og-torrentfs), and for anything else
+// that exposes a TorrentFS as an io/fs.FS (e.g. TorrentFS.IOFS).
 package tfstest
 
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,6 +26,12 @@ import (
 // MountFunc mounts tfs at mountDir and returns a cleanup/unmount function.
 // If FUSE is unavailable the implementation should call t.Skip.
 type MountFunc func(t testing.TB, tfs *torrentfs.TorrentFS, mountDir string) (unmount func())
+
+// FSMountFunc makes tfs available as fsys and returns a cleanup/unmount
+// function. The FS need not go through the operating system at all (see
+// TorrentFS.IOFS). If the FS is unavailable the implementation should call
+// t.Skip.
+type FSMountFunc func(t testing.TB, tfs *torrentfs.TorrentFS) (fsys fs.FS, unmount func())
 
 // startDeadlineBreaker starts a goroutine that calls tfs.Destroy() and
 // unmount() shortly before the test deadline, preventing the test from
@@ -52,6 +60,22 @@ func startDeadlineBreaker(t *testing.T, tfs *torrentfs.TorrentFS, unmount func()
 //	    torrentfstest.RunTestSuite(t, myMountFunc)
 //	}
 func RunTestSuite(t *testing.T, mount MountFunc) {
+	RunFSTestSuite(t, func(t testing.TB, tfs *torrentfs.TorrentFS) (fsys fs.FS, unmount func()) {
+		mountDir, err := os.MkdirTemp("", "tfstest-mnt-")
+		qt.Assert(t, qt.IsNil(err))
+		// Registered before mount so it runs after the unmount cleanup. Not
+		// t.TempDir or os.RemoveAll: if the unmount didn't take, don't fail
+		// the test over it, or walk into a wedged mount.
+		t.Cleanup(func() { os.Remove(mountDir) })
+		unmount = mount(t, tfs, mountDir)
+		fsys = os.DirFS(mountDir)
+		return
+	})
+}
+
+// RunFSTestSuite runs the full torrentfs integration test suite against the
+// fs.FS provided by mount.
+func RunFSTestSuite(t *testing.T, mount FSMountFunc) {
 	t.Run("UnmountWedged", func(t *testing.T) { testUnmountWedged(t, mount) })
 	t.Run("DownloadOnDemand", func(t *testing.T) { testDownloadOnDemand(t, mount) })
 	t.Run("StreamSintel", func(t *testing.T) { testStreamSintel(t, mount) })
@@ -60,7 +84,6 @@ func RunTestSuite(t *testing.T, mount MountFunc) {
 // layout holds temporary directories for a test.
 type layout struct {
 	BaseDir   string
-	MountDir  string
 	Completed string
 	Metainfo  *metainfo.MetaInfo
 }
@@ -73,8 +96,6 @@ func newGreetingLayout(t testing.TB) (tl layout) {
 	tl.BaseDir = t.TempDir()
 	tl.Completed = filepath.Join(tl.BaseDir, "completed")
 	os.Mkdir(tl.Completed, 0o777)
-	tl.MountDir = filepath.Join(tl.BaseDir, "mnt")
-	os.Mkdir(tl.MountDir, 0o777)
 	testutil.CreateDummyTorrentData(tl.Completed)
 	tl.Metainfo = testutil.GreetingMetaInfo()
 	return
@@ -82,7 +103,7 @@ func newGreetingLayout(t testing.TB) (tl layout) {
 
 // testUnmountWedged verifies that a blocked read is interrupted cleanly when
 // Destroy is called before the filesystem is unmounted.
-func testUnmountWedged(t *testing.T, mount MountFunc) {
+func testUnmountWedged(t *testing.T, mount FSMountFunc) {
 	layout := newGreetingLayout(t)
 	defer layout.destroy()
 
@@ -100,7 +121,7 @@ func testUnmountWedged(t *testing.T, mount MountFunc) {
 	qt.Assert(t, qt.IsNil(err))
 
 	tfs := torrentfs.New(client)
-	unmount := mount(t, tfs, layout.MountDir)
+	fsys, unmount := mount(t, tfs)
 	// unmount is registered as a cleanup but the test also calls it explicitly
 	// after Destroy; the implementation must tolerate double-unmount.
 	t.Cleanup(unmount)
@@ -113,7 +134,7 @@ func testUnmountWedged(t *testing.T, mount MountFunc) {
 	readErrCh := make(chan error, 1)
 	go func() {
 		defer cancel()
-		_, err := os.ReadFile(filepath.Join(layout.MountDir, tt.Info().BestName()))
+		_, err := fs.ReadFile(fsys, tt.Info().BestName())
 		readErrCh <- err
 	}()
 
@@ -146,9 +167,9 @@ func testUnmountWedged(t *testing.T, mount MountFunc) {
 	}
 }
 
-// testDownloadOnDemand verifies that reading a file through the FUSE mount
+// testDownloadOnDemand verifies that reading a file through the filesystem
 // triggers torrent download from a seeder.
-func testDownloadOnDemand(t *testing.T, mount MountFunc) {
+func testDownloadOnDemand(t *testing.T, mount FSMountFunc) {
 	layout := newGreetingLayout(t)
 	defer layout.destroy()
 
@@ -193,11 +214,11 @@ func testDownloadOnDemand(t *testing.T, mount MountFunc) {
 
 	tfs := torrentfs.New(leecher)
 	defer tfs.Destroy()
-	unmount := mount(t, tfs, layout.MountDir)
+	fsys, unmount := mount(t, tfs)
 	t.Cleanup(unmount)
 	startDeadlineBreaker(t, tfs, unmount)
 
-	data, err := os.ReadFile(filepath.Join(layout.MountDir, "greeting"))
+	data, err := fs.ReadFile(fsys, testutil.GreetingFileName)
 	qt.Assert(t, qt.IsNil(err))
 	qt.Check(t, qt.Equals(string(data), testutil.GreetingFileContents))
 }

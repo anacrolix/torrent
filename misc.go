@@ -3,6 +3,7 @@ package torrent
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net"
 
 	"github.com/RoaringBitmap/roaring/v2"
@@ -96,10 +97,30 @@ func torrentRequestOffset(torrentLength, pieceSize int64, r Request) (off int64)
 // beyond any real torrent. It is a tunable policy limit, not a protocol one.
 const maxInfoPieces = 1 << 24
 
+// maxPieceLength caps the piece length so that offsets within a piece fit the 32-bit peer protocol
+// integers used for chunk arithmetic. Real torrents use far smaller pieces.
+const maxPieceLength = 1 << 30
+
 func validateInfo(info *metainfo.Info) error {
 	// A negative piece length later reaches Piece.V1Length, which panics.
 	if info.PieceLength < 0 {
 		return errors.New("negative piece length")
+	}
+	// Offsets within a piece are 32-bit on the wire and in chunk arithmetic.
+	if info.PieceLength > maxPieceLength {
+		return fmt.Errorf("piece length %v exceeds %v", info.PieceLength, maxPieceLength)
+	}
+	// v1 file lengths are used for storage offsets and the piece count check below, so they must be
+	// non-negative and their sum must not overflow.
+	var v1Total int64
+	for fi := range info.UpvertedV1Files() {
+		if fi.Length < 0 {
+			return fmt.Errorf("negative file length %v", fi.Length)
+		}
+		if fi.Length > math.MaxInt64-v1Total {
+			return errors.New("total file length overflows")
+		}
+		v1Total += fi.Length
 	}
 	if info.HasV2() {
 		if err := info.FileTree.Validate(); err != nil {
@@ -133,15 +154,27 @@ func validateInfo(info *metainfo.Info) error {
 		}
 		// A hybrid info carries both a v1 hash list and a v2 file tree. If their piece counts
 		// disagree, later code indexes the v1 hashes by the v2 count and slices out of range.
-		if info.HasV1() && int64(len(info.Pieces)/20) != numPieces {
-			return fmt.Errorf("hybrid info has %v v1 piece hashes for %v pieces", len(info.Pieces)/20, numPieces)
+		if info.HasV1() {
+			if int64(len(info.Pieces)/20) != numPieces {
+				return fmt.Errorf("hybrid info has %v v1 piece hashes for %v pieces", len(info.Pieces)/20, numPieces)
+			}
+			// The v1 file lengths must span the same pieces as the v2 file tree. Otherwise the last
+			// piece's v1 length (metainfo.Piece.V1Length) comes out zero or negative and panics the
+			// piece hasher.
+			if (v1Total+info.PieceLength-1)/info.PieceLength != numPieces {
+				return fmt.Errorf("hybrid info v1 file lengths span %v pieces, not %v",
+					(v1Total+info.PieceLength-1)/info.PieceLength, numPieces)
+			}
 		}
 	}
 	if len(info.Pieces)%20 != 0 {
 		return errors.New("pieces has invalid length")
 	}
 	if info.PieceLength == 0 {
-		if info.TotalLength() != 0 {
+		// A zero piece length only fits an empty torrent with no pieces. Content or piece hashes
+		// make the piece count nonzero, and hashing the last piece then reaches Piece.V1Length with
+		// a zero length, which panics.
+		if info.TotalLength() != 0 || len(info.Pieces) != 0 {
 			return errors.New("zero piece length")
 		}
 	} else if !info.HasV2() {

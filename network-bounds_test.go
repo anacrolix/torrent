@@ -5,14 +5,17 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/netip"
 	"testing"
+	"time"
 
 	"github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/testutil"
+	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	utHolepunch "github.com/anacrolix/torrent/peer_protocol/ut-holepunch"
 )
@@ -156,4 +159,177 @@ func TestFullMessageBufferedMaxLength(t *testing.T) {
 	r.Peek(5)
 	qt.Check(t, qt.IsFalse(fullMessageBuffered(r)))
 	qt.Check(t, qt.IsFalse(bufferedMessageIsPiece(r)))
+}
+
+// The hash request range check must not wrap: index+length is computed in uint32 on the wire.
+func TestHashRequestRangeDoesNotWrap(t *testing.T) {
+	mi, err := metainfo.LoadFromFile("testdata/v2-multi-piece.torrent")
+	qt.Assert(t, qt.IsNil(err))
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	tt, err := cl.AddTorrent(mi)
+	qt.Assert(t, qt.IsNil(err))
+	<-tt.GotInfo()
+	cl.lock()
+	defer cl.unlock()
+	c := cl.newConnection(nil, newConnectionOpts{network: "test"})
+	c.setTorrent(tt)
+	root := tt.Files()[0].piecesRoot.Unwrap()
+	_, err = c.getHashes(&pp.Message{PiecesRoot: root, Index: 0, Length: 2})
+	qt.Check(t, qt.IsNil(err))
+	_, err = c.getHashes(&pp.Message{PiecesRoot: root, Index: math.MaxUint32, Length: 2})
+	qt.Check(t, qt.IsNotNil(err))
+}
+
+type pingCountingDhtServer struct {
+	DhtServer
+	pings chan *net.UDPAddr
+}
+
+func (me pingCountingDhtServer) Ping(addr *net.UDPAddr) {
+	me.pings <- addr
+}
+
+// Each Port message used to start a DHT ping. Only the first on a conn should.
+func TestPortMessagePingsOnce(t *testing.T) {
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	ds := pingCountingDhtServer{pings: make(chan *net.UDPAddr, 10)}
+	tt, _ := cl.AddTorrentInfoHash(testutil.GreetingMetaInfo().HashInfoBytes())
+	cl.lock()
+	defer cl.unlock()
+	cl.dhtServers = append(cl.dhtServers, ds)
+	defer func() { cl.dhtServers = nil }()
+	c := cl.newConnection(nil, newConnectionOpts{
+		network:    "tcp",
+		remoteAddr: &net.TCPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 5678},
+	})
+	c.setTorrent(tt)
+	for range 3 {
+		c.onPeerSentPort(6881)
+	}
+	select {
+	case addr := <-ds.pings:
+		qt.Check(t, qt.Equals(addr.String(), "1.2.3.4:6881"))
+	case <-time.After(5 * time.Second):
+		t.Fatal("no ping")
+	}
+	time.Sleep(50 * time.Millisecond)
+	qt.Check(t, qt.HasLen(ds.pings, 0))
+}
+
+// Repeated extended handshakes must not list the conn for PEX again, or replace its PEX timer.
+func TestRepeatedExtendedHandshakePex(t *testing.T) {
+	tt, c := newNetworkBoundsTestConn(t, TestingConfig(t), false)
+	c.RemoteAddr = &net.TCPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 5678}
+	c.Network = "tcp"
+	c.LocalLtepProtocolMap = &tt.cl.defaultLocalLtepProtocolMap
+	payload := bencode.MustMarshal(pp.ExtendedHandshakeMessage{
+		M:    map[pp.ExtensionName]pp.ExtensionNumber{pp.ExtensionNamePex: 1},
+		Port: 5678,
+	})
+	qt.Assert(t, qt.IsNil(c.onReadExtendedMsg(pp.HandshakeExtendedID, payload)))
+	qt.Assert(t, qt.IsTrue(c.pex.IsEnabled()))
+	timer := c.pex.timer
+	for range 10 {
+		qt.Assert(t, qt.IsNil(c.onReadExtendedMsg(pp.HandshakeExtendedID, payload)))
+	}
+	qt.Check(t, qt.Equals(c.pex.timer, timer))
+	qt.Check(t, qt.Equals(tt.pex.nc, 1))
+	qt.Check(t, qt.Equals(tt.pex.numPending(nil), 1))
+}
+
+// PEX enabled on a magnet's conn before the info arrives must be stopped if the info turns out to
+// be private (BEP 27).
+func TestPexDisabledWhenInfoIsPrivate(t *testing.T) {
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	info, err := testutil.GreetingMetaInfo().UnmarshalInfo()
+	qt.Assert(t, qt.IsNil(err))
+	info.Private = new(bool)
+	*info.Private = true
+	infoBytes, err := bencode.Marshal(info)
+	qt.Assert(t, qt.IsNil(err))
+	tt, _ := cl.AddTorrentInfoHash(metainfo.HashBytes(infoBytes))
+	cl.lock()
+	defer cl.unlock()
+	c := cl.newConnection(nil, newConnectionOpts{
+		network:    "tcp",
+		remoteAddr: &net.TCPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 5678},
+	})
+	c.setTorrent(tt)
+	c.initMessageWriter()
+	c.LocalLtepProtocolMap = &cl.defaultLocalLtepProtocolMap
+	qt.Assert(t, qt.IsNil(tt.addPeerConn(c)))
+	qt.Assert(t, qt.IsNil(c.onReadExtendedMsg(pp.HandshakeExtendedID, bencode.MustMarshal(pp.ExtendedHandshakeMessage{
+		M: map[pp.ExtensionName]pp.ExtensionNumber{pp.ExtensionNamePex: 1},
+	}))))
+	qt.Assert(t, qt.IsTrue(c.pex.IsEnabled()))
+	qt.Assert(t, qt.IsNil(tt.setInfoBytesLocked(infoBytes, nil)))
+	qt.Check(t, qt.IsFalse(c.pex.IsEnabled()))
+	// A later handshake doesn't turn it back on.
+	qt.Assert(t, qt.IsNil(c.onReadExtendedMsg(pp.HandshakeExtendedID, bencode.MustMarshal(pp.ExtendedHandshakeMessage{
+		M: map[pp.ExtensionName]pp.ExtensionNumber{pp.ExtensionNamePex: 1},
+	}))))
+	qt.Check(t, qt.IsFalse(c.pex.IsEnabled()))
+}
+
+// One peer claiming a different metadata_size must not discard metadata progress made at the size
+// other peers agree on.
+func TestMetadataSizeNotResetByOnePeer(t *testing.T) {
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	mi := testutil.GreetingMetaInfo()
+	tt, _ := cl.AddTorrentInfoHash(mi.HashInfoBytes())
+	cl.lock()
+	defer cl.unlock()
+	port := 1000
+	newConn := func() *PeerConn {
+		ours, theirs := net.Pipe()
+		t.Cleanup(func() { theirs.Close() })
+		go io.Copy(io.Discard, theirs)
+		port++
+		c := cl.newConnection(ours, newConnectionOpts{
+			network:    "tcp",
+			remoteAddr: &net.TCPAddr{IP: net.IPv4(1, 2, 3, 4), Port: port},
+		})
+		c.setTorrent(tt)
+		c.startMessageWriter()
+		c.LocalLtepProtocolMap = &cl.defaultLocalLtepProtocolMap
+		tt.conns[c] = struct{}{}
+		return c
+	}
+	handshake := func(c *PeerConn, size int) {
+		qt.Assert(t, qt.IsNil(c.onReadExtendedMsg(pp.HandshakeExtendedID, bencode.MustMarshal(pp.ExtendedHandshakeMessage{
+			M:            map[pp.ExtensionName]pp.ExtensionNumber{pp.ExtensionNameMetadata: 1},
+			MetadataSize: size,
+		}))))
+	}
+	realSize := len(mi.InfoBytes)
+	a := newConn()
+	handshake(a, realSize)
+	qt.Assert(t, qt.HasLen(tt.metadataBytes, realSize))
+	// Receive the only metadata piece but don't complete it yet.
+	tt.saveMetadataPiece(0, mi.InfoBytes)
+	b := newConn()
+	handshake(b, realSize+1)
+	qt.Check(t, qt.HasLen(tt.metadataBytes, realSize))
+	qt.Check(t, qt.IsTrue(tt.haveMetadataPiece(0)))
+	// Data for b's size isn't mixed into ours.
+	b.metadataRequests = []bool{true}
+	payload := append(bencode.MustMarshal(pp.ExtendedMetadataRequestMsg{
+		Piece:     0,
+		TotalSize: realSize + 1,
+		Type:      pp.DataMetadataExtensionMsgType,
+	}), make([]byte, realSize+1)...)
+	qt.Check(t, qt.IsNil(cl.gotMetadataExtensionMsg(payload, tt, b)))
+	qt.Check(t, qt.DeepEquals(tt.metadataBytes, mi.InfoBytes))
+	// Once more peers agree on another size, use it.
+	handshake(newConn(), realSize+1)
+	qt.Check(t, qt.HasLen(tt.metadataBytes, realSize+1))
+	qt.Check(t, qt.IsFalse(tt.haveMetadataPiece(0)))
 }

@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	qt "github.com/go-quicktest/qt"
 
+	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 )
@@ -105,6 +107,33 @@ func TestValidateInfoRejectsMalformed(t *testing.T) {
 			"negative piece length",
 		},
 		{
+			"piece length too large",
+			metainfo.Info{Name: "x", PieceLength: 1 << 32, Length: 1, Pieces: make([]byte, 20)},
+			"piece length",
+		},
+		{
+			"v1 negative file length",
+			metainfo.Info{Name: "x", PieceLength: 16384, Pieces: make([]byte, 20), Files: []metainfo.FileInfo{
+				{Path: []string{"a"}, Length: -1},
+				{Path: []string{"b"}, Length: 17},
+			}},
+			"negative file length",
+		},
+		{
+			"v1 negative single file length",
+			metainfo.Info{Name: "x", PieceLength: 16384, Length: -1},
+			"negative file length",
+		},
+		{
+			"v1 file lengths overflow",
+			metainfo.Info{Name: "x", PieceLength: 16384, Pieces: make([]byte, 20), Files: []metainfo.FileInfo{
+				{Path: []string{"a"}, Length: math.MaxInt64},
+				{Path: []string{"b"}, Length: math.MaxInt64},
+				{Path: []string{"c"}, Length: 3},
+			}},
+			"overflows",
+		},
+		{
 			"v2 zero piece length",
 			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 0, FileTree: metainfo.FileTree{
 				Dir: map[string]metainfo.FileTree{"a": {File: metainfo.FileTreeFile{Length: 0}}},
@@ -149,6 +178,40 @@ func TestValidateInfoRejectsMalformed(t *testing.T) {
 			}},
 			"v1 piece hashes",
 		},
+		{
+			// v1 files cover fewer pieces than the v2 tree. The last piece's v1 length comes out
+			// negative and panics the piece hasher if this isn't rejected.
+			"hybrid v1 file lengths shorter than v2 file tree",
+			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 16384, Length: 16384, Pieces: make([]byte, 40), FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{"x": {File: metainfo.FileTreeFile{Length: 2 * 16384, PiecesRoot: valid32}}},
+			}},
+			"v1 file lengths",
+		},
+		{
+			// No v1 length at all with the v2 tree spanning two pieces: the last piece's v1 length is
+			// negative.
+			"hybrid v1 length missing",
+			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 16384, Pieces: make([]byte, 40), FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{"x": {File: metainfo.FileTreeFile{Length: 2 * 16384, PiecesRoot: valid32}}},
+			}},
+			"v1 file lengths",
+		},
+		{
+			// v1 files cover more pieces than the v2 tree. The last piece's v1 length then exceeds the
+			// piece length, which also panics.
+			"hybrid v1 file lengths longer than v2 file tree",
+			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 16384, Length: 3 * 16384, Pieces: make([]byte, 40), FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{"x": {File: metainfo.FileTreeFile{Length: 2 * 16384, PiecesRoot: valid32}}},
+			}},
+			"v1 file lengths",
+		},
+		{
+			// A zero piece length with piece hashes is contradictory: the piece count comes from the
+			// hashes, but the last piece's v1 length is zero and panics the piece hasher.
+			"v1 zero piece length with piece hashes",
+			metainfo.Info{Name: "x", PieceLength: 0, Pieces: make([]byte, 40)},
+			"zero piece length",
+		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			err := validateInfo(&c.info)
@@ -175,9 +238,35 @@ func TestValidateInfoAcceptsWellFormed(t *testing.T) {
 			metainfo.Info{Name: "x", PieceLength: 16384, Length: 16385, Pieces: make([]byte, 40)},
 		},
 		{
+			// An empty torrent has no content and no pieces, so a zero piece length is fine here.
+			"v1 empty torrent with zero piece length",
+			metainfo.Info{Name: "x", PieceLength: 0},
+		},
+		{
 			"hybrid single piece",
 			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 16384, Length: 16384, Pieces: make([]byte, 20), FileTree: metainfo.FileTree{
 				Dir: map[string]metainfo.FileTree{"x": {File: metainfo.FileTreeFile{Length: 16384, PiecesRoot: valid32}}},
+			}},
+		},
+		{
+			"hybrid multiple pieces",
+			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 16384, Length: 3 * 16384, Pieces: make([]byte, 60), FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{"x": {File: metainfo.FileTreeFile{Length: 3 * 16384, PiecesRoot: valid32}}},
+			}},
+		},
+		{
+			// A padded hybrid: file "a" plus a pad file fills the first piece, then file "b" fills
+			// the second. Two v2 pieces, and the v1 lengths (including the pad) span two pieces too.
+			"hybrid multiple files with padding",
+			metainfo.Info{MetaVersion: 2, Name: "x", PieceLength: 16384, Pieces: make([]byte, 40), Files: []metainfo.FileInfo{
+				{Path: []string{"a"}, Length: 100},
+				{Path: []string{".pad", "16284"}, Length: 16284},
+				{Path: []string{"b"}, Length: 16384},
+			}, FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{
+					"a": {File: metainfo.FileTreeFile{Length: 100, PiecesRoot: valid32}},
+					"b": {File: metainfo.FileTreeFile{Length: 16384, PiecesRoot: valid32}},
+				},
 			}},
 		},
 	} {
@@ -216,4 +305,81 @@ func TestAddTorrentSpecBadV2Root(t *testing.T) {
 	if !strings.Contains(err.Error(), "bad v2 file tree") {
 		t.Fatalf("unexpected error: %v", err)
 	}
+}
+
+// End-to-end: AddTorrentSpec with a v1 info whose file lengths are negative must return an error.
+func TestAddTorrentSpecNegativeFileLength(t *testing.T) {
+	info := metainfo.Info{
+		Name:        "x",
+		PieceLength: 16384,
+		Pieces:      make([]byte, 20),
+		Files: []metainfo.FileInfo{
+			{Path: []string{"a"}, Length: -1},
+			{Path: []string{"b"}, Length: 17},
+		},
+	}
+	infoBytes, err := bencode.Marshal(info)
+	qt.Assert(t, qt.IsNil(err))
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	_, _, err = cl.AddTorrentSpec(&TorrentSpec{
+		AddTorrentOpts: AddTorrentOpts{
+			InfoHash:  metainfo.HashBytes(infoBytes),
+			InfoBytes: infoBytes,
+		},
+	})
+	qt.Assert(t, qt.ErrorMatches(err, ".*negative file length.*"))
+}
+
+// End-to-end: a hybrid info whose v1 file lengths cover fewer pieces than its v2 file tree must be
+// rejected by AddTorrentSpec. Otherwise it is accepted, and the initial piece check hashes the last
+// piece, where metainfo.Piece.V1Length computes a negative length and panics the hasher goroutine,
+// taking down the whole process. Reachable from a remote peer over ut_metadata after a magnet add.
+func TestAddTorrentSpecHybridV1LengthTooShort(t *testing.T) {
+	// The v2 file tree says file "x" is two pieces, but the v1 "length" is only one piece.
+	infoBytes, err := bencode.Marshal(map[string]any{
+		"name":         "x",
+		"piece length": int64(16384),
+		"meta version": int64(2),
+		"length":       int64(16384),               // v1: one piece
+		"pieces":       strings.Repeat("\x00", 40), // but two v1 piece hashes
+		"file tree": map[string]any{
+			"x": map[string]any{"": map[string]any{
+				"length":      int64(2 * 16384), // v2: two pieces
+				"pieces root": strings.Repeat("\x00", 32),
+			}},
+		},
+	})
+	qt.Assert(t, qt.IsNil(err))
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	_, _, err = cl.AddTorrentSpec(&TorrentSpec{
+		AddTorrentOpts: AddTorrentOpts{
+			InfoHash:  metainfo.HashBytes(infoBytes),
+			InfoBytes: infoBytes,
+		},
+	})
+	qt.Assert(t, qt.ErrorMatches(err, ".*v1 file lengths.*"))
+}
+
+// End-to-end: a v1 info with a zero piece length but non-empty piece hashes must be rejected when
+// its info bytes are set. Otherwise it is accepted, and the initial piece check hashes the last
+// piece, where metainfo.Piece.V1Length computes a zero length and panics the hasher goroutine,
+// taking down the whole process. Reachable from a remote peer over ut_metadata after a magnet add,
+// which is what SetInfoBytes models here.
+func TestSetInfoBytesZeroPieceLength(t *testing.T) {
+	infoBytes, err := bencode.Marshal(map[string]any{
+		"name":         "x",
+		"piece length": int64(0),
+		"pieces":       strings.Repeat("\x00", 40), // two piece hashes, so two pieces
+	})
+	qt.Assert(t, qt.IsNil(err))
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	tt, _ := cl.AddTorrentOpt(AddTorrentOpts{InfoHash: metainfo.HashBytes(infoBytes)})
+	err = tt.SetInfoBytes(infoBytes)
+	qt.Assert(t, qt.ErrorMatches(err, ".*zero piece length.*"))
 }

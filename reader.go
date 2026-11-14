@@ -65,8 +65,10 @@ type reader struct {
 	// different contexts, you should have different Readers.
 	ctx context.Context
 
-	// Required when modifying pos and readahead.
-	mu sync.Locker
+	// Protects reader-local state. Piece-priority changes are separately applied
+	// under the Client lock, but reads that remain in the same piece window do
+	// not need to contend with peer request scheduling.
+	mu sync.Mutex
 
 	readahead, pos int64
 	// Position that reads have continued contiguously from.
@@ -349,6 +351,13 @@ func (r *reader) readAt(ctx context.Context, b []byte, pos int64) (n int, err er
 	r.slogger().Error("read failed after reader reset", "err", err)
 
 	r.updatePieceCompletion(pos)
+	// The storage reader may hold a piece reader opened before the piece completion changed (for
+	// example chunks that have since been moved to completed storage), so open a fresh one.
+	err = r.clearStorageReader()
+	if err != nil {
+		err = fmt.Errorf("closing storage reader after completion resync: %w", err)
+		return
+	}
 
 	n, retryable, err = r.readOnceAt(ctx, b, pos)
 	if err == nil || !retryable {
@@ -398,18 +407,46 @@ func (r *reader) updatePieceCompletion(pos int64) {
 
 // Hodor
 func (r *reader) Close() error {
+	r.mu.Lock()
 	r.t.cl.lock()
 	r.t.deleteReader(r)
 	r.t.cl.unlock()
+	r.mu.Unlock()
 	return r.clearStorageReader()
 }
 
 func (r *reader) posChanged() {
+	// ReadaheadFunc is documented to run with the Client locked. Keep that
+	// contract for dynamic readahead, while static readahead can determine an
+	// unchanged piece window without taking the Client lock.
+	if r.readaheadFunc != nil {
+		r.t.cl.lock()
+		defer r.t.cl.unlock()
+		r.posChangedClientLocked()
+		return
+	}
 	to := r.piecesUncached()
 	from := r.pieces
 	if to == from {
 		return
 	}
+	r.t.cl.lock()
+	r.applyPosChanged(from, to)
+	r.t.cl.unlock()
+}
+
+// posChangedClientLocked is used while registering a new reader, when the
+// caller already holds the Client lock.
+func (r *reader) posChangedClientLocked() {
+	to := r.piecesUncached()
+	from := r.pieces
+	if to == from {
+		return
+	}
+	r.applyPosChanged(from, to)
+}
+
+func (r *reader) applyPosChanged(from, to pieceRange) {
 	r.pieces = to
 	// log.Printf("reader pos changed %v->%v", from, to)
 	r.t.readerPosChanged(from, to)

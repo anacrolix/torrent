@@ -16,6 +16,10 @@ import (
 // allocation when parsing, but also leaves the window open to implement a better solution.
 const DefaultDecodeMaxStrLen = 1<<27 - 1 // ~128MiB
 
+// Maximum length in bytes of an integer decoded into a *big.Int. That's far beyond what any known
+// use of bencode needs.
+const maxBigIntLen = 1 << 10
+
 // The default maximum nesting depth of bencode dicts and lists. The decoder recurses once per
 // nesting level, so without a limit a few million levels of nesting would exhaust the goroutine
 // stack (a fatal, unrecoverable error in Go). Real-world metainfo nests only a handful of levels
@@ -743,6 +747,13 @@ func (d *Decoder) parseIntInterface() (ret interface{}) {
 	}
 	n, err := strconv.ParseInt(d.buf.String(), 10, 64)
 	if ne, ok := err.(*strconv.NumError); ok && ne.Err == strconv.ErrRange {
+		// Converting decimal digits to a big.Int takes superlinear time, so bound the input.
+		if d.buf.Len() > maxBigIntLen {
+			panic(&SyntaxError{
+				Offset: start,
+				What:   fmt.Errorf("integer length %v exceeds limit (%v)", d.buf.Len(), maxBigIntLen),
+			})
+		}
 		i := new(big.Int)
 		_, ok := i.SetString(d.buf.String(), 10)
 		if !ok {

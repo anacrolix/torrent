@@ -115,7 +115,7 @@ type PeerConn struct {
 	// Hash pieces received from the peer, mapped from pieces root to piece layer hashes. This way
 	// we can verify all the pieces for a file when they're all arrived before submitting them to
 	// the torrent.
-	receivedHashPieces map[[32]byte][][32]byte
+	receivedHashPieces map[[32]byte]*receivedFileHashes
 
 	// Requests from the peer that haven't yet been read from storage for upload.
 	unreadPeerRequests map[Request]struct{}
@@ -1655,36 +1655,68 @@ func (pc *PeerConn) onReadHashes(msg *pp.Message) (err error) {
 	if file == nil {
 		return fmt.Errorf("no file for pieces root %x", msg.PiecesRoot)
 	}
-	filePieceHashes := pc.receivedHashPieces[msg.PiecesRoot]
-	if filePieceHashes == nil {
-		filePieceHashes = make([][32]byte, file.numPieces())
+	numPieces := file.numPieces()
+	if uint64(msg.Index) > uint64(numPieces) {
+		return fmt.Errorf("hash index %d is past file piece count %d", msg.Index, numPieces)
+	}
+	fileHashes := pc.receivedHashPieces[msg.PiecesRoot]
+	if fileHashes == nil {
+		fileHashes = &receivedFileHashes{
+			hashes:   make([][32]byte, numPieces),
+			received: make([]bool, numPieces),
+		}
 		g.MakeMapIfNil(&pc.receivedHashPieces)
-		pc.receivedHashPieces[msg.PiecesRoot] = filePieceHashes
+		pc.receivedHashPieces[msg.PiecesRoot] = fileHashes
 	}
-	if uint64(msg.Index) > uint64(len(filePieceHashes)) {
-		return fmt.Errorf("hash index %d is past file piece count %d", msg.Index, len(filePieceHashes))
+	fileHashes.add(int(msg.Index), msg.Hashes)
+	// The root can only be checked once every piece hash for the file has arrived. Checking it
+	// sooner costs a full root computation per reply.
+	if fileHashes.numReceived < numPieces {
+		return nil
 	}
-	copy(filePieceHashes[msg.Index:], msg.Hashes)
+	delete(pc.receivedHashPieces, msg.PiecesRoot)
 	root := merkle.RootWithPadHash(
-		filePieceHashes,
+		fileHashes.hashes,
 		metainfo.HashForPiecePad(int64(pc.t.usualPieceSize())))
 	expectedPiecesRoot := file.piecesRoot.Unwrap()
-	if root == expectedPiecesRoot {
-		pc.protocolLogger.WithNames(v2HashesLogName).Levelf(
-			log.Info,
-			"got piece hashes for file %v (num pieces %v)",
-			file, file.numPieces())
-		for filePieceIndex, peerHash := range filePieceHashes {
-			torrentPieceIndex := file.BeginPieceIndex() + filePieceIndex
-			pc.t.piece(torrentPieceIndex).setV2Hash(peerHash)
-		}
-	} else {
-		pc.protocolLogger.WithNames(v2HashesLogName).Levelf(
-			log.Debug,
-			"peer file piece hashes root mismatch: %x != %x",
-			root, expectedPiecesRoot)
+	if root != expectedPiecesRoot {
+		// The peer's hashes are provably wrong.
+		torrent.Add("v2 piece hashes received with wrong root", 1)
+		return fmt.Errorf(
+			"piece hashes for file %v have root %x, expected %x",
+			file, root, expectedPiecesRoot)
+	}
+	pc.protocolLogger.WithNames(v2HashesLogName).Levelf(
+		log.Info,
+		"got piece hashes for file %v (num pieces %v)",
+		file, numPieces)
+	for filePieceIndex, peerHash := range fileHashes.hashes {
+		torrentPieceIndex := file.BeginPieceIndex() + filePieceIndex
+		pc.t.piece(torrentPieceIndex).setV2Hash(peerHash)
 	}
 	return nil
+}
+
+// Piece layer hashes received from a peer for one file.
+type receivedFileHashes struct {
+	hashes      [][32]byte
+	received    []bool
+	numReceived int
+}
+
+// Adds hashes starting at file piece index. Hashes past the end of the file are padding.
+func (me *receivedFileHashes) add(index int, hashes [][32]byte) {
+	for i, h := range hashes {
+		j := index + i
+		if j >= len(me.hashes) {
+			break
+		}
+		me.hashes[j] = h
+		if !me.received[j] {
+			me.received[j] = true
+			me.numReceived++
+		}
+	}
 }
 
 func (pc *PeerConn) getHashes(msg *pp.Message) ([][32]byte, error) {
@@ -2165,7 +2197,8 @@ func fullMessageBuffered(r *bufio.Reader) bool {
 		return false
 	}
 	b, _ := r.Peek(4)
-	return r.Buffered() >= 4+int(binary.BigEndian.Uint32(b))
+	// Compare as uint64: on 32-bit platforms int(length) can be negative.
+	return uint64(r.Buffered()) >= 4+uint64(binary.BigEndian.Uint32(b))
 }
 
 // Reports whether the next message is a Piece that's wholly in the buffer.

@@ -8,6 +8,8 @@ import (
 	"io"
 	"math/big"
 	"reflect"
+	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -236,6 +238,79 @@ func TestDecodeMaxStrLen(t *testing.T) {
 	}), 69)
 }
 
+// A string's length comes from the input, so a short input claiming a long string must fail without
+// allocating that length first. Peers can send these, for example in DHT messages.
+func TestDecodeTruncatedLongString(t *testing.T) {
+	input := fmt.Sprintf("d1:a%d:", DefaultDecodeMaxStrLen)
+	for _, v := range []any{
+		new(struct {
+			A string `bencode:"a"`
+		}),
+		new(struct {
+			A []byte `bencode:"a"`
+		}),
+		new(struct {
+			A [20]byte `bencode:"a"`
+		}),
+		new(struct {
+			A bool `bencode:"a"`
+		}),
+		// Not a string type, so the string is read and discarded.
+		new(struct {
+			A int `bencode:"a"`
+		}),
+		new(any),
+	} {
+		for name, decode := range map[string]func() error{
+			"Unmarshal": func() error { return Unmarshal([]byte(input), v) },
+			"Decoder":   func() error { return NewDecoder(strings.NewReader(input)).Decode(v) },
+		} {
+			t.Run(fmt.Sprintf("%s/%T", name, v), func(t *testing.T) {
+				var before, after runtime.MemStats
+				runtime.ReadMemStats(&before)
+				err := decode()
+				runtime.ReadMemStats(&after)
+				qt.Assert(t, qt.IsNotNil(err))
+				allocated := after.TotalAlloc - before.TotalAlloc
+				qt.Assert(t, qt.IsTrue(allocated < 1<<16), qt.Commentf("allocated %v bytes", allocated))
+			})
+		}
+	}
+}
+
+// Long strings are read in steps when the input isn't known to hold them, and must decode the same
+// either way, into every string target. Cut short, they must fail the same way too.
+func TestDecodeLongString(t *testing.T) {
+	type target struct {
+		A string   `bencode:"a"`
+		B []byte   `bencode:"b"`
+		C [20]byte `bencode:"c"`
+		D bool     `bencode:"d"`
+		E int      `bencode:"e,ignore_unmarshal_type_error"`
+	}
+	for _, n := range []int{0, 1, 20, bytes.MinRead - 1, bytes.MinRead, bytes.MinRead + 1, 1<<20 + 7} {
+		s := strings.Repeat("abcdefghij", n/10+1)[:n]
+		input := fmt.Sprintf("d1:a%[1]d:%[2]s1:b%[1]d:%[2]s1:c%[1]d:%[2]s1:d%[1]d:%[2]s1:e%[1]d:%[2]se", n, s)
+		want := target{A: s, B: []byte(s), D: n != 0}
+		copy(want.C[:], s)
+		t.Run(fmt.Sprint(n), func(t *testing.T) {
+			var got target
+			qt.Assert(t, qt.IsNil(Unmarshal([]byte(input), &got)))
+			qt.Assert(t, qt.DeepEquals(got, want))
+			got = target{}
+			qt.Assert(t, qt.IsNil(NewDecoder(strings.NewReader(input)).Decode(&got)))
+			qt.Assert(t, qt.DeepEquals(got, want))
+			short := fmt.Sprintf("d1:a%d:%s", n+1, s)
+			wantErr := fmt.Sprintf("bencode: syntax error (offset: %d): unexpected I/O error: unexpected EOF", len(short))
+			if n == 0 {
+				wantErr = fmt.Sprintf("bencode: syntax error (offset: %d): unexpected EOF", len(short))
+			}
+			qt.Assert(t, qt.ErrorMatches(Unmarshal([]byte(short), &got), regexp.QuoteMeta(wantErr)))
+			qt.Assert(t, qt.ErrorMatches(NewDecoder(strings.NewReader(short)).Decode(&got), regexp.QuoteMeta(wantErr)))
+		})
+	}
+}
+
 // This is for the "github.com/anacrolix/torrent/metainfo".Info.Private field.
 func TestDecodeStringIntoBoolPtr(t *testing.T) {
 	var m struct {
@@ -406,4 +481,21 @@ func TestDecodeMaxStrLenUnmarshaler(t *testing.T) {
 		t.Fatalf("expected SyntaxError for 10-byte string at limit 9, got %T: %v", err, err)
 	}
 	qt.Check(t, qt.StringContains(se.Error(), "exceeds limit"))
+}
+
+// Integers too large for int64 decode to *big.Int, which is superlinear in the number of digits,
+// so their length is bounded. That includes values in ignored dict keys.
+func TestDecodeBigIntLengthLimit(t *testing.T) {
+	atLimit := "i" + strings.Repeat("9", maxBigIntLen) + "e"
+	var v interface{}
+	qt.Assert(t, qt.IsNil(Unmarshal([]byte(atLimit), &v)))
+	qt.Check(t, qt.Equals(v.(*big.Int).String(), atLimit[1:len(atLimit)-1]))
+	overLimit := "i" + strings.Repeat("9", maxBigIntLen+1) + "e"
+	var se *SyntaxError
+	qt.Assert(t, qt.ErrorAs(Unmarshal([]byte(overLimit), &v), &se))
+	qt.Check(t, qt.StringContains(se.Error(), "exceeds limit"))
+	var s struct {
+		A int `bencode:"a"`
+	}
+	qt.Assert(t, qt.ErrorAs(Unmarshal([]byte("d1:b"+overLimit+"e"), &s), &se))
 }

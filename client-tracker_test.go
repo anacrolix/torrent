@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,10 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
 	qt "github.com/go-quicktest/qt"
-	"github.com/gorilla/websocket"
 
+	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/testutil"
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/tracker"
 )
 
@@ -57,16 +60,14 @@ func TestClientInvalidTracker(t *testing.T) {
 	to.Drop()
 }
 
-var upgrader = websocket.Upgrader{}
-
 func testtracker(w http.ResponseWriter, r *http.Request) {
-	c, err := upgrader.Upgrade(w, r, nil)
+	c, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		return
 	}
-	defer c.Close()
+	defer c.CloseNow()
 	for {
-		_, _, err := c.ReadMessage()
+		_, _, err := c.Read(r.Context())
 		if err != nil {
 			break
 		}
@@ -222,4 +223,80 @@ func startTestTracker() (*httptest.Server, string) {
 	s := httptest.NewServer(http.HandlerFunc(testtracker))
 	trackerUrl := "ws" + strings.TrimPrefix(s.URL, "http")
 	return s, trackerUrl
+}
+
+// newEventTracker serves HTTP announces, reporting each announce event on the returned channel.
+func newEventTracker(t *testing.T) (string, <-chan string) {
+	events := make(chan string, 16)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		events <- r.URL.Query().Get("event")
+		b, err := bencode.Marshal(map[string]any{"interval": 1800, "peers": ""})
+		if err != nil {
+			panic(err)
+		}
+		w.Write(b)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL + "/announce", events
+}
+
+func requireAnnounceEvent(t *testing.T, events <-chan string, want string) {
+	t.Helper()
+	select {
+	case got := <-events:
+		qt.Assert(t, qt.Equals(got, want))
+	case <-time.After(10 * time.Second):
+		t.Fatalf("no %q announce", want)
+	}
+}
+
+// Dropping a torrent must announce Stopped to its trackers promptly, not when the dispatcher's next
+// regular announce is due.
+func TestClientDroppedTorrentAnnouncesStopped(t *testing.T) {
+	cfg := TestingConfig(t)
+	cfg.DisableTrackers = false
+	cl, err := NewClient(cfg)
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	url, events := newEventTracker(t)
+	tor, _ := cl.AddTorrentInfoHash(metainfo.Hash{1, 2, 3})
+	tor.AddTrackers([][]string{{url}})
+	requireAnnounceEvent(t, events, "started")
+	// Stopped is only announced after a successful announce.
+	announced := func() bool {
+		cl.lock()
+		defer cl.unlock()
+		for _, state := range tor.regularTrackerAnnounceState {
+			if !state.lastOk.Completed.IsZero() {
+				return true
+			}
+		}
+		return false
+	}
+	for deadline := time.Now().Add(10 * time.Second); !announced(); time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("started announce never completed")
+		}
+	}
+	tor.Drop()
+	requireAnnounceEvent(t, events, "stopped")
+}
+
+// Each tracker added starts an announce that looks up its tracker client while adding the next one
+// writes to the same map. Only -race catches it.
+func TestAddTrackersWhileAnnouncing(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("d8:intervali3600e5:peers0:e"))
+	}))
+	defer s.Close()
+	cfg := TestingConfig(t)
+	cfg.DisableTrackers = false
+	cl, err := NewClient(cfg)
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	to, _ := cl.AddTorrentInfoHash(metainfo.Hash{1})
+	for i := range 20 {
+		to.AddTrackers([][]string{{fmt.Sprintf("%s/%d", s.URL, i)}})
+		time.Sleep(time.Millisecond)
+	}
 }

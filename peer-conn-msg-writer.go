@@ -64,6 +64,8 @@ type peerConnMsgWriter struct {
 
 	mu        sync.Mutex
 	writeCond chansync.BroadcastCond
+	// Broadcast when the write buffer is handed off to be written, leaving an empty one.
+	writeBufferTaken chansync.BroadcastCond
 	// Pointer so we can swap with the "front buffer".
 	writeBuffer *peerConnMsgWriterBuffer
 
@@ -113,6 +115,7 @@ func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 		}
 		// Flip the buffers.
 		frontBuf, cn.writeBuffer = cn.writeBuffer, frontBuf
+		cn.writeBufferTaken.Broadcast()
 		cn.mu.Unlock()
 		if frontBuf.Len() == 0 {
 			panic("expected non-empty front buffer")
@@ -174,4 +177,16 @@ func (cn *peerConnMsgWriter) write(msg pp.Message) bool {
 
 func (cn *peerConnMsgWriter) writeBufferFull() bool {
 	return cn.writeBuffer.Len() >= writeBufferHighWaterLen
+}
+
+// Returns whether the write buffer holds more than maxReadLoopWriteBufferLen, and a channel that is
+// closed when the buffer is next handed off to be written.
+func (cn *peerConnMsgWriter) readLoopShouldWait() (bool, <-chan struct{}) {
+	cn.mu.Lock()
+	defer cn.mu.Unlock()
+	if cn.writeBuffer == nil {
+		// The writer was never set up, as in some tests.
+		return false, nil
+	}
+	return cn.writeBuffer.Len() > maxReadLoopWriteBufferLen, cn.writeBufferTaken.Signaled()
 }

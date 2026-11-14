@@ -65,8 +65,10 @@ type reader struct {
 	// different contexts, you should have different Readers.
 	ctx context.Context
 
-	// Required when modifying pos and readahead.
-	mu sync.Locker
+	// Protects reader-local state. Piece-priority changes are separately applied
+	// under the Client lock, but reads that remain in the same piece window do
+	// not need to contend with peer request scheduling.
+	mu sync.Mutex
 
 	readahead, pos int64
 	// Position that reads have continued contiguously from.
@@ -268,8 +270,11 @@ func (r *reader) torrentOffset(readerPos int64) int64 {
 	return r.offset + readerPos
 }
 
-// Performs at most one successful read to torrent storage.
-func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, err error) {
+// Performs at most one successful read to torrent storage. retryable reports that err came from
+// reading storage on a live Torrent, the only failure readAt's retries can fix. A failure waiting
+// for the data (the context is done, the Torrent closed, downloading or networking disabled) is
+// final.
+func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, retryable bool, err error) {
 	var avail int64
 	avail, err = r.waitAvailable(ctx, pos, int64(len(b)), n == 0)
 	if avail == 0 || err != nil {
@@ -304,14 +309,16 @@ func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, er
 	} else {
 		r.slogger().Error("error reading", attrs[:]...)
 	}
+	retryable = true
 	return
 }
 
 // Performs at most one successful read to torrent storage. Try reading, first with the storage
 // reader we already have, then after resetting it (in case data moved for
 // completed/incomplete/promoted etc.). Then try resetting the piece completions. Then after all
-// that if the storage is supposed to be flaky, try all over again. TODO: Filter errors and set log
-// levels appropriately.
+// that if the storage is supposed to be flaky, try all over again. Only storage failures are
+// retried: a failure waiting for the data is returned as is, since retrying it cannot succeed, and
+// with capped storage the retry recursed until the stack overflowed.
 func (r *reader) readAt(ctx context.Context, b []byte, pos int64) (n int, err error) {
 	if pos >= r.length {
 		err = io.EOF
@@ -324,8 +331,8 @@ func (r *reader) readAt(ctx context.Context, b []byte, pos int64) (n int, err er
 	if remaining := r.length - pos; int64(len(b)) > remaining {
 		b = b[:remaining]
 	}
-	n, err = r.readOnceAt(ctx, b, pos)
-	if err == nil {
+	n, retryable, err := r.readOnceAt(ctx, b, pos)
+	if err == nil || !retryable {
 		return
 	}
 	r.slogger().Error("initial read failed", "err", err)
@@ -337,24 +344,29 @@ func (r *reader) readAt(ctx context.Context, b []byte, pos int64) (n int, err er
 	}
 	r.storageReader = nil
 
-	n, err = r.readOnceAt(ctx, b, pos)
-	if err == nil {
+	n, retryable, err = r.readOnceAt(ctx, b, pos)
+	if err == nil || !retryable {
 		return
 	}
 	r.slogger().Error("read failed after reader reset", "err", err)
 
 	r.updatePieceCompletion(pos)
+	// The storage reader may hold a piece reader opened before the piece completion changed (for
+	// example chunks that have since been moved to completed storage), so open a fresh one.
+	err = r.clearStorageReader()
+	if err != nil {
+		err = fmt.Errorf("closing storage reader after completion resync: %w", err)
+		return
+	}
 
-	n, err = r.readOnceAt(ctx, b, pos)
-	if err == nil {
+	n, retryable, err = r.readOnceAt(ctx, b, pos)
+	if err == nil || !retryable {
 		return
 	}
 	r.slogger().Error("read failed after completion resync", "err", err)
 
 	if r.t.hasStorageCap() {
-		// Ensure params weren't modified (Go sux). Recurse to detect infinite loops. TODO: I expect
-		// only some errors should pass through here, this might cause us to get stuck if we retry
-		// for any error.
+		// Ensure params weren't modified (Go sux). Recurse to detect infinite loops.
 		return r.readAt(ctx, b, pos)
 	}
 
@@ -395,18 +407,46 @@ func (r *reader) updatePieceCompletion(pos int64) {
 
 // Hodor
 func (r *reader) Close() error {
+	r.mu.Lock()
 	r.t.cl.lock()
 	r.t.deleteReader(r)
 	r.t.cl.unlock()
+	r.mu.Unlock()
 	return r.clearStorageReader()
 }
 
 func (r *reader) posChanged() {
+	// ReadaheadFunc is documented to run with the Client locked. Keep that
+	// contract for dynamic readahead, while static readahead can determine an
+	// unchanged piece window without taking the Client lock.
+	if r.readaheadFunc != nil {
+		r.t.cl.lock()
+		defer r.t.cl.unlock()
+		r.posChangedClientLocked()
+		return
+	}
 	to := r.piecesUncached()
 	from := r.pieces
 	if to == from {
 		return
 	}
+	r.t.cl.lock()
+	r.applyPosChanged(from, to)
+	r.t.cl.unlock()
+}
+
+// posChangedClientLocked is used while registering a new reader, when the
+// caller already holds the Client lock.
+func (r *reader) posChangedClientLocked() {
+	to := r.piecesUncached()
+	from := r.pieces
+	if to == from {
+		return
+	}
+	r.applyPosChanged(from, to)
+}
+
+func (r *reader) applyPosChanged(from, to pieceRange) {
 	r.pieces = to
 	// log.Printf("reader pos changed %v->%v", from, to)
 	r.t.readerPosChanged(from, to)

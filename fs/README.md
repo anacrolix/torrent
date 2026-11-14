@@ -11,6 +11,15 @@ modules:
 | [anacrolix/og-torrentfs](https://github.com/anacrolix/og-torrentfs) | [anacrolix/fuse](https://github.com/anacrolix/fuse) — supports macFUSE and fuse-t on macOS, fusermount on Linux |
 | [anacrolix/hanwen-torrentfs](https://github.com/anacrolix/hanwen-torrentfs) | [hanwen/go-fuse/v2](https://github.com/hanwen/go-fuse) — uses macFUSE socket protocol on macOS (incompatible with fuse-t) |
 
+`TorrentFS.IOFS` exposes the same view as a plain `io/fs.FS`, with no FUSE
+involved.
+
+## Testing
+
+The shared suite in `tfstest/` runs here against `TorrentFS.IOFS`
+(`TestIOFSSuite`), so the traversal and read helpers are tested without FUSE.
+Backends run the same suite through a real mount with `tfstest.RunTestSuite`.
+
 ## Changing this package
 
 - **Interface changes** (`Backend`, `Unmounter`, or any exported type/function

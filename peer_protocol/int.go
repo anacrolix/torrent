@@ -36,6 +36,26 @@ func (i *Integer) Read(r io.Reader) error {
 	return err
 }
 
+// readInteger reads a big-endian Integer from a byte reader. It avoids the heap allocation that
+// Integer.Read incurs when its buffer escapes through the io.Reader interface, and matches
+// io.ReadFull's end-of-input behaviour: io.EOF if nothing was read, io.ErrUnexpectedEOF if the
+// value was truncated.
+func readInteger(r io.ByteReader, i *Integer) error {
+	var b [4]byte
+	for j := range b {
+		c, err := r.ReadByte()
+		if err != nil {
+			if err == io.EOF && j != 0 {
+				err = io.ErrUnexpectedEOF
+			}
+			return err
+		}
+		b[j] = c
+	}
+	*i = Integer(binary.BigEndian.Uint32(b[:]))
+	return nil
+}
+
 // It's perfectly fine to cast these to an int. TODO: Or is it?
 func (i Integer) Int() int {
 	return int(i)

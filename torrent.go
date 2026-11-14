@@ -2782,6 +2782,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	defer func() {
 		s.marking = false
 		t.deferPublishPieceStateChange(piece)
+		s.numVerifiesCond.Broadcast()
 	}()
 
 	if passed {

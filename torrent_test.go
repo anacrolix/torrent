@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2"
@@ -315,4 +316,80 @@ func BenchmarkMakePieces(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		tt.makePieces()
 	}
+}
+
+type blockingMarkCompleteStorage struct {
+	storage.ClientImpl
+	piece   int
+	marking chan struct{}
+	release chan struct{}
+}
+
+func (me *blockingMarkCompleteStorage) OpenTorrent(
+	ctx context.Context, info *metainfo.Info, ih metainfo.Hash,
+) (ti storage.TorrentImpl, err error) {
+	ti, err = me.ClientImpl.OpenTorrent(ctx, info, ih)
+	if err != nil {
+		return
+	}
+	piece := ti.Piece
+	ti.Piece = func(p metainfo.Piece) storage.PieceImpl {
+		return blockingMarkCompletePiece{piece(p), p.Index() == me.piece, me}
+	}
+	return
+}
+
+type blockingMarkCompletePiece struct {
+	storage.PieceImpl
+	block bool
+	s     *blockingMarkCompleteStorage
+}
+
+func (me blockingMarkCompletePiece) MarkComplete() error {
+	if me.block {
+		close(me.s.marking)
+		<-me.s.release
+	}
+	return me.PieceImpl.MarkComplete()
+}
+
+func TestVerifyDataWaitsForCompletionToBeRecorded(t *testing.T) {
+	dir := t.TempDir()
+	testutil.CreateDummyTorrentData(dir)
+	mi := testutil.GreetingMetaInfo()
+	info, err := mi.UnmarshalInfo()
+	qt.Assert(t, qt.IsNil(err))
+	st := &blockingMarkCompleteStorage{
+		ClientImpl: storage.NewFileOpts(storage.NewFileClientOpts{
+			ClientBaseDir:   dir,
+			PieceCompletion: storage.NewMapPieceCompletion(),
+			UsePartFiles:    g.Some(false),
+		}),
+		piece:   info.NumPieces() - 1,
+		marking: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	tt, _ := cl.AddTorrentOpt(AddTorrentOpts{
+		InfoHash:                 mi.HashInfoBytes(),
+		InfoBytes:                mi.InfoBytes,
+		Storage:                  st,
+		DisableInitialPieceCheck: true,
+	})
+	verified := make(chan error, 1)
+	go func() { verified <- tt.VerifyData() }()
+	<-st.marking
+	select {
+	case err := <-verified:
+		qt.Check(t, qt.IsNil(err))
+		t.Fatalf("VerifyData returned while the last piece was being marked complete, with %v of %v bytes complete",
+			tt.BytesCompleted(), tt.Length())
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(st.release)
+	qt.Assert(t, qt.IsNil(<-verified))
+	qt.Check(t, qt.Equals(tt.BytesCompleted(), tt.Length()))
+	qt.Check(t, qt.IsTrue(tt.Complete().Bool()))
 }

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"os"
 	"strconv"
 	"syscall"
 
@@ -126,16 +125,6 @@ type listenFunc func(n network, addr string, f firewallCallback, logger *slog.Lo
 
 const listenAllRetryLimit = 150
 
-func listenAll(
-	networks []network,
-	getHost func(string) string,
-	port int,
-	f firewallCallback,
-	logger *slog.Logger,
-) ([]socket, error) {
-	return listenAllWithListenFunc(networks, getHost, port, f, logger, listen)
-}
-
 func listenAllWithListenFunc(
 	networks []network,
 	getHost func(string) string,
@@ -169,18 +158,15 @@ type networkAndHost struct {
 	Host    string
 }
 
+// Reports whether a listen failed because the host can't use that network at all, so it should be
+// skipped rather than treated as fatal. The errnos are per platform, see unsupportedNetworkErrnos.
 func isUnsupportedNetworkError(err error) bool {
-	var sysErr *os.SyscallError
-	//spewCfg := spew.NewDefaultConfig()
-	//spewCfg.ContinueOnMethod = true
-	//spewCfg.Dump(err)
-	if !errors.As(err, &sysErr) {
-		return false
+	for _, errno := range unsupportedNetworkErrnos {
+		if errors.Is(err, errno) {
+			return true
+		}
 	}
-	//spewCfg.Dump(sysErr)
-	//spewCfg.Dump(sysErr.Err.Error())
-	// This might only be Linux specific.
-	return sysErr.Syscall == "bind" && sysErr.Err.Error() == "cannot assign requested address"
+	return false
 }
 
 func listenAllRetry(

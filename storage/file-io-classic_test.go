@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,6 +31,39 @@ func TestDefaultFileIoReadsEnvironmentLazily(t *testing.T) {
 	t.Cleanup(func() { _ = ioImpl.Close() })
 	_, ok = ioImpl.(*mmapFileIo)
 	qt.Assert(t, qt.IsTrue(ok))
+}
+
+func TestClassicFileReaderWritesAPrefixWithoutError(t *testing.T) {
+	name := filepath.Join(t.TempDir(), "data.bin")
+	qt.Assert(t, qt.IsNil(os.WriteFile(name, []byte("0123456789"), 0o644)))
+	f, err := os.Open(name)
+	qt.Assert(t, qt.IsNil(err))
+	defer f.Close()
+
+	var buf bytes.Buffer
+	written, err := classicFileReader{f}.writeToN(&buf, 4)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.Equals(written, int64(4)))
+	qt.Assert(t, qt.Equals(buf.String(), "0123"))
+}
+
+type twoBytesWriter struct{ bytes.Buffer }
+
+func (w *twoBytesWriter) Write(p []byte) (int, error) {
+	return w.Buffer.Write(p[:min(len(p), 2)])
+}
+
+func TestClassicFileReaderReportsARealShortWrite(t *testing.T) {
+	name := filepath.Join(t.TempDir(), "data.bin")
+	qt.Assert(t, qt.IsNil(os.WriteFile(name, []byte("0123456789"), 0o644)))
+	f, err := os.Open(name)
+	qt.Assert(t, qt.IsNil(err))
+	defer f.Close()
+
+	var w twoBytesWriter
+	written, err := classicFileReader{f}.writeToN(&w, 4)
+	qt.Assert(t, qt.ErrorIs(err, io.ErrShortWrite))
+	qt.Assert(t, qt.Equals(written, int64(2)))
 }
 
 func TestClassicFileIoRenameClosesCachedWriter(t *testing.T) {

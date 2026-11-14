@@ -49,14 +49,14 @@ func FuzzMsg(f *testing.F) {
 		var m Msg
 		err := m.UnmarshalBinary(b)
 		if err != nil {
-			t.SkipNow()
+			t.Skip(err)
 		}
 		mb, err := m.MarshalBinary()
 		if err != nil {
 			t.Fatal(err)
 		}
 		if !bytes.Equal(b, mb) {
-			t.FailNow()
+			t.Fatalf("remarshalled %x as %x", b, mb)
 		}
 	})
 }

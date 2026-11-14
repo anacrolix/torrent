@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"errors"
 	"io"
 
 	"github.com/anacrolix/missinggo/v2/panicif"
@@ -9,6 +10,9 @@ import (
 )
 
 func (t *Torrent) storageReader() storageReader {
+	if t.storage == nil {
+		return storageNotOpenReader{}
+	}
 	if t.storage.NewReader == nil {
 		return &storagePieceReader{t: t}
 	}
@@ -86,4 +90,17 @@ func (me torrentStorageImplReader) ReadAt(p []byte, off int64) (n int, err error
 
 func (me torrentStorageImplReader) Close() error {
 	return me.implReader.Close()
+}
+
+// Returned when using a Torrent's storage before it's opened, see AddTorrentOpts.DeferStorageOpen.
+var errStorageNotOpen = errors.New("torrent storage not open")
+
+type storageNotOpenReader struct{}
+
+func (storageNotOpenReader) ReadAt([]byte, int64) (int, error) {
+	return 0, errStorageNotOpen
+}
+
+func (storageNotOpenReader) Close() error {
+	return nil
 }

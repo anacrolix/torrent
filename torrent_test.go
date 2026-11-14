@@ -247,10 +247,72 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	tt.assertAllPiecesRelativeAvailabilityZero()
 }
 
+// A peer can go from having all pieces, to none, to some. Its availability must still be fully
+// removed when the conn goes away.
+func TestRelativeAvailabilityHaveAllHaveNoneHave(t *testing.T) {
+	cl := newTestingClient(t)
+	mi, _ := testutil.Greeting.Generate(5)
+	tt := cl.newTorrentOpt(AddTorrentOpts{InfoHash: mi.HashInfoBytes()})
+	tt.setChunkSize(2)
+	g.MakeMapIfNil(&tt.conns)
+	qt.Assert(t, qt.IsNil(tt.SetInfoBytes(mi.InfoBytes)))
+	pc := PeerConn{}
+	pc.t = tt
+	pc.legacyPeerImpl = &pc
+	pc.initRequestState()
+	g.InitNew(&pc.callbacks)
+	tt.cl.lock()
+	tt.conns[&pc] = struct{}{}
+	qt.Assert(t, qt.IsNil(pc.onPeerSentHaveAll()))
+	qt.Assert(t, qt.IsNil(pc.peerSentHaveNone()))
+	qt.Check(t, qt.HasLen(tt.connsWithAllPieces, 0))
+	qt.Assert(t, qt.IsNil(pc.peerSentHave(0)))
+	qt.Check(t, qt.Equals(tt.piece(0).availability(), 1))
+	qt.Check(t, qt.Equals(tt.piece(1).availability(), 0))
+	tt.cl.unlock()
+	// Dropping asserts all relative availability returns to zero.
+	tt.Drop()
+}
+
 func TestAppendMissingStringsSkipsRepeats(t *testing.T) {
 	qt.Check(t, qt.DeepEquals(
 		appendMissingStrings(
 			[]string{"http://existing"},
 			[]string{"http://a", "http://b", "http://a", "http://existing"}),
 		[]string{"http://existing", "http://a", "http://b"}))
+}
+
+// A torrent with many leading empty files before a data file: a valid shape (empty files are
+// common as padding/placeholders) that made makePieces rescan the empty files for every piece.
+func benchmarkMakePiecesInfo(n int) *metainfo.Info {
+	const pieceLength = 1 << 14
+	files := make([]metainfo.FileInfo, 0, n+1)
+	for i := 0; i < n; i++ {
+		files = append(files, metainfo.FileInfo{Length: 0, Path: []string{"pad", fmt.Sprintf("%d", i)}})
+	}
+	files = append(files, metainfo.FileInfo{Length: int64(n) * pieceLength, Path: []string{"data"}})
+	return &metainfo.Info{
+		Name:        "x",
+		PieceLength: pieceLength,
+		Pieces:      make([]byte, 20*n),
+		Files:       files,
+	}
+}
+
+func BenchmarkMakePieces(b *testing.B) {
+	cl, err := NewClient(TestingConfig(b))
+	qt.Assert(b, qt.IsNil(err))
+	defer cl.Close()
+	info := benchmarkMakePiecesInfo(20000)
+	tt := cl.newTorrentForTesting()
+	cl.lock()
+	defer cl.unlock()
+	tt.info = info
+	tt.fileSegmentsIndex.Set(info.FileSegmentsIndex())
+	tt.initFiles()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		tt.makePieces()
+	}
 }

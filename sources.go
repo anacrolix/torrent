@@ -58,8 +58,14 @@ func (t *Torrent) trySource(source string) (retry g.Option[time.Duration], err e
 	if ctx.Err() != nil {
 		return
 	}
+	reqCtx := ctx
+	if timeout := t.cl.config.MetainfoSourcesTimeout; timeout > 0 {
+		var cancel context.CancelFunc
+		reqCtx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
 	var mi metainfo.MetaInfo
-	mi, err = getTorrentSource(ctx, source, t.cl.config.MetainfoSourcesClient)
+	mi, err = getTorrentSource(reqCtx, source, t.cl.config.MetainfoSourcesClient)
 	if ctx.Err() != nil {
 		return
 	}

@@ -21,6 +21,10 @@ jobs:
   golangci:
     name: lint
     runs-on: ubuntu-latest
+    # possum links its static library with -l:libpossum.a, which newer Go toolchains reject unless
+    # it is allowed explicitly. The lint typecheck processes that cgo directive too.
+    env:
+      CGO_LDFLAGS_ALLOW: '-l:libpossum\.a'
     steps:
       - uses: actions/checkout@v5
         with:

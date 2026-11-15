@@ -37,7 +37,7 @@ import (
 	"github.com/anacrolix/torrent/internal/extracmp"
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/webtorrent"
-	"github.com/cespare/xxhash"
+	"github.com/cespare/xxhash/v2"
 	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
 	"github.com/pion/webrtc/v4"
@@ -1580,10 +1580,13 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 	var salt [8]byte
 	rand.Read(salt[:])
 	t.smartBanCache.Hash = func(b []byte) uint64 {
-		h := xxhash.New()
-		h.Write(salt[:])
-		h.Write(b)
-		return h.Sum64()
+		// Keep the digest on the stack to avoid a heap allocation per recorded and checked block on
+		// the receive hot path; xxhash.New would allocate one.
+		var d xxhash.Digest
+		d.Reset()
+		d.Write(salt[:])
+		d.Write(b)
+		return d.Sum64()
 	}
 	t.smartBanCache.Init()
 	t.networkingEnabled.Set()

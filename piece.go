@@ -340,7 +340,7 @@ func (p Piece) VerifyDataContext(ctx context.Context) error {
 	//log.Printf("target: %d", target)
 	for {
 		locker.RLock()
-		done := p.state().numVerifies >= target && !p.state().marking
+		done := p.state().numVerifies >= target
 		//log.Printf("got %d verifies", p.state().numVerifies)
 		numVerifiesChanged := p.state().numVerifiesCond.Signaled()
 		locker.RUnlock()
@@ -552,8 +552,9 @@ func (p Piece) numFiles() int {
 func (p Piece) nextNovelHashCount() (ret pieceVerifyCount) {
 	s := p.state()
 	ret = s.numVerifies + 1
-	if s.hashing {
-		// The next novel hash will be the one after the current one.
+	if s.hashing || s.marking {
+		// The next novel hash will be the one after the current one. A hash that is marking has
+		// finished hashing but hasn't been counted in numVerifies yet.
 		ret++
 	}
 	return

@@ -2758,15 +2758,22 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	p := t.piece(piece)
 	s := p.state()
-	s.numVerifies++
-	s.numVerifiesCond.Broadcast()
-	t.cl.event.Broadcast()
+	firstHash := s.numVerifies == 0
+	// The verify is only counted once marking has finished, so anything waiting on numVerifies
+	// (such as VerifyData) observes the completion recorded in storage. While marking is set,
+	// nextNovelHashCount accounts for the in-flight verify. The client lock is held whenever this
+	// runs, including on every return path.
+	defer func() {
+		s.numVerifies++
+		s.numVerifiesCond.Broadcast()
+		t.cl.event.Broadcast()
+	}()
 	if t.closed.IsSet() {
 		return
 	}
 
 	// Don't score the first time a piece is hashed, it could be an initial check.
-	if t.initialPieceCheckDisabled || s.numVerifies != 1 {
+	if t.initialPieceCheckDisabled || !firstHash {
 		if passed {
 			pieceHashedCorrect.Add(1)
 		} else {
@@ -2782,7 +2789,6 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	defer func() {
 		s.marking = false
 		t.deferPublishPieceStateChange(piece)
-		s.numVerifiesCond.Broadcast()
 	}()
 
 	if passed {
@@ -3066,8 +3072,9 @@ func (t *Torrent) queueInitialPieceCheck(i pieceIndex) {
 	if p.numVerifies != 0 {
 		return
 	}
-	// If a hash is already occurring we've satisfied the initial piece check condition.
-	if p.hashing {
+	// If a hash is already occurring (or its result is being recorded) we've satisfied the initial
+	// piece check condition.
+	if p.hashing || p.marking {
 		return
 	}
 	if p.storageCompletionOk {

@@ -354,6 +354,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		}
 		return t.MergeSpec(spec)
 	}
+	cc.MetainfoSourcesTimeout = time.Minute
 	return cc
 }
 
@@ -386,4 +387,8 @@ type MetainfoSourcesConfig struct {
 	// is provided to prevent a race as the fetcher for the source was bound to it. Returning an
 	// error will kill the respective sourcer.
 	MetainfoSourcesMerger func(t *Torrent, info *metainfo.MetaInfo) error
+	// Timeout for a single attempt to fetch metainfo from a source over HTTP. Without it a source
+	// that accepts the connection but never responds holds the attempt open until the torrent is
+	// dropped. Zero disables the timeout.
+	MetainfoSourcesTimeout time.Duration
 }

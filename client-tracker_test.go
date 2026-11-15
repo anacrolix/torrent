@@ -339,3 +339,64 @@ func TestRemovedWebsocketTrackerIsReleased(t *testing.T) {
 	cl.websocketTrackers.mu.Unlock()
 	qt.Check(t, qt.IsFalse(stillRegistered))
 }
+
+func TestRetainedWebsocketTrackerIsNotReleased(t *testing.T) {
+	s, trackerURL := startTestTracker()
+	defer s.Close()
+
+	cfg := TestingConfig(t)
+	cfg.DisableTrackers = false
+	cl, err := NewClient(cfg)
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+
+	dir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(dir)
+	mi.AnnounceList = [][]string{{trackerURL}}
+	to, err := cl.AddTorrent(mi)
+	qt.Assert(t, qt.IsNil(err))
+	defer to.Drop()
+
+	cl.lock()
+	var key torrentTrackerAnnouncerKey
+	var original websocketTrackerStatus
+	found := false
+	for k, announcer := range to.trackerAnnouncers {
+		if status, ok := announcer.(websocketTrackerStatus); ok && status.url.String() == trackerURL {
+			key, original, found = k, status, true
+			break
+		}
+	}
+	cl.unlock()
+	qt.Assert(t, qt.IsTrue(found))
+
+	cl.websocketTrackers.mu.Lock()
+	originalClient, registered := cl.websocketTrackers.clients[trackerURL]
+	originalRefs := 0
+	if registered {
+		originalRefs = originalClient.refCount
+	}
+	cl.websocketTrackers.mu.Unlock()
+	qt.Assert(t, qt.IsTrue(registered))
+
+	to.ModifyTrackers([][]string{{trackerURL}})
+
+	cl.lock()
+	retained, exists := to.trackerAnnouncers[key]
+	cl.unlock()
+	qt.Assert(t, qt.IsTrue(exists))
+	status, ok := retained.(websocketTrackerStatus)
+	qt.Assert(t, qt.IsTrue(ok))
+	qt.Check(t, qt.Equals(status.tc, original.tc))
+
+	cl.websocketTrackers.mu.Lock()
+	client, registered := cl.websocketTrackers.clients[trackerURL]
+	refs := 0
+	if registered {
+		refs = client.refCount
+	}
+	cl.websocketTrackers.mu.Unlock()
+	qt.Assert(t, qt.IsTrue(registered))
+	qt.Check(t, qt.Equals(client, originalClient))
+	qt.Check(t, qt.Equals(refs, originalRefs))
+}

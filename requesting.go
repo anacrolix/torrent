@@ -28,7 +28,6 @@ type (
 )
 
 func (t *Torrent) requestStrategyPieceOrderState(i int) requestStrategy.PieceRequestOrderState {
-	t.slogger().Debug("requestStrategyPieceOrderState", "pieceIndex", i)
 	return requestStrategy.PieceRequestOrderState{
 		Priority:     t.piece(i).purePriority(),
 		Partial:      t.piecePartiallyDownloaded(i),
@@ -242,11 +241,16 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 	if t.dataDownloadDisallowed.Bool() {
 		return
 	}
+	if t.storage == nil {
+		return
+	}
 	requestHeap := desiredPeerRequests{
 		peer:           p,
 		pieceStates:    &t.requestPieceStates,
 		requestIndexes: t.requestIndexes,
 	}
+	candidateLimit := p.requestCandidateLimit()
+	var stealCandidates []RequestIndex
 	requestHeap.pieceStates.Clear()
 	requestHeap.pieceStatesGen = t.requestPieceStates.gen
 	t.logPieceRequestOrder()
@@ -282,14 +286,49 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 					// Can't re-request while awaiting acknowledgement.
 					return
 				}
-				requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
+				requestingPeer := t.requestingPeer(r)
+				if requestingPeer == nil || requestingPeer == p {
+					if len(requestHeap.requestIndexes) < candidateLimit {
+						requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
+					}
+				} else if len(stealCandidates) < candidateLimit {
+					if stealCandidates == nil {
+						stealCandidates = make([]RequestIndex, 0, candidateLimit)
+					}
+					stealCandidates = append(stealCandidates, r)
+				}
 			})
-			return true
+			return len(requestHeap.requestIndexes) < candidateLimit
 		},
+	)
+	requestHeap.requestIndexes = mergeRequestCandidates(
+		requestHeap.requestIndexes,
+		stealCandidates,
+		candidateLimit,
 	)
 	t.assertPendingRequests()
 	desired.Requests = requestHeap
 	return
+}
+
+func mergeRequestCandidates(primary, steal []RequestIndex, limit int) []RequestIndex {
+	remaining := max(0, limit-len(primary))
+	return append(primary, steal[:min(len(steal), remaining)]...)
+}
+
+func (p *PeerConn) requestCandidateLimit() int {
+	// The piece order is already sorted by urgency, partial state,
+	// availability and piece index. Keep enough alternatives to refill the
+	// peer pipeline without rebuilding a heap containing the entire readahead
+	// window after every received 16 KiB chunk.
+	return requestCandidateLimitFor(
+		int(p.t.chunksPerRegularPiece()),
+		int(p.nominalMaxRequests()),
+	)
+}
+
+func requestCandidateLimitFor(chunksPerPiece, nominalMaxRequests int) int {
+	return max(chunksPerPiece*2, nominalMaxRequests*4)
 }
 
 // Update requests if there's a reason assigned.
@@ -419,6 +458,12 @@ func (p *PeerConn) applyRequestState(next desiredRequestState) {
 			if diff > 1 || (diff == 1 && !p.lastUsefulChunkReceived.After(existing.lastUsefulChunkReceived)) {
 				continue
 			}
+			// Don't steal a request the current holder has not had time to answer. The tests
+			// above compare queue depths, which say nothing about whether the block is already
+			// on the wire; see ClientConfig.StealRequestGrace.
+			if !t.stealRequestGraceElapsed(req) {
+				continue
+			}
 			t.cancelRequest(req)
 		}
 		more = p.mustRequest(req)
@@ -439,6 +484,21 @@ func (p *PeerConn) applyRequestState(next desiredRequestState) {
 	// 	"requests %v->%v (peak %v->%v) reason %q (peer %v)",
 	// 	originalRequestCount, current.Requests.GetCardinality(), p.peakRequests, newPeakRequests, p.needRequestUpdate, p)
 	p.peakRequests = newPeakRequests
+}
+
+// stealRequestGraceElapsed reports whether req has been outstanding with its current holder
+// long enough for another peer to be allowed to take it. Always true when
+// ClientConfig.StealRequestGrace is unset, which is the historical behaviour.
+//
+// The clock is requestState.when, which PeerConn.request rewrites on every issue, so the
+// grace is measured against the current holder rather than the request's total lifetime.
+func (t *Torrent) stealRequestGraceElapsed(req RequestIndex) bool {
+	grace := t.cl.config.StealRequestGrace
+	if grace <= 0 {
+		return true
+	}
+	// The caller has already resolved a requesting peer for req, so the state is present.
+	return time.Since(t.requestState[req].when) >= grace
 }
 
 // This could be set to 10s to match the unchoke/request update interval recommended by some

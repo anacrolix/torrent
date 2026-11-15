@@ -22,6 +22,7 @@ type fileTorrentImpl struct {
 	segmentLocater    segments.Index
 	infoHash          metainfo.Hash
 	io                fileIo
+	checkpoint        *torrentCheckpointBuffer
 	// Save memory by pointing to the other data.
 	client *fileClientImpl
 }
@@ -116,7 +117,32 @@ func (me *fileTorrentImpl) Piece(p metainfo.Piece) PieceImpl {
 }
 
 func (me *fileTorrentImpl) Close() error {
-	return me.io.Close()
+	var err error
+	if me.checkpoint != nil {
+		err = errors.Join(err, me.checkpoint.close())
+	}
+	err = errors.Join(err, me.io.Close())
+	return err
+}
+
+func (me *fileTorrentImpl) CloseWriters() error {
+	closedPaths, remaining, err := me.io.closeWriters()
+	me.logger().Debug("closing writer cache after torrent completion", "count", len(closedPaths))
+	for _, path := range closedPaths {
+		me.logger().Debug("closed cached writer after torrent completion", "path", path)
+	}
+	me.logger().Debug(
+		"writer cache close result after torrent completion",
+		"closedCount",
+		len(closedPaths),
+		"remainingCount",
+		remaining,
+		"cleared",
+		remaining == 0,
+		"err",
+		err,
+	)
+	return err
 }
 
 func (me *fileTorrentImpl) file(index int) file {

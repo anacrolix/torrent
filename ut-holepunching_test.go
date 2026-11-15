@@ -119,6 +119,9 @@ func TestHolepunchConnect(t *testing.T) {
 	}, true)
 	llg.cl.unlock()
 	wg.Wait()
+	// The reader can finish using data from the leecher before the leecher-leecher has accepted
+	// the seeder's holepunched connection and updated its stats, so wait for that.
+	waitForHolepunchedConn(t, leecherLeecher)
 
 	qt.Check(t, qt.Not(qt.HasLen(seeder.dialedSuccessfullyAfterHolepunchConnect, 0)))
 	qt.Check(t, qt.Not(qt.HasLen(leecherLeecher.probablyOnlyConnectedDueToHolepunch, 0)))
@@ -127,6 +130,19 @@ func TestHolepunchConnect(t *testing.T) {
 	qt.Check(t, qt.Not(qt.Equals(llClientStats.NumPeersUndialableWithoutHolepunch, 0)))
 	qt.Check(t, qt.Not(qt.Equals(llClientStats.NumPeersUndialableWithoutHolepunchDialedAfterHolepunchConnect, 0)))
 	qt.Check(t, qt.Not(qt.Equals(llClientStats.NumPeersProbablyOnlyConnectedDueToHolepunch, 0)))
+}
+
+func waitForHolepunchedConn(t *testing.T, cl *Client) {
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		cl.rLock()
+		n := len(cl.probablyOnlyConnectedDueToHolepunch)
+		cl.rUnlock()
+		if n != 0 || time.Now().After(deadline) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func waitForConns(t *Torrent) {
@@ -342,7 +358,6 @@ func TestUtpSimultaneousOpen(t *testing.T) {
 		if errors.Is(err, errMsgNotReceived) {
 			return
 		}
-		skipGoUtpDialIssue(t, err)
 		t.Log(err)
 		time.Sleep(time.Second)
 	}
@@ -352,12 +367,6 @@ func TestUtpSimultaneousOpen(t *testing.T) {
 func writeAndReadMsg(r, w net.Conn) error {
 	go writeMsg(w)
 	return readMsg(r)
-}
-
-func skipGoUtpDialIssue(t *testing.T, err error) {
-	if err.Error() == "timed out waiting for ack" {
-		t.Skip("anacrolix go utp implementation has issues. Use anacrolix/go-libutp by enabling CGO.")
-	}
 }
 
 // Show that dialling one socket and accepting from the other results in them having ends of the
@@ -392,7 +401,6 @@ func TestUtpDirectDialMsg(t *testing.T) {
 		if err == nil {
 			return
 		}
-		skipGoUtpDialIssue(t, err)
 		t.Log(err)
 		time.Sleep(time.Second)
 	}

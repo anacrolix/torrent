@@ -32,6 +32,7 @@ type TorrentImpl struct {
 	// Preferred over PieceWithHash. Called with the piece hash if it's available.
 	PieceWithHash func(p metainfo.Piece, pieceHash g.Option[[]byte]) PieceImpl
 	Close         func() error
+	CloseWriters  func() error
 	// Storages that share the same space, will provide equal pointers. The function is called once
 	// to determine the storage for torrents sharing the same function pointer, and mutated in
 	// place.

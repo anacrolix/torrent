@@ -18,11 +18,12 @@ type fileReader interface {
 
 // This gets clobbered by a hybrid mmap implementation if mmap is available.
 var defaultFileIo = func() fileIo {
-	return classicFileIo{}
+	return newClassicFileIo()
 }
 
 type fileIo interface {
 	Close() error
+	closeWriters() (closedPaths []string, remaining int, err error)
 
 	openForSharedRead(name string) (sharableReader, error)
 	openForRead(name string) (fileReader, error)

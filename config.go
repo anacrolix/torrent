@@ -38,6 +38,41 @@ type ClientTrackerConfig struct {
 	// implementation, or deprecate in favour of a Client DNS resolver. It was done manually before
 	// calling the Announce.Do wrapper.
 	LookupTrackerIp func(*url.URL) ([]net.IP, error)
+	// How long to wait before retrying an announce that failed. Each further consecutive failure
+	// doubles the wait, up to FailedAnnounceMaxInterval. A tracker that has gone away is retried
+	// forever, so without a growing interval every torrent keeps knocking at this rate.
+	FailedAnnounceMinInterval time.Duration
+	// The cap on the doubling described above. Set it to FailedAnnounceMinInterval to retry at a
+	// constant interval.
+	FailedAnnounceMaxInterval time.Duration
+}
+
+const (
+	defaultFailedAnnounceMinInterval = time.Minute
+	defaultFailedAnnounceMaxInterval = 30 * time.Minute
+)
+
+// failedAnnounceInterval is how long to wait after an announce that failed, given how many
+// consecutive failures there have been (1 for the first).
+func (cfg *ClientTrackerConfig) failedAnnounceInterval(consecutiveFailures int) time.Duration {
+	d := cfg.FailedAnnounceMinInterval
+	if d <= 0 {
+		d = defaultFailedAnnounceMinInterval
+	}
+	maxInterval := cfg.FailedAnnounceMaxInterval
+	if maxInterval <= 0 {
+		maxInterval = defaultFailedAnnounceMaxInterval
+	}
+	if maxInterval < d {
+		maxInterval = d
+	}
+	for i := 1; i < consecutiveFailures; i++ {
+		d *= 2
+		if d >= maxInterval {
+			return maxInterval
+		}
+	}
+	return d
 }
 
 type ClientDhtConfig struct {
@@ -101,6 +136,26 @@ type ClientConfig struct {
 	DownloadRateLimiter *rate.Limiter
 	// Maximum unverified bytes across all torrents. Not used if zero.
 	MaxUnverifiedBytes int64
+	// Minimum age an outstanding request must reach before another peer is allowed to steal it.
+	// Zero or negative disables the check, which is the historical behaviour.
+	//
+	// Stealing (see PeerConn.applyRequestState) hands a request to a peer that looks better, and
+	// its trigger is a one-request difference in queue depth. Across a large peer set that
+	// difference is noise: queue depths move by one every time a chunk lands, so without a floor
+	// the same request can migrate several times inside a single round-trip. Each migration is a
+	// Cancel on the wire, and a Cancel only prevents a transfer if it reaches the peer before the
+	// peer has served the request. Otherwise the block arrives regardless and is thrown away as
+	// ConnStats.ChunksReadWasted, while the stealer requests the same block again.
+	//
+	// A request younger than a round-trip has not yet had the opportunity to be answered, so its
+	// holder has not been shown to be failing and there is no information in moving it. Requiring
+	// an age gives each holder one uninterrupted attempt, and because the age is reset every time
+	// the request is issued (PeerConn.request), it also caps how often a single request can move.
+	//
+	// Latency is what makes this matter: the data already committed to the wire when a Cancel is
+	// sent scales with round-trip time, so on a LAN the cost of a steal is near zero and on a
+	// tunnelled path it is not.
+	StealRequestGrace time.Duration
 
 	// User-provided Client peer ID. If not present, one is generated automatically.
 	PeerID string
@@ -110,7 +165,11 @@ type ClientConfig struct {
 	DisableTCP bool `long:"disable-tcp"`
 	// Called to instantiate storage for each added torrent. Builtin backends
 	// are in the storage package. If not set, the "file" implementation is
-	// used (and Closed when the Client is Closed).
+	// used (and Closed when the Client is Closed). A DefaultStorage provided
+	// here is owned by the caller and is not Closed by the Client: if it
+	// implements storage.ClientImplCloser (as the builtin backends do, e.g. to
+	// release a piece completion database), Close it after Client.Close
+	// returns, and also if NewClient fails.
 	DefaultStorage storage.ClientImpl
 
 	HeaderObfuscationPolicy HeaderObfuscationPolicy
@@ -199,7 +258,12 @@ type ClientConfig struct {
 	// bit of a special case, since a peer could also be useless if they're just not interested, or
 	// we don't intend to obtain all of a torrent's data.
 	DropMutuallyCompletePeers bool
-	// Use dialers to obtain connections to regular peers.
+	// Whether to use the Client's own listen sockets (the "default dialers") to make outgoing
+	// connections to regular peers. This is enabled by default. Setting it to false disables
+	// these default dialers, so that outgoing peer connections are only made through any
+	// additional Dialer added by other means (see Client.AddDialer), such as a SOCKS5 proxy
+	// dialer. This has no effect on incoming connections, which are controlled separately by
+	// AcceptPeerConnections.
 	DialForPeerConns bool
 	// Whether to accept peer connections at all.
 	AcceptPeerConnections bool
@@ -275,6 +339,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		DialForPeerConns:       true,
 		AcceptPeerConnections:  true,
 		MaxUnverifiedBytes:     64 << 20,
+		StealRequestGrace:      initDurationFromEnv(stealRequestGraceEnvKey, defaultStealRequestGrace),
 		DialRateLimiter:        rate.NewLimiter(10, 10),
 		PieceHashersPerTorrent: 2,
 	}
@@ -283,8 +348,13 @@ func NewDefaultClientConfig() *ClientConfig {
 	}
 	cc.PeriodicallyAnnounceTorrentsToDht = true
 	cc.MetainfoSourcesMerger = func(t *Torrent, info *metainfo.MetaInfo) error {
-		return t.MergeSpec(TorrentSpecFromMetaInfo(info))
+		spec, err := TorrentSpecFromMetaInfoErr(info)
+		if err != nil {
+			return err
+		}
+		return t.MergeSpec(spec)
 	}
+	cc.MetainfoSourcesTimeout = time.Minute
 	return cc
 }
 
@@ -317,4 +387,8 @@ type MetainfoSourcesConfig struct {
 	// is provided to prevent a race as the fetcher for the source was bound to it. Returning an
 	// error will kill the respective sourcer.
 	MetainfoSourcesMerger func(t *Torrent, info *metainfo.MetaInfo) error
+	// Timeout for a single attempt to fetch metainfo from a source over HTTP. Without it a source
+	// that accepts the connection but never responds holds the attempt open until the torrent is
+	// dropped. Zero disables the timeout.
+	MetainfoSourcesTimeout time.Duration
 }

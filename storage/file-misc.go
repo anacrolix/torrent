@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/torrent/metainfo"
@@ -90,6 +91,8 @@ type fileExtra struct {
 	safeOsPath string
 	// Utility value to help the race detector find issues for us.
 	race byte
+	// A piece of the file that was incomplete when last checked. See allFilePiecesComplete.
+	incompleteHint atomic.Int64
 }
 
 func (f *fileExtra) partFilePath() string {

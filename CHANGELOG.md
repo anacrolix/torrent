@@ -2,23 +2,207 @@
 
 All notable changes to [anacrolix/torrent](https://github.com/anacrolix/torrent) are documented in this file.
 
-## [Unreleased]
+## [v1.62.0] - 2026-11-10
 
+Large release with **security fixes**, **big memory and throughput improvements for pieces and peer
+messages**, BEP 14 and BEP 27 support, a completed BEP 6, SOCKS5 peer dialing, and migrations to
+`log/slog` and roaring v2.
+
+**Security:** fixes [GHSA-2wrx-84qj-4pcg](https://github.com/anacrolix/torrent/security/advisories/GHSA-2wrx-84qj-4pcg)
+(unbounded bencode recursion), [GHSA-4mxg-hpvf-2386](https://github.com/anacrolix/torrent/security/advisories/GHSA-4mxg-hpvf-2386)
+(unverified metadata for btih magnets), and remote crashes and resource exhaustion triggered by
+malicious peers or crafted torrents (#1169, #1171, #1186, #1188, #1196). It also upgrades pion/dtls to fix CVE-2026-26014 (#1178). All
+users should upgrade.
+
+**Breaking API changes:**
+
+- `Torrent.Piece` returns a `Piece` value instead of `*Piece`
+- Roaring bitmaps are now `github.com/RoaringBitmap/roaring/v2` (`PeerConn.PeerPieces`,
+  `webseed.Client.Pieces`, `typed-roaring`)
+- `storage.PieceCompletionGetSetter.Set` takes `g.Option[bool]` instead of `bool`
+- `peer_protocol.Decoder.Pool` is a `ChunkBufferPool` instead of `*sync.Pool`
+- `tracker/http.Peer.FromDictInterface` returns an `error`
+- `fs.TorrentFS.Root` and the `fs/cmd/torrentfs` package are removed
+- `webtorrent.TrackerClient.Dialer` is replaced by `HTTPClient *http.Client`, as the WebSocket
+  library moved from gorilla/websocket to coder/websocket (#1177)
+- Go 1.26 is required
+
+Changes:
+
+- Reject info bytes that don't match a v1-only infohash, so peers can't serve forged metadata for
+  btih magnets and `AddTorrentInfoHash` torrents (GHSA-4mxg-hpvf-2386, #1158, `f317bd86`)
+- Reject out-of-range ut_metadata piece indexes, which let any peer crash the client (#1169,
+  `40a8d413`)
+- Bound peer-supplied fields that could crash or exhaust the client: `metadata_size` truncation in
+  the extended handshake, Piece messages that don't match the request, and hash requests before
+  the info is known no longer panic. Peer-keyed expvar maps are capped, ut_holepunch connects
+  respect half-open limits, and tracker announce intervals are clamped to at least one minute
+  (#1171, `4b30f293`)
+- `metainfo`: Reject malformed info dicts that crash or exhaust the client: negative file or piece
+  lengths, directories with file properties, v2 piece lengths that aren't a power of two of at
+  least 16 KiB, v2 file trees implying more than 2^24 pieces, and hybrid infos whose v1 and v2
+  piece counts disagree (#1186, `2f79175b`)
+- `bencode`: Don't allocate a string's claimed length before reading it, so a short input can't
+  force a huge allocation (#1188, `34fa3599`)
+- Don't crash when a magnet source returns info that doesn't decode (#1196, `ffb17a05`)
+- Don't panic getting the info of a v2 torrent from peers, when pieces don't have hashes yet
+  (#1195, `72e4c5fa`)
+- Don't panic dropping a torrent whose info failed to set (#1134, `e241a2fb`)
+- `tracker/shared`: `AnnounceEvent.MarshalText` returns an error for out-of-range values instead of
+  panicking, and `MarshalJSON` now matches `UnmarshalJSON` and the wire format (#1199, `bc94681c`)
+- Add fuzz targets for network-facing parsers, ready for OSS-Fuzz (`2e78e27d`, `d09c409f`)
+- Upgrade `pion/dtls/v3` to v3.0.11 for CVE-2026-26014 (GHSA-9f3f-wv7r-qc8r), random AES-GCM
+  nonces that could leak the authentication key (#1153, #1178, `adafce05`)
 - `bencode`: Limit dict/list nesting depth to `Decoder.MaxDepth` (default 64). Deeper input is
   rejected with a `SyntaxError` instead of recursing unboundedly, which previously could crash the
   process with a fatal stack overflow and made deeply nested v2 file trees decode quadratically.
   `Decoder.MaxStrLen` is now also enforced on values decoded for `Unmarshaler` fields
+  (GHSA-2wrx-84qj-4pcg, `76452a2c`)
 - Get uTP from `anacrolix/go-utp`, where the implementation-selecting `utp` package moved from
   `go-libutp`. The pure Go implementation can be selected with the `purego_utp` build tag, as well
-  as with `purego` or `CGO_ENABLED=0` as before
-- Add retry limit to `listenAll` to prevent infinite loops
-- Retry any subsequent listen failure on dynamic port
-- Error trying to open `mmapFileIo` after close
-- Check `Torrent.haveInfo` when writing announce record status progress
-- Use a heap in `Client.startPieceHashers`
-- Batch torrent input updates by doing them in the dispatcher
-- Close shared readers when storage is closed
-- Use `InsteadOf` and various other indexed improvements to manage announce overdue
+  as with `purego` or `CGO_ENABLED=0` as before (`2287d597`, `5561014e`)
+- Validate v2 file tree pieces roots before torrent setup, so a crafted torrent with a short or
+  missing pieces root no longer panics (`7218a979`)
+- `tracker/http`: Limit the size of tracker response bodies (#1143, `92ad5149`)
+- `tracker/http`: Handle malformed non-compact peer list entries without panicking (#1055, `d78e8d7c`)
+- Reject unsolicited BEP 52 hashes from peers (#1054, `42bf4100`)
+- Skip address families the host doesn't support when listening, instead of failing on hosts
+  without IPv6 (#1157, `e119fbe2`)
+- Match unsupported-network listen errors by errno per platform, including Winsock errors on Windows
+  (#1159, `6e2c965f`)
+- Decode buffered peer messages without releasing the client lock, raising `Have` throughput under
+  contention by about 40% (#1166, `84db35a8`)
+- Remove a debug log on the per-chunk hot path, raising piece throughput by 20-35% (#1170,
+  `afd39ce2`)
+- Replace gorilla/websocket with coder/websocket for the WebTorrent tracker client (#1177, `bb94c1ba`)
+- Reuse chunk pool buffers for served peer request data, cutting allocations per request from
+  ~17 KB to ~0.9 KB (#1082, `95af5dee`)
+- `storage`: Avoid O(n^2) completion lookups when marking pieces complete (#1155, `9f60b788`)
+- Don't retry reader wait errors on capped storage, which could recurse until the stack overflowed
+  when a read's context ended (#1168, `8e67d734`)
+- Fix a memory leak where dropped torrents stayed reachable through deferred unlock actions and
+  were never garbage collected (#930, #1129, `44941e96`, thanks @istancescu)
+- `tracker/udp`: Fix a client deadlock on a connect error response (#1148, `5cba0673`)
+- Fix a deadlock where verifying a piece of a closed torrent kept the client lock, blocking
+  `Client.Close` forever (#1119, #1145, `564da3c1`)
+- Fix a race reading the tracker clients map after releasing the client lock (#1059, #1128, #1200,
+  `ef9bed06`)
+- Release peer conn timer functions on stop, so closed conns and dropped torrents can be garbage
+  collected promptly (#1183, `2d6ca78b`)
+- Announce torrent changes, such as a dropped torrent's Stopped event, without waiting for the
+  next regular announce (#1122, #1123, `18376fbe`)
+- Reduce lock contention for streaming requests (#1113, `c7ede03b`), and stop the request order
+  scan at the first unwanted piece, which stalled readers on large torrents (#1124, `131d9597`)
+- `storage`: Batch file flushes and piece completion checkpoints, at one second or 128 MiB, instead
+  of flushing per completed piece (#1103, `b72bd575`)
+- `storage`: Don't report the hashing read's length limit as a short write (#1132, `d38ace8d`)
+- `storage`: Document that a provided `DefaultStorage` is not closed by the `Client` (#1125,
+  `0c3111e3`)
+- Remove a leftover log line for every HTTP scrape URL (#1141, `2e71a871`)
+- WebTorrent: serialize announce events using wire values (#1185, `1876c31d`), encode empty offers
+  as JSON arrays (#1192, `1d1ce4a3`), and clean up closed WebRTC peer connections (#1191,
+  `67aa7ca7`)
+- Test `Reader.Read` on a dropped torrent with capped storage (#1181, `7d22f0ea`)
+- Snapshot the infohash for outgoing handshakes, so a hybrid torrent's canonical infohash changing
+  mid-handshake can't make the handshake disagree with itself (#1179, `82f2d6f4`)
+- Write buffered chunks in batches per client lock release (#1172, `009b3aac`)
+- `metainfo`: `Load` ignores a malformed `announce-list` and falls back to `announce` (#910, #1151,
+  `2611fbfc`, thanks @asmanya)
+- Add SOCKS5 proxy support for outgoing peer connections with `dialer.Socks5` (#1075, `3c926d06`,
+  `4ad31c51`)
+- Add `ClientConfig.ListenPacket` to build the uTP/DHT socket on a caller-provided
+  `net.PacketConn` (#1063, `8c67afb7`)
+- Add `AddTorrentOpts.DeferStorageOpen` and `Torrent.OpenStorage`, so a magnet's storage isn't
+  opened (creating, truncating or renaming files) until the caller has inspected the info (#1182,
+  `e93a3fc0`)
+- Add `Torrent.RemoveWebSeeds` (#1131, `179fb0a5`)
+- Add `ClientConfig.AnonymousMode` (`f1b61cc5`)
+- Add `ClientConfig.StealRequestGrace`, a minimum request age before stealing a request from
+  another peer (#1095, `23d8abf9`)
+- Implement BEP 27 private torrents (#1053, `eda2204d`)
+- Complete the BEP 6 Fast Extension: send the Allowed Fast set and record received ones
+  (#1052, `0f10f50b`)
+- Add BEP 14 local peer discovery (#1047, `b441f151`, `b923477f`)
+- Back off exponentially from trackers that keep failing, capped at 30 minutes and configurable
+  (#1116, `4aea1d64`)
+- Skip tracker URLs repeated within an added tier (#1099, `b682e476`)
+- Don't call announce callbacks with `TrackerClient.mu` held (`a1cc8c01`)
+- Announce dispatcher: don't record announce keys that couldn't be created (#1079, `7e8d4096`)
+- Tracker announcer: don't pend updates when trackers are disabled (#1076, `b5a78686`)
+- Add a test pinning `TrackerDialContext` use for HTTP announces (#1080, `581c3704`)
+- Fix races on `connIdIssued` in the UDP tracker client (#1039, `b14abfca`; #1065, `73738123`)
+- `storage`: Cache classic file writer handles instead of opening a file per chunk write
+  (#1087, `9a5bc9f3`), and expose cleanup of the cached writers through `Torrent.CloseWriters`
+  (#1105, `d913b30f`)
+- `storage`: Add a buffered Bolt piece completion wrapper that defers durable writes until
+  checkpoint (#1088, `bcdd9ad3`)
+- `storage`: Resolve `TORRENT_STORAGE_DEFAULT_FILE_IO` lazily when a backend is created, rather than
+  at package init (#1106, `7c810d0b`)
+- `storage`: Let a file client ask for the classic file IO instead of mmap (#1115, `6eade025`)
+- `storage`: Skip part-file promotion when it's disabled (#1086, `cabb8253`)
+- `storage`: Allow piece completion to be set unknown (`ec1d01e8`), and fix the inconsistent Bolt
+  piece completion receiver (`5693f720`)
+- `storage`: Avoid a recursive `RLock` in the piece resource `WriteTo` fallback (#1074, `922418a6`)
+- `storage`: Fix a double close in `fileMmap` (`454d1f31`), and guard mmap-span `WriteAt` against
+  use after `Close` (`d90c78c7`)
+- `possum`: Log `ChunksReader` at debug instead of error (#1073, `3e79365b`)
+- Clip file-scoped reads to the file's extent (#1110, `142076b1`)
+- Fix a race in reader context synchronization (`3e9eb41b`)
+- Webseeds: request each slice from one webseed at a time (#1114, `80f39a54`)
+- Webseeds: don't panic when a dropped torrent still has requests in flight (#1112, `4bd78e74`)
+- Webseeds: handle per-file unavailability (404/403/410/451) without convicting the webseed
+  (`3fff0ed9`), and log idle timeout and connection reset errors at debug (`7dea9805`)
+- `metainfo`: Size symlinked files by their target in `BuildFromFilePath` (#1111, `61cfb120`)
+- `metainfo`: Add `ChoosePieceLengthEx` with configurable piece size and count bounds (`83a4fbaf`)
+- Fix "panic: is zero" when adding pure v2 torrents (#1090, `478ed739`), and register v2-only
+  torrents under their real short hash (`fa9ca951`)
+- Apply piece layers before computing initial piece priorities (`0a4bb8e3`)
+- Fix a panic requesting hashes for files with 512n+1 pieces (#1066, `ea4b3b58`)
+- Fix a `servePeerRequest` panic when the torrent is closed during a storage read (`0aa61207`)
+- Stop the sticky piece hasher from hashing new pieces after torrent close (`cc8650f3`)
+- Fix a data race reading piece storage in `pieceHashed` (`16063930`)
+- Don't check the piece request order before it exists (#1117, `579d9ffc`), and skip the
+  pending/request-order check when downloads are disabled (`533f575a`)
+- Peer conn message writer: install the wakeup channel before filling the buffer (#1078,
+  `aa71e8d2`), and rearm the keepalive timer before parking (#1071, `70072f1a`)
+- Peer ranking key and connection ordering changes (`8592293b`), with fewer allocations when
+  ranking connections (`74694084`, `17e652b7`, `7f301460`, `03f37e38`)
+- Large memory reductions for pieces: `Piece` is now a value type with index-based request
+  strategy, piece state is minimized and interned, and peer request piece states are stored in a
+  sparse map (`92727a0c`, `7319dce2`, `c995fd48`, `f00c6951`, `127b73a7`, `db78655c`, `7571cc2a`,
+  `953bf5b2`, `1a5da356`, `00f47f9f`, `d459b815`, `6e257164`)
+- Faster hashing of zero-filled data via an `internal/zeroio` fast path (`d7406400`, `79bb40e2`,
+  `777ce515`, `89e20c18`), and optimized merkle hashing (`85a40aa5`)
+- Add `internal/chunk-pool` for allocation-free chunk buffer reuse (`32564ff4`), and skip piece
+  state change publishing when there are no subscribers (`7db7f9d7`)
+- Migrate logging from `log.Logger` to `log/slog` across packages; deprecated `Logger` fields keep
+  backward-compatible adapters (`5d662f77`)
+- Migrate to roaring v2 bitmaps (`f533f67a`, `ef45b020`)
+- `fs`: Refactor into a FUSE-library-agnostic package with a shared integration test suite
+  (`5bb7f62b`)
+- `indexed`: Fix version check and `SetMinRecord` bugs (`0aad5471`)
+- Require Go 1.26 (`b6d7bb3e`, `27da9ac9`)
+- Update go-libutp (`2918d420`, `0615ced4`), dht (`d134f7d2`), possum (`bf69b207`) and
+  anacrolix/btree (`048703ee`)
+- Add retry limit to `listenAll` to prevent infinite loops (`b61085e3`)
+- Retry any subsequent listen failure on dynamic port (`b3c27864`)
+- Error trying to open `mmapFileIo` after close (`b4fcea28`)
+- Check `Torrent.haveInfo` when writing announce record status progress (`13522ce1`)
+- Use a heap in `Client.startPieceHashers` (`8192686d`)
+- Batch torrent input updates by doing them in the dispatcher (`f90637a7`, `ca759172`)
+- `storage`: Closing file storage now releases its file handles and memory maps. Previously a
+  dropped torrent's files stayed open until the process exited, so they couldn't be renamed or
+  deleted on Windows, and deleted files kept their disk space on Linux (#1062, `e8c5742d`)
+- Use `InsteadOf` and various other indexed improvements to manage announce overdue (`ee06ed50`)
+- Hyphenate file names that use underscores outside Go-recognized suffixes (#1167, `3792e549`)
+- CI: cache go test results across runs (#1165, `b4cbbc76`)
+- Build the `tests/*` modules against the local checkout in the root workspace, and vet them in CI
+  (`2e04ad02`, `db36fb51`, `104dd364`)
+- CI: add Claude PR Assistant and Code Review workflows (`c404a49d`, `4042498b`, #1189), and cache
+  and retry macOS FUSE installs (#1198, `8a85949f`)
+- Test and CI fixes, including using an ephemeral listen port in the SOCKS5 dialer test (#1156, `34887523`),
+  Windows Hyper-V port exclusions (`a59d7c92`), and not running every workflow twice on PR
+  branches (#1147, `5f95cd33`)
 
 ## [v1.61.0] - 2025-12-17
 
@@ -909,7 +1093,7 @@ Large release with **WebTorrent support** and **webseed** implementation.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/anacrolix/torrent/compare/v1.61.0...HEAD
+[v1.62.0]: https://github.com/anacrolix/torrent/compare/v1.61.0...v1.62.0
 [v1.61.0]: https://github.com/anacrolix/torrent/compare/v1.60.0...v1.61.0
 [v1.60.0]: https://github.com/anacrolix/torrent/compare/v1.59.1...v1.60.0
 [v1.59.1]: https://github.com/anacrolix/torrent/compare/v1.59.0...v1.59.1

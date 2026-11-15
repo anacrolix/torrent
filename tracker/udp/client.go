@@ -232,10 +232,13 @@ func (cl *Client) request(
 				err = log.WithLevel(log.Debug, err)
 			}
 			// Force a reconnection. Probably any error is worth doing this for, but the one we're
-			// specifically interested in is ConnectionIdMissmatchNul.
-			cl.mu.Lock()
-			cl.connIdIssued = time.Time{}
-			cl.mu.Unlock()
+			// specifically interested in is ConnectionIdMissmatchNul. A connect request runs with
+			// cl.mu already held by writeRequest, and has no connection ID to invalidate.
+			if action != ActionConnect {
+				cl.mu.Lock()
+				cl.connIdIssued = time.Time{}
+				cl.mu.Unlock()
+			}
 		default:
 			err = fmt.Errorf("unexpected response action %v", dr.Header.Action)
 		}

@@ -1,6 +1,17 @@
 name: Windows
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs when a PR gets new commits. Pushes to master and tags
+# always run to completion.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -17,6 +28,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
+          # Replaced by go-test-cache, which also saves updated test results.
+          cache: false
+      - uses: ./.github/actions/go-test-cache
       - name: Fix Windows dynamic port range
         shell: pwsh
         run: |
@@ -24,6 +38,6 @@ jobs:
           netsh int ipv4 set dynamicport udp start=20000 num=16384
       - run: go mod download
       - name: Test packages
-        run: go test -count=1 ./...
+        run: go test ./...
         env:
           CGO_ENABLED: "0"

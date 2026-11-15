@@ -363,6 +363,7 @@ func TestRequestMissingHashesTrailingSingleHash(t *testing.T) {
 		},
 		pieces: make([]pieceState, numPieces),
 	}
+	tor.initFiles()
 	c := &PeerConn{
 		Peer: Peer{
 			cl: cl,

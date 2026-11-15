@@ -340,7 +340,7 @@ func (p Piece) VerifyDataContext(ctx context.Context) error {
 	//log.Printf("target: %d", target)
 	for {
 		locker.RLock()
-		done := p.state().numVerifies >= target
+		done := p.state().numVerifies >= target && !p.state().marking
 		//log.Printf("got %d verifies", p.state().numVerifies)
 		numVerifiesChanged := p.state().numVerifiesCond.Signaled()
 		locker.RUnlock()

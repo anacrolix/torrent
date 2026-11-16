@@ -43,7 +43,7 @@ func NewBoltPieceCompletion(dir string) (ret PieceCompletion, err error) {
 		return
 	}
 	db.NoSync = true
-	ret = &boltPieceCompletion{db}
+	ret = newBufferedPieceCompletion(&boltPieceCompletion{db})
 	return
 }
 
@@ -84,24 +84,38 @@ func (me *boltPieceCompletion) Set(pk metainfo.PieceKey, complete g.Option[bool]
 	if !complete.Ok {
 		return me.delete(pk)
 	}
+	return me.SetBatch([]PieceCompletionChange{{
+		Key:      pk,
+		Complete: complete.Value,
+	}})
+}
+
+func (me *boltPieceCompletion) SetBatch(changes []PieceCompletionChange) error {
 	err := me.db.Update(func(tx *bbolt.Tx) error {
 		c, err := tx.CreateBucketIfNotExists(completionBucketKey)
 		if err != nil {
 			return fmt.Errorf("creating completion bucket: %w", err)
 		}
-		ih, err := c.CreateBucketIfNotExists(pk.InfoHash[:])
-		if err != nil {
-			return fmt.Errorf("creating bucket for infohash %v: %w", pk.InfoHash, err)
+		for _, change := range changes {
+			ih, err := c.CreateBucketIfNotExists(change.Key.InfoHash[:])
+			if err != nil {
+				return fmt.Errorf("creating bucket for infohash %v: %w", change.Key.InfoHash, err)
+			}
+			key := boltPieceCompletionKey(change.Key.Index)
+			err = ih.Put(key[:], []byte(func() string {
+				if change.Complete {
+					return boltDbCompleteValue
+				}
+				return boltDbIncompleteValue
+			}()))
+			if err != nil {
+				return err
+			}
 		}
-		key := boltPieceCompletionKey(pk.Index)
-		value := boltDbIncompleteValue
-		if complete.Value {
-			value = boltDbCompleteValue
-		}
-		return ih.Put(key[:], []byte(value))
+		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("setting completion for %v: %w", pk, err)
+		return fmt.Errorf("setting piece completion batch: %w", err)
 	}
 	return nil
 }

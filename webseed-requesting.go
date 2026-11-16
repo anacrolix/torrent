@@ -68,6 +68,18 @@ func (cl *Client) updateWebseedRequests() {
 	existingRequests := maps.Collect(cl.iterCurrentWebseedRequestsFromClient())
 	panicif.False(maps.Equal(existingRequests, maps.Collect(cl.iterCurrentWebseedRequests())))
 
+	// Slices spoken for, whichever webseed is doing the fetching. Requests are unique per url and
+	// slice, so without this a slice is requested from every webseed at once: the copies fetch the
+	// same bytes, and each one cancels itself as soon as it reads a chunk another copy has already
+	// delivered. That churn costs far more than it gains, so a slice is left to the one request
+	// that has it. Starts as the slices already in flight and grows as the plan is built. That
+	// includes requests of a removed web seed that are still closing: one for the same slice from
+	// the URL added again would collide with them in Client.activeWebseedRequests.
+	slicesTaken := make(map[webseedSliceRequestKey]struct{}, len(cl.activeWebseedRequests))
+	for key := range cl.activeWebseedRequests {
+		slicesTaken[key.sliceRequestKey()] = struct{}{}
+	}
+
 	g.MakeMapIfNil(&cl.aprioriMap)
 	aprioriMap := cl.aprioriMap
 	clear(aprioriMap)
@@ -75,7 +87,7 @@ func (cl *Client) updateWebseedRequests() {
 		//if len(aprioriMap) >= webseedHostRequestConcurrency {
 		//	break
 		//}
-		if g.MapContains(existingRequests, uniqueKey) {
+		if g.MapContains(slicesTaken, uniqueKey.sliceRequestKey()) {
 			continue
 		}
 		cur, ok := aprioriMap[uniqueKey]
@@ -192,8 +204,15 @@ func (cl *Client) updateWebseedRequests() {
 		if len(plan.byCost[costKey]) >= webseedHostRequestConcurrency {
 			continue
 		}
-		g.MakeMapIfNil(&plan.byCost)
 		requestKey := elem.webseedUniqueRequestKey
+		sliceKey := requestKey.sliceRequestKey()
+		// One request per slice, here as well as against the requests already in flight: a plan
+		// holding the same slice for several webseeds would start the duplicates itself.
+		if elem.existingWebseedRequest == nil && g.MapContains(slicesTaken, sliceKey) {
+			continue
+		}
+		slicesTaken[sliceKey] = struct{}{}
+		g.MakeMapIfNil(&plan.byCost)
 		plan.byCost[costKey] = append(plan.byCost[costKey], plannedWebseedRequest{
 			url:        elem.url,
 			t:          elem.t,
@@ -215,8 +234,6 @@ func (cl *Client) updateWebseedRequests() {
 			//fmt.Println(formatMap(existingRequests))
 		}
 	})
-
-	// TODO: Do we deduplicate requests across different webseeds?
 
 	for costKey, plannedRequests := range plan.byCost {
 		for _, request := range plannedRequests {
@@ -356,6 +373,17 @@ type webseedUniqueRequestKey struct {
 	sliceIndex webseedSliceIndex
 }
 
+// The range a request covers, without the webseed it goes to: two webseeds asked for the same slice
+// return the same bytes.
+type webseedSliceRequestKey struct {
+	t          *Torrent
+	sliceIndex webseedSliceIndex
+}
+
+func (me webseedUniqueRequestKey) sliceRequestKey() webseedSliceRequestKey {
+	return webseedSliceRequestKey{t: me.t, sliceIndex: me.sliceIndex}
+}
+
 type aprioriMapValue struct {
 	costKey      webseedHostKeyHandle
 	priority     PiecePriority
@@ -484,11 +512,23 @@ func (cl *Client) yieldKeyAndValue(
 func (cl *Client) iterCurrentWebseedRequestsFromClient() iter.Seq2[webseedUniqueRequestKey, webseedRequestOrderValue] {
 	return func(yield func(webseedUniqueRequestKey, webseedRequestOrderValue) bool) {
 		for key, ar := range cl.activeWebseedRequests {
-			// The torrent may have been dropped while this request was still in flight. Requests
-			// remove themselves from this map asynchronously, some time after the torrent is
-			// removed from cl.torrents, so tolerate (by ignoring) requests belonging to torrents
-			// that are no longer live. See https://github.com/anacrolix/torrent/issues/1098.
+			// A dropped torrent leaves cl.torrents synchronously, but its in-flight requests only
+			// leave this map when each one closes. Ignore requests belonging to torrents that are
+			// no longer live. See https://github.com/anacrolix/torrent/issues/1098.
 			if key.t.closed.IsSet() {
+				continue
+			}
+			if _, live := cl.torrents[key.t]; !live {
+				continue
+			}
+			// Likewise for a removed web seed: closing it cancelled its requests.
+			// The URL may have been added again since, as a new web seed that
+			// does not own them.
+			ws, live := key.t.webSeeds[key.url]
+			if !live {
+				continue
+			}
+			if _, own := ws.activeRequests[ar]; !own {
 				continue
 			}
 			if !cl.yieldKeyAndValue(yield, key, ar) {

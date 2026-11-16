@@ -38,6 +38,41 @@ type ClientTrackerConfig struct {
 	// implementation, or deprecate in favour of a Client DNS resolver. It was done manually before
 	// calling the Announce.Do wrapper.
 	LookupTrackerIp func(*url.URL) ([]net.IP, error)
+	// How long to wait before retrying an announce that failed. Each further consecutive failure
+	// doubles the wait, up to FailedAnnounceMaxInterval. A tracker that has gone away is retried
+	// forever, so without a growing interval every torrent keeps knocking at this rate.
+	FailedAnnounceMinInterval time.Duration
+	// The cap on the doubling described above. Set it to FailedAnnounceMinInterval to retry at a
+	// constant interval.
+	FailedAnnounceMaxInterval time.Duration
+}
+
+const (
+	defaultFailedAnnounceMinInterval = time.Minute
+	defaultFailedAnnounceMaxInterval = 30 * time.Minute
+)
+
+// failedAnnounceInterval is how long to wait after an announce that failed, given how many
+// consecutive failures there have been (1 for the first).
+func (cfg *ClientTrackerConfig) failedAnnounceInterval(consecutiveFailures int) time.Duration {
+	d := cfg.FailedAnnounceMinInterval
+	if d <= 0 {
+		d = defaultFailedAnnounceMinInterval
+	}
+	maxInterval := cfg.FailedAnnounceMaxInterval
+	if maxInterval <= 0 {
+		maxInterval = defaultFailedAnnounceMaxInterval
+	}
+	if maxInterval < d {
+		maxInterval = d
+	}
+	for i := 1; i < consecutiveFailures; i++ {
+		d *= 2
+		if d >= maxInterval {
+			return maxInterval
+		}
+	}
+	return d
 }
 
 type ClientDhtConfig struct {
@@ -130,7 +165,11 @@ type ClientConfig struct {
 	DisableTCP bool `long:"disable-tcp"`
 	// Called to instantiate storage for each added torrent. Builtin backends
 	// are in the storage package. If not set, the "file" implementation is
-	// used (and Closed when the Client is Closed).
+	// used (and Closed when the Client is Closed). A DefaultStorage provided
+	// here is owned by the caller and is not Closed by the Client: if it
+	// implements storage.ClientImplCloser (as the builtin backends do, e.g. to
+	// release a piece completion database), Close it after Client.Close
+	// returns, and also if NewClient fails.
 	DefaultStorage storage.ClientImpl
 
 	HeaderObfuscationPolicy HeaderObfuscationPolicy
@@ -309,8 +348,13 @@ func NewDefaultClientConfig() *ClientConfig {
 	}
 	cc.PeriodicallyAnnounceTorrentsToDht = true
 	cc.MetainfoSourcesMerger = func(t *Torrent, info *metainfo.MetaInfo) error {
-		return t.MergeSpec(TorrentSpecFromMetaInfo(info))
+		spec, err := TorrentSpecFromMetaInfoErr(info)
+		if err != nil {
+			return err
+		}
+		return t.MergeSpec(spec)
 	}
+	cc.MetainfoSourcesTimeout = time.Minute
 	return cc
 }
 
@@ -343,4 +387,8 @@ type MetainfoSourcesConfig struct {
 	// is provided to prevent a race as the fetcher for the source was bound to it. Returning an
 	// error will kill the respective sourcer.
 	MetainfoSourcesMerger func(t *Torrent, info *metainfo.MetaInfo) error
+	// Timeout for a single attempt to fetch metainfo from a source over HTTP. Without it a source
+	// that accepts the connection but never responds holds the attempt open until the torrent is
+	// dropped. Zero disables the timeout.
+	MetainfoSourcesTimeout time.Duration
 }

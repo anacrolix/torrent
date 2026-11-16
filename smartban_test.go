@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/anacrolix/missinggo/v2/iter"
-	"github.com/cespare/xxhash"
+	"github.com/cespare/xxhash/v2"
 
 	"github.com/anacrolix/torrent/smartban"
 )
@@ -27,12 +27,13 @@ func BenchmarkSmartBanRecordBlock(b *testing.B) {
 	b.Run("xxHash", func(b *testing.B) {
 		var salt [8]byte
 		benchmarkSmartBanRecordBlock(b, func(block []byte) uint64 {
-			h := xxhash.New()
 			// xxHash is not cryptographic, and so we're salting it so attackers can't know a priori
-			// where block data collisions are.
-			h.Write(salt[:])
-			h.Write(block)
-			return h.Sum64()
+			// where block data collisions are. Keep the digest on the stack to avoid an allocation.
+			var d xxhash.Digest
+			d.Reset()
+			d.Write(salt[:])
+			d.Write(block)
+			return d.Sum64()
 		})
 	})
 	b.Run("Sha1", func(b *testing.B) {

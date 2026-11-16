@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net"
 
-	"github.com/anacrolix/go-libutp/utp"
+	utp "github.com/anacrolix/go-utp"
 	"github.com/anacrolix/log"
 )
 

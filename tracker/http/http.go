@@ -116,7 +116,11 @@ func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceO
 	}
 	defer resp.Body.Close()
 	var buf bytes.Buffer
-	io.Copy(&buf, resp.Body)
+	_, err = io.Copy(&buf, cl.limitBody(resp.Body))
+	if err != nil {
+		err = fmt.Errorf("reading response body: %w", err)
+		return
+	}
 	if resp.StatusCode != 200 {
 		err = fmt.Errorf("response from tracker: %s: %q", resp.Status, buf.Bytes())
 		return

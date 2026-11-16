@@ -42,3 +42,17 @@ func TestShortFile(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// The memory mapped implementation faults when a mapped file is replaced or
+// truncated by something else, so clients that share their files with another
+// writer need a way to ask for the classic one.
+func TestDisableMmapSelectsTheClassicFileIo(t *testing.T) {
+	if _, ok := (NewFileClientOpts{DisableMmap: true}).fileIo().(*classicFileIo); !ok {
+		t.Fatalf("DisableMmap gives %T, want the classic file io", (NewFileClientOpts{DisableMmap: true}).fileIo())
+	}
+	def := NewFileClientOpts{}.fileIo()
+	if _, ok := def.(*classicFileIo); ok != (os.Getenv("TORRENT_STORAGE_DEFAULT_FILE_IO") == "classic") {
+		t.Fatalf("default file io is %T, which does not follow TORRENT_STORAGE_DEFAULT_FILE_IO=%q",
+			def, os.Getenv("TORRENT_STORAGE_DEFAULT_FILE_IO"))
+	}
+}

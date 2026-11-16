@@ -119,6 +119,9 @@ func TestHolepunchConnect(t *testing.T) {
 	}, true)
 	llg.cl.unlock()
 	wg.Wait()
+	// The reader can finish using data from the leecher before the leecher-leecher has accepted
+	// the seeder's holepunched connection and updated its stats, so wait for that.
+	waitForHolepunchedConn(t, leecherLeecher)
 
 	qt.Check(t, qt.Not(qt.HasLen(seeder.dialedSuccessfullyAfterHolepunchConnect, 0)))
 	qt.Check(t, qt.Not(qt.HasLen(leecherLeecher.probablyOnlyConnectedDueToHolepunch, 0)))
@@ -127,6 +130,19 @@ func TestHolepunchConnect(t *testing.T) {
 	qt.Check(t, qt.Not(qt.Equals(llClientStats.NumPeersUndialableWithoutHolepunch, 0)))
 	qt.Check(t, qt.Not(qt.Equals(llClientStats.NumPeersUndialableWithoutHolepunchDialedAfterHolepunchConnect, 0)))
 	qt.Check(t, qt.Not(qt.Equals(llClientStats.NumPeersProbablyOnlyConnectedDueToHolepunch, 0)))
+}
+
+func waitForHolepunchedConn(t *testing.T, cl *Client) {
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		cl.rLock()
+		n := len(cl.probablyOnlyConnectedDueToHolepunch)
+		cl.rUnlock()
+		if n != 0 || time.Now().After(deadline) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func waitForConns(t *Torrent) {

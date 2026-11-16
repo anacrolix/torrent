@@ -226,12 +226,9 @@ func (ws *webseedPeer) readChunksErrorLevel(err error, req *webseedRequest) slog
 	if ws.peer.closedCtx.Err() != nil {
 		return slog.LevelDebug
 	}
-	var h2e http2.GoAwayError
-	if errors.As(err, &h2e) {
-		if h2e.ErrCode == http2.ErrCodeEnhanceYourCalm {
-			// It's fine, we'll sleep for a bit. But it's still interesting.
-			return slog.LevelInfo
-		}
+	if isHttp2GoAwayEnhanceYourCalm(err) {
+		// It's fine, we'll sleep for a bit. But it's still interesting.
+		return slog.LevelInfo
 	}
 	var ne net.Error
 	if errors.As(err, &ne) && ne.Timeout() {
@@ -446,4 +443,15 @@ func (me *webseedPeer) slogger() *slog.Logger {
 // anything the webseed did.
 func ourOwnDoing(err error, req *webseedRequest, peerCtx context.Context) bool {
 	return req.cancelled.Load() || peerCtx.Err() != nil || errors.Is(err, context.Canceled)
+}
+
+// Matches by message because with golang.org/x/net >= v0.54 on Go 1.27, http2.GoAwayError is
+// internal to net/http and can't be matched with errors.As.
+func isHttp2GoAwayEnhanceYourCalm(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "server sent GOAWAY") &&
+		strings.Contains(s, "ErrCode="+http2.ErrCodeEnhanceYourCalm.String())
 }

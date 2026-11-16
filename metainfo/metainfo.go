@@ -16,7 +16,7 @@ import (
 type MetaInfo struct {
 	InfoBytes    bencode.Bytes `bencode:"info,omitempty"`                                                        // BEP 3
 	Announce     string        `bencode:"announce,omitempty" mapstructure:",omitempty"`                          // BEP 3
-	AnnounceList AnnounceList  `bencode:"announce-list,omitempty"`                                               // BEP 12
+	AnnounceList AnnounceList  `bencode:"announce-list,omitempty,ignore_unmarshal_type_error"`                   // BEP 12
 	Nodes        []Node        `bencode:"nodes,omitempty,ignore_unmarshal_type_error" mapstructure:",omitempty"` // BEP 5
 	// Where's this specified? Mentioned at
 	// https://wiki.theory.org/index.php/BitTorrentSpecification: (optional) the creation time of

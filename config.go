@@ -165,7 +165,11 @@ type ClientConfig struct {
 	DisableTCP bool `long:"disable-tcp"`
 	// Called to instantiate storage for each added torrent. Builtin backends
 	// are in the storage package. If not set, the "file" implementation is
-	// used (and Closed when the Client is Closed).
+	// used (and Closed when the Client is Closed). A DefaultStorage provided
+	// here is owned by the caller and is not Closed by the Client: if it
+	// implements storage.ClientImplCloser (as the builtin backends do, e.g. to
+	// release a piece completion database), Close it after Client.Close
+	// returns, and also if NewClient fails.
 	DefaultStorage storage.ClientImpl
 
 	HeaderObfuscationPolicy HeaderObfuscationPolicy
@@ -344,8 +348,13 @@ func NewDefaultClientConfig() *ClientConfig {
 	}
 	cc.PeriodicallyAnnounceTorrentsToDht = true
 	cc.MetainfoSourcesMerger = func(t *Torrent, info *metainfo.MetaInfo) error {
-		return t.MergeSpec(TorrentSpecFromMetaInfo(info))
+		spec, err := TorrentSpecFromMetaInfoErr(info)
+		if err != nil {
+			return err
+		}
+		return t.MergeSpec(spec)
 	}
+	cc.MetainfoSourcesTimeout = time.Minute
 	return cc
 }
 
@@ -378,4 +387,8 @@ type MetainfoSourcesConfig struct {
 	// is provided to prevent a race as the fetcher for the source was bound to it. Returning an
 	// error will kill the respective sourcer.
 	MetainfoSourcesMerger func(t *Torrent, info *metainfo.MetaInfo) error
+	// Timeout for a single attempt to fetch metainfo from a source over HTTP. Without it a source
+	// that accepts the connection but never responds holds the attempt open until the torrent is
+	// dropped. Zero disables the timeout.
+	MetainfoSourcesTimeout time.Duration
 }

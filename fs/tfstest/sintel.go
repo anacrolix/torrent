@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"runtime"
 	"syscall"
@@ -33,12 +34,12 @@ var sintelFileHashes = map[string]string{
 }
 
 // testStreamSintel verifies that a large multi-file torrent can be streamed
-// through the FUSE mount. It downloads the Sintel open-movie torrent via
+// through the filesystem. It downloads the Sintel open-movie torrent via
 // BitTorrent and reads a file through the filesystem, verifying its MD5.
 //
 // This test requires internet access and is skipped by default because it is
 // slow and occasionally flaky.
-func testStreamSintel(t *testing.T, mount MountFunc) {
+func testStreamSintel(t *testing.T, mount FSMountFunc) {
 	// Locate testdata relative to this source file so the test works both when
 	// run from within the torrent module and when called from a backend repo
 	// that replaces github.com/anacrolix/torrent with a local path.
@@ -81,10 +82,9 @@ func testStreamSintel(t *testing.T, mount MountFunc) {
 	qt.Assert(t, qt.IsNil(err))
 	defer cl.Close()
 
-	mountDir := t.TempDir()
 	tfs := torrentfs.New(cl)
 	defer tfs.Destroy()
-	unmount := mount(t, tfs, mountDir)
+	fsys, unmount := mount(t, tfs)
 	t.Cleanup(unmount)
 	// When ctx is done (interrupt) or the test deadline approaches, destroy tfs
 	// and unmount so that any goroutines blocked in FUSE operations are unblocked.
@@ -101,7 +101,7 @@ func testStreamSintel(t *testing.T, mount MountFunc) {
 		<-cleanupCtx.Done()
 		tfs.Destroy()
 		unmount()
-		// Cancel ctx so the goroutine watching it closes f, unblocking f.WriteTo.
+		// Cancel ctx so the goroutine watching it closes f, unblocking the copy.
 		cancel()
 	}()
 
@@ -116,9 +116,10 @@ func testStreamSintel(t *testing.T, mount MountFunc) {
 		}
 	}()
 
-	f, err := openFileWhenExists(t, ctx, filepath.Join(mountDir, "Sintel", targetFile))
+	targetPath := path.Join("Sintel", targetFile)
+	f, err := openFileWhenExists(t, ctx, fsys, targetPath)
 	qt.Assert(t, qt.IsNil(err))
-	t.Logf("opened %v", f.Name())
+	t.Logf("opened %v", targetPath)
 	defer f.Close()
 
 	fi, err := f.Stat()
@@ -131,7 +132,7 @@ func testStreamSintel(t *testing.T, mount MountFunc) {
 		f.Close()
 	}()
 	start := time.Now()
-	_, err = f.WriteTo(io.MultiWriter(h, &progressWriter{
+	_, err = io.Copy(io.MultiWriter(h, &progressWriter{
 		onWrite: func(n int) {
 			written += int64(n)
 			elapsed := time.Since(start).Seconds()
@@ -141,7 +142,7 @@ func testStreamSintel(t *testing.T, mount MountFunc) {
 			}
 			t.Logf("progress %.2f%% (%.2f MiB/s)", 100*float64(written)/float64(fi.Size()), rate)
 		},
-	}))
+	}), f)
 	if ctx.Err() != nil {
 		t.Fatal(ctx.Err())
 	}
@@ -149,10 +150,10 @@ func testStreamSintel(t *testing.T, mount MountFunc) {
 
 	qt.Assert(t, qt.Equals(hex.EncodeToString(h.Sum(nil)), sintelFileHashes[targetFile]))
 
-	// Warm re-read: all pieces are now fully local. Re-read via the same FUSE
-	// mount without any network activity to verify the filesystem handles a
+	// Warm re-read: all pieces are now fully local. Re-read via the same
+	// filesystem without any network activity to verify the filesystem handles a
 	// completed torrent correctly.
-	f2, err := os.Open(filepath.Join(mountDir, "Sintel", targetFile))
+	f2, err := fsys.Open(targetPath)
 	qt.Assert(t, qt.IsNil(err))
 	defer f2.Close()
 	h2 := md5.New()
@@ -164,15 +165,15 @@ func testStreamSintel(t *testing.T, mount MountFunc) {
 	qt.Assert(t, qt.Equals(hex.EncodeToString(h2.Sum(nil)), sintelFileHashes[targetFile]))
 }
 
-func openFileWhenExists(t *testing.T, ctx context.Context, name string) (*os.File, error) {
+func openFileWhenExists(t *testing.T, ctx context.Context, fsys fs.FS, name string) (fs.File, error) {
 	for {
 		type openResult struct {
-			f   *os.File
+			f   fs.File
 			err error
 		}
 		ch := make(chan openResult, 1)
 		go func() {
-			f, err := os.Open(name)
+			f, err := fsys.Open(name)
 			ch <- openResult{f, err}
 		}()
 		var res openResult

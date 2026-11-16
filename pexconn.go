@@ -21,7 +21,7 @@ type pexConnState struct {
 	enabled bool
 	xid     pp.ExtensionNumber
 	last    *pexEvent
-	timer   *time.Timer
+	timer   *releasedTimer
 	gate    chan struct{}
 	readyfn func()
 	torrent *Torrent
@@ -38,6 +38,10 @@ func (s *pexConnState) IsEnabled() bool {
 
 // Init is called from the reader goroutine upon the extended handshake completion
 func (s *pexConnState) Init(c *PeerConn) {
+	if s.enabled {
+		// The extended handshake can be repeated. Keep the existing state and timer.
+		return
+	}
 	xid, ok := c.PeerExtensionIDs[pp.ExtensionNamePex]
 	if !ok || xid == 0 || c.t.cl.config.DisablePEX {
 		return
@@ -52,7 +56,7 @@ func (s *pexConnState) Init(c *PeerConn) {
 	s.logger = c.logger.WithDefaultLevel(log.Debug).WithNames("pex")
 	s.readyfn = c.tickleWriter
 	s.gate = make(chan struct{}, 1)
-	s.timer = time.AfterFunc(0, func() {
+	s.timer = newReleasedTimer(0, func() {
 		s.gate <- struct{}{}
 		s.readyfn() // wake up the writer
 	})
@@ -163,6 +167,12 @@ func (s *pexConnState) Recv(payload []byte) error {
 	// - detect malicious peers
 
 	return nil
+}
+
+// Stops PEX on the conn, for when we learn the torrent is private after PEX was enabled.
+func (s *pexConnState) disable() {
+	s.Close()
+	s.enabled = false
 }
 
 func (s *pexConnState) Close() {

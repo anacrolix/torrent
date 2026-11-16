@@ -1932,7 +1932,7 @@ func (cn *PeerConn) shouldRequest(r RequestIndex) error {
 	if cn.t.hashingPiece(pi) {
 		panic("piece is being hashed")
 	}
-	if cn.t.pieces[pi].marking {
+	if cn.t.pieces[pi].check == pieceCheckMarking {
 		panic("piece is being marked")
 	}
 	if cn.t.pieceQueuedForHash(pi) {

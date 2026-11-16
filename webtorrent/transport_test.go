@@ -4,6 +4,9 @@
 package webtorrent
 
 import (
+	"bytes"
+	"errors"
+	"io"
 	"testing"
 	"time"
 
@@ -60,4 +63,67 @@ func TestClosedPeerConnectionRemovedFromStats(t *testing.T) {
 		case <-time.After(time.Millisecond):
 		}
 	}
+}
+
+
+type testDatagramReader struct {
+    messages [][]byte
+}
+
+func (r *testDatagramReader) Read(p []byte) (int, error) {
+    if len(r.messages) == 0 {
+        return 0, io.EOF
+    }
+    if len(p) < len(r.messages[0]) {
+        return 0, io.ErrShortBuffer
+    }
+    n := copy(p, r.messages[0])
+    r.messages = r.messages[1:]
+    return n, nil
+}
+
+func TestDataChannelStreamReaderReassemblesMessageReads(t *testing.T) {
+    handshake := append([]byte{19}, []byte("BitTorrent protocol")...)
+    handshake = append(handshake, bytes.Repeat([]byte{0}, 48)...)
+    if len(handshake) != 68 {
+        t.Fatalf("invalid handshake fixture length %d", len(handshake))
+    }
+    payload := bytes.Repeat([]byte{0xa5}, 16*1024+13)
+    raw := &testDatagramReader{messages: [][]byte{handshake, payload}}
+    reader := newDataChannelStreamReader(raw)
+
+    gotHandshake := make([]byte, 68)
+    if _, err := io.ReadFull(reader, gotHandshake[:1]); err != nil {
+        t.Fatalf("reading BitTorrent handshake length: %v", err)
+    }
+    if _, err := io.ReadFull(reader, gotHandshake[1:]); err != nil {
+        t.Fatalf("reading remainder of BitTorrent handshake: %v", err)
+    }
+    if !bytes.Equal(gotHandshake, handshake) {
+        t.Fatal("handshake content changed at DataChannel message boundary")
+    }
+
+    gotPayload := make([]byte, len(payload))
+    for i := 0; i < len(gotPayload); {
+        end := min(i+4096, len(gotPayload))
+        if _, err := io.ReadFull(reader, gotPayload[i:end]); err != nil {
+            t.Fatalf("reading piece payload at %d: %v", i, err)
+        }
+        i = end
+    }
+    if !bytes.Equal(gotPayload, payload) {
+        t.Fatal("piece content changed across multiple small reads")
+    }
+    var extra [1]byte
+    if n, err := reader.Read(extra[:]); n != 0 || !errors.Is(err, io.EOF) {
+        t.Fatalf("expected EOF after all messages, got n=%d err=%v", n, err)
+    }
+}
+
+func TestRawDataChannelReadFailsWithSmallBuffer(t *testing.T) {
+    raw := &testDatagramReader{messages: [][]byte{bytes.Repeat([]byte{1}, 68)}}
+    var byteBuf [1]byte
+    if _, err := raw.Read(byteBuf[:]); !errors.Is(err, io.ErrShortBuffer) {
+        t.Fatalf("expected short buffer from unwrapped detached DataChannel, got %v", err)
+    }
 }

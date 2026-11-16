@@ -858,9 +858,9 @@ func (t *Torrent) pieceState(index pieceIndex) (ret PieceState) {
 	ret.Priority = p.effectivePriority()
 	ret.Completion = p.completion()
 	ret.QueuedForHash = p.queuedForHash()
-	ret.Hashing = s.hashing
+	ret.Hashing = s.check == pieceCheckHashing
 	ret.Checking = ret.QueuedForHash || ret.Hashing
-	ret.Marking = s.marking
+	ret.Marking = s.check == pieceCheckMarking
 	if ret.Ok && !ret.Complete && t.piecePartiallyDownloaded(index) {
 		ret.Partial = true
 	}
@@ -2784,10 +2784,10 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		}
 	}
 
-	s.marking = true
+	s.check = pieceCheckMarking
 	t.deferPublishPieceStateChange(piece)
 	defer func() {
-		s.marking = false
+		s.check = pieceCheckIdle
 		t.deferPublishPieceStateChange(piece)
 	}()
 
@@ -2968,7 +2968,7 @@ func (t *Torrent) pieceHasher(initial pieceIndex) {
 
 func (t *Torrent) startHash(pi pieceIndex) {
 	t.piecesQueuedForHash.Remove(pi)
-	t.pieces[pi].hashing = true
+	t.pieces[pi].check = pieceCheckHashing
 	t.deferPublishPieceStateChange(pi)
 	t.updatePiecePriority(pi, "Torrent.startHash")
 	t.storageLock.RLock()
@@ -2979,7 +2979,7 @@ func (t *Torrent) startHash(pi pieceIndex) {
 func (t *Torrent) getPieceToHash() (_ g.Option[pieceIndex]) {
 	for i := range t.piecesQueuedForHash.Iterate {
 		p := &t.pieces[i]
-		if p.hashing || p.marking {
+		if p.check != pieceCheckIdle {
 			continue
 		}
 		return g.Some(i)
@@ -3040,7 +3040,7 @@ func (t *Torrent) finishHash(index pieceIndex) {
 		}
 		t.smartBanCache.ForgetBlockSeq(iterRange(t.pieceRequestIndexBegin(index), t.pieceRequestIndexBegin(index+1)))
 	}
-	p.state().hashing = false
+	p.state().check = pieceCheckIdle
 	t.pieceHashed(index, correct, copyErr)
 	t.updatePiecePriority(index, "Torrent.finishHash")
 	t.activePieceHashes--
@@ -3074,7 +3074,7 @@ func (t *Torrent) queueInitialPieceCheck(i pieceIndex) {
 	}
 	// If a hash is already occurring (or its result is being recorded) we've satisfied the initial
 	// piece check condition.
-	if p.hashing || p.marking {
+	if p.check != pieceCheckIdle {
 		return
 	}
 	if p.storageCompletionOk {
@@ -3200,7 +3200,7 @@ func (t *Torrent) AddClientPeer(cl *Client) int {
 }
 
 func (t *Torrent) hashingPiece(i pieceIndex) bool {
-	return t.pieces[i].hashing
+	return t.pieces[i].check == pieceCheckHashing
 }
 
 func (t *Torrent) pieceQueuedForHash(i pieceIndex) bool {

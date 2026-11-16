@@ -1497,7 +1497,9 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 	if !t.cl.config.DropMutuallyCompletePeers {
 		return
 	}
-	if !t.haveAllPieces() {
+	// We need nothing more from anyone. This also covers partial seeds (BEP 21), which hold every
+	// piece of their wanted files but not every piece.
+	if !t.haveInfo() || t.closed.IsSet() || t.needData() {
 		return
 	}
 	if all, known := p.peerHasAllPieces(); !known || !all {

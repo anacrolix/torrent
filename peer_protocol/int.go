@@ -1,6 +1,7 @@
 package peer_protocol
 
 import (
+	"bufio"
 	"encoding/binary"
 	"io"
 	"math"
@@ -36,24 +37,30 @@ func (i *Integer) Read(r io.Reader) error {
 	return err
 }
 
-// readInteger reads a big-endian Integer from a byte reader. It avoids the heap allocation that
-// Integer.Read incurs when its buffer escapes through the io.Reader interface, and matches
-// io.ReadFull's end-of-input behaviour: io.EOF if nothing was read, io.ErrUnexpectedEOF if the
-// value was truncated.
-func readInteger(r io.ByteReader, i *Integer) error {
-	var b [4]byte
-	for j := range b {
-		c, err := r.ReadByte()
-		if err != nil {
-			if err == io.EOF && j != 0 {
-				err = io.ErrUnexpectedEOF
-			}
-			return err
-		}
-		b[j] = c
+// readBufferedInteger reads a big-endian Integer straight out of br's buffer with Peek and Discard,
+// so there's no scratch buffer to escape to the heap the way Integer.Read's does. At most limit
+// bytes are consumed, as though the input ended there. End of input is handled the way
+// io.ReadFull and a byte-at-a-time read handle it: the bytes that were available are consumed,
+// and the error is io.EOF if there were none, io.ErrUnexpectedEOF if the value was truncated.
+// Other errors from the underlying reader are passed through. It returns the bytes consumed.
+func readBufferedInteger(br *bufio.Reader, limit int64, i *Integer) (n int, err error) {
+	want := 4
+	if limit < 4 {
+		want = int(max(limit, 0))
 	}
-	*i = Integer(binary.BigEndian.Uint32(b[:]))
-	return nil
+	b, err := br.Peek(want)
+	if err == nil && want == 4 {
+		*i = Integer(binary.BigEndian.Uint32(b))
+	}
+	// Can't fail: the bytes are already buffered.
+	n, _ = br.Discard(len(b))
+	if err == nil && want < 4 {
+		err = io.EOF
+	}
+	if err == io.EOF && n != 0 {
+		err = io.ErrUnexpectedEOF
+	}
+	return
 }
 
 // It's perfectly fine to cast these to an int. TODO: Or is it?

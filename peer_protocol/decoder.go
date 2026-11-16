@@ -56,6 +56,13 @@ func (dr *decodeReader) ReadByte() (c byte, err error) {
 	return
 }
 
+// readInteger reads a big-endian Integer from within the message without a scratch buffer.
+func (dr *decodeReader) readInteger(i *Integer) error {
+	n, err := readBufferedInteger(dr.br, dr.lr.N, i)
+	dr.lr.N -= int64(n)
+	return err
+}
+
 func (dr *decodeReader) Read(p []byte) (n int, err error) {
 	n, err = dr.lr.Read(p)
 	if dr.lr.N != 0 && err == io.EOF {
@@ -83,6 +90,14 @@ func (er expectReader) ReadByte() (c byte, err error) {
 	return
 }
 
+func (er expectReader) readInteger(i *Integer) error {
+	err := er.dr.readInteger(i)
+	if err == io.EOF {
+		err = io.ErrUnexpectedEOF
+	}
+	return err
+}
+
 func (er expectReader) Read(p []byte) (n int, err error) {
 	n, err = er.dr.Read(p)
 	if err == io.EOF {
@@ -100,7 +115,7 @@ func (er expectReader) UnreadLength() int64 {
 func (d *Decoder) Decode(msg *Message) (err error) {
 	{
 		var length Integer
-		err = readInteger(d.R, &length)
+		_, err = readBufferedInteger(d.R, 4, &length)
 		if err != nil {
 			return fmt.Errorf("reading message length: %w", err)
 		}
@@ -135,10 +150,10 @@ func readMessageAfterType(msg *Message, r *expectReader, piecePool ChunkBufferPo
 	switch msg.Type {
 	case Choke, Unchoke, Interested, NotInterested, HaveAll, HaveNone:
 	case Have, AllowedFast, Suggest:
-		err = readInteger(r, &msg.Index)
+		err = r.readInteger(&msg.Index)
 	case Request, Cancel, Reject:
 		for _, data := range []*Integer{&msg.Index, &msg.Begin, &msg.Length} {
-			err = readInteger(r, data)
+			err = r.readInteger(data)
 			if err != nil {
 				break
 			}
@@ -149,7 +164,7 @@ func readMessageAfterType(msg *Message, r *expectReader, piecePool ChunkBufferPo
 		msg.Bitfield = unmarshalBitfield(b)
 	case Piece:
 		for _, pi := range []*Integer{&msg.Index, &msg.Begin} {
-			err = readInteger(r, pi)
+			err = r.readInteger(pi)
 			if err != nil {
 				return
 			}

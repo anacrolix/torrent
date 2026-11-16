@@ -218,8 +218,17 @@ func TestBufferedPieceCompletionDeleteTorrentClearsOverlayAndUnderlying(t *testi
 	qt.Assert(t, qt.IsTrue(value.Ok))
 	qt.Assert(t, qt.IsTrue(value.Complete))
 
+	// Dirty entries for the deleted torrent must not be written back by a later checkpoint.
+	checkpointer, ok := pc.(PieceCompletionCheckpointer)
+	qt.Assert(t, qt.IsTrue(ok))
+	qt.Assert(t, qt.IsNil(checkpointer.Checkpoint([]metainfo.PieceKey{targetKey})))
+	value, err = underlying.Get(targetKey)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.IsFalse(value.Ok))
+
 	underlying.mu.Lock()
 	defer underlying.mu.Unlock()
+	qt.Assert(t, qt.HasLen(underlying.batch, 0))
 	qt.Assert(t, qt.HasLen(underlying.deletedTorrents, 1))
 	qt.Assert(t, qt.Equals(underlying.deletedTorrents[0], targetHash))
 }

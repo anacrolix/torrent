@@ -1057,8 +1057,8 @@ func (t *Torrent) writeStatus(w io.Writer) {
 				luns.Scheme = ""
 				runs.Scheme = ""
 				var ml multiless.Computation
-				ml = multiless.EagerOrdered(ml, luns.String(), runs.String())
-				ml = multiless.EagerOrdered(ml, lu.String(), ru.String())
+				ml = ml.EagerOrdered(luns.String(), runs.String())
+				ml = ml.EagerOrdered(lu.String(), ru.String())
 				return ml.OrderingInt()
 			},
 		)

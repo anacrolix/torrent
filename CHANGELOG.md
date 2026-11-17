@@ -66,6 +66,9 @@ Changes:
   `58ab7c4d`), an allocation per smart-ban block hash (#1218, `ab68b6ac`), and reallocating the
   file list when requesting missing hashes (#1220, `75c0a750`)
 - `cmd/torrent`: Port argument handling to bargle v2 (#1096, `d4cfdd9a`)
+- `bencode`: `omitempty` checks fields with `reflect.Value.IsZero`, so a zero struct field with
+  unexported fields is omitted instead of panicking. Other results are unchanged: nil slices and
+  maps are omitted, empty non-nil ones are still encoded
 - Update missinggo/v2 to v2.12.0 and stop importing missinggo v1, and bump possum for Go 1.27.4
   cgo flag checks (#1219, `5d7afc65`)
 - Test and CI fixes (#1209, #1226)

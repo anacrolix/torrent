@@ -70,8 +70,30 @@ var random_encode_tests = []random_encode_test{
 	{struct {
 		A *string `bencode:",omitempty"`
 	}{new(string)}, "d1:A0:e"},
+	// omitempty omits zero values only: empty but non-nil slices and maps are still encoded.
+	{struct {
+		A []byte         `bencode:",omitempty"`
+		B []int          `bencode:",omitempty"`
+		C map[string]int `bencode:",omitempty"`
+		D []int          `bencode:",omitempty"`
+		F int            `bencode:",omitempty"`
+		G string         `bencode:",omitempty"`
+		H interface{}    `bencode:",omitempty"`
+	}{A: []byte{}, B: nil, C: map[string]int{}}, "d1:A0:1:Cdee"},
+	// Zero structs with unexported fields are omitted, and non-zero ones aren't.
+	{struct {
+		A omitEmptyUnexported `bencode:",omitempty"`
+	}{}, "de"},
+	{struct {
+		A omitEmptyUnexported `bencode:",omitempty"`
+	}{omitEmptyUnexported{B: 1}}, "d1:Ad1:Bi1eee"},
 	{bigIntFromString("62208002200000000000"), "i62208002200000000000e"},
 	{*bigIntFromString("62208002200000000000"), "i62208002200000000000e"},
+}
+
+type omitEmptyUnexported struct {
+	B int
+	c int
 }
 
 func bigIntFromString(s string) *big.Int {

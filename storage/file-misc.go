@@ -30,7 +30,7 @@ func minFileLengthsForTorrentExtent(
 }
 
 func fsync(filePath string) (err error) {
-	f, err := os.OpenFile(filePath, os.O_WRONLY, filePerm)
+	f, err := os.OpenFile(filePath, fsyncOpenFlag, 0)
 	if err != nil {
 		return
 	}

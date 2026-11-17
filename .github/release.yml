@@ -1,0 +1,27 @@
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+  categories:
+    - title: Security
+      labels:
+        - security
+    - title: Breaking Changes
+      labels:
+        - breaking
+    - title: Bug Fixes
+      labels:
+        - bug
+        - fix
+    - title: Performance
+      labels:
+        - performance
+        - perf
+    - title: New Features
+      labels:
+        - feature
+        - feat
+        - enhancement
+    - title: Other Changes
+      labels:
+        - "*"

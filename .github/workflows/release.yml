@@ -1,0 +1,208 @@
+name: Release
+
+run-name: "Release ${{ github.ref_name }}"
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  verify:
+    name: Verify tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      prev_tag: ${{ steps.prev.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate tag format
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Tag '$TAG' does not match semver pattern v#.#.# or v#.#.#-pre"
+            exit 1
+          fi
+
+      - name: Extract version metadata
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          if [[ "$TAG" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Find previous stable tag
+        id: prev
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          # Sort all stable tags together with the current one, then pick
+          # the entry just below it. This handles backports correctly:
+          # pushing v1.62.1 after v1.63.0 exists finds v1.62.0, not v1.63.0.
+          PREV=$(git tag \
+            | grep -xE 'v[0-9]+\.[0-9]+\.[0-9]+' \
+            | sort -V \
+            | grep -xB1 "$TAG" \
+            | head -1)
+          [ "$PREV" = "$TAG" ] && PREV=""
+          echo "tag=${PREV}" >> "$GITHUB_OUTPUT"
+          echo "Previous stable tag: ${PREV:-<none>}"
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: verify
+    env:
+      CGO_LDFLAGS: "-Lstorage/possum/lib/target/debug"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+
+      - uses: ./.github/actions/go-test-cache
+
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y fuse
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: storage/possum/lib
+
+      - name: Build possum
+        run: cd storage/possum/lib && cargo build --lib
+
+      - run: go mod download
+
+      - name: Run tests
+        run: go test -count 1 -race -failfast -timeout 600s ./...
+
+  security:
+    name: Security scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Run govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest && govulncheck ./...
+
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [verify, test, security]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+          - goos: freebsd
+            goarch: amd64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          EXT=""
+          if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
+          OUTPUT="torrent-${VERSION}-${GOOS}-${GOARCH}${EXT}"
+          go build -trimpath \
+            -ldflags="-s -w" \
+            -o "$OUTPUT" \
+            ./cmd/torrent
+          echo "artifact=$OUTPUT" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: torrent-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.artifact }}
+          retention-days: 1
+
+  publish:
+    name: Publish release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [verify, build]
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: torrent-*
+          merge-multiple: true
+
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum * > checksums.txt
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PREV_TAG: ${{ needs.verify.outputs.prev_tag }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+        run: |
+          ARGS=(--generate-notes --verify-tag)
+          if [ -n "$PREV_TAG" ]; then
+            ARGS+=(--notes-start-tag "$PREV_TAG")
+          fi
+          if [ "$PRERELEASE" = "true" ]; then
+            ARGS+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" "${ARGS[@]}" dist/*

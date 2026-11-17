@@ -80,13 +80,17 @@ var random_encode_tests = []random_encode_test{
 		G string         `bencode:",omitempty"`
 		H interface{}    `bencode:",omitempty"`
 	}{A: []byte{}, B: nil, C: map[string]int{}}, "d1:A0:1:Cdee"},
-	// Zero structs with unexported fields are omitted, and non-zero ones aren't.
+	// Zero structs with unexported fields are omitted, and non-zero ones aren't, even when only an
+	// unexported field is set.
 	{struct {
 		A omitEmptyUnexported `bencode:",omitempty"`
 	}{}, "de"},
 	{struct {
 		A omitEmptyUnexported `bencode:",omitempty"`
 	}{omitEmptyUnexported{B: 1}}, "d1:Ad1:Bi1eee"},
+	{struct {
+		A omitEmptyUnexported `bencode:",omitempty"`
+	}{omitEmptyUnexported{c: 1}}, "d1:Ad1:Bi0eee"},
 	{bigIntFromString("62208002200000000000"), "i62208002200000000000e"},
 	{*bigIntFromString("62208002200000000000"), "i62208002200000000000e"},
 }

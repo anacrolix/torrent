@@ -8,12 +8,30 @@ import (
 	"sort"
 	"strconv"
 	"sync"
-
-	"github.com/anacrolix/missinggo"
 )
 
+// isEmptyValue reports whether v is a zero value, recursing into arrays and structs. Copied from
+// missinggo v1's IsEmptyValue, which missinggo v2 doesn't have.
 func isEmptyValue(v reflect.Value) bool {
-	return missinggo.IsEmptyValue(v)
+	switch v.Kind() {
+	case reflect.Func, reflect.Map, reflect.Slice:
+		return v.IsNil()
+	case reflect.Array:
+		z := true
+		for i := 0; i < v.Len(); i++ {
+			z = z && isEmptyValue(v.Index(i))
+		}
+		return z
+	case reflect.Struct:
+		z := true
+		for i := 0; i < v.NumField(); i++ {
+			z = z && isEmptyValue(v.Field(i))
+		}
+		return z
+	}
+	// Compare other types directly:
+	z := reflect.Zero(v.Type())
+	return v.Interface() == z.Interface()
 }
 
 type Encoder struct {

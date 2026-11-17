@@ -3635,6 +3635,11 @@ func sendUtHolepunchMsg(
 	addrPort netip.AddrPort,
 	errCode utHolepunch.ErrCode,
 ) {
+	// Incoming extended messages are routed by the ids we advertise, so a peer can send us
+	// ut_holepunch messages without advertising the extension itself. We have no id to reply with.
+	if !pc.supportsExtension(utHolepunch.ExtensionName) {
+		return
+	}
 	holepunchMsg := utHolepunch.Msg{
 		MsgType:  msgType,
 		AddrPort: addrPort,
@@ -3681,6 +3686,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 			// There's no better error code. The sender's address itself is invalid. I don't see
 			// this error message being appropriate anywhere else anyway.
 			sendMsg(sender, utHolepunch.Error, msg.AddrPort, utHolepunch.NoSuchPeer)
+			return nil
 		}
 		targets := t.peerConnsWithDialAddrPort(msg.AddrPort)
 		if len(targets) == 0 {

@@ -487,6 +487,11 @@ func (d *Decoder) parseDictStruct(v reflect.Value) error {
 		if !ok {
 			// The key is in d.buf, which parsing the value will overwrite.
 			key = bytes.Clone(key)
+		}
+		// A key read through the buffer (one longer than bytes.MinRead from a stream) is left in it,
+		// and would corrupt the next token read.
+		d.buf.Reset()
+		if !ok {
 			// There's nowhere to put the value, but it's still parsed (and validated) as it would
 			// be for an interface{}.
 			if_, _ := d.parseValueInterface()

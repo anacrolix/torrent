@@ -28,3 +28,14 @@ func TestDecoderIntAfterIntTypeError(t *testing.T) {
 	qt.Assert(t, qt.IsNil(d.Decode(&i)))
 	qt.Check(t, qt.Equals(i, 2))
 }
+
+// A dict key longer than bytes.MinRead, read from a stream, used to be left in the decoder buffer.
+func TestDecoderLongStructKey(t *testing.T) {
+	key := strings.Repeat("k", 600)
+	d := NewDecoder(strings.NewReader("d600:" + key + "3:abc1:xi5ee"))
+	var v struct {
+		X int `bencode:"x"`
+	}
+	qt.Assert(t, qt.IsNil(d.Decode(&v)))
+	qt.Check(t, qt.Equals(v.X, 5))
+}

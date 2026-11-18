@@ -24,6 +24,10 @@ func (t *Torrent) startWebsocketAnnouncer(url.URL, [20]byte) torrentTrackerAnnou
 	return nil
 }
 
+func isWebsocketTrackerAnnouncer(torrentTrackerAnnouncer) bool {
+	return false
+}
+
 type webRtcStatsReports map[string]any
 
 func (t *Torrent) GetWebRtcPeerConnStats() map[string]webRtcStatsReports {

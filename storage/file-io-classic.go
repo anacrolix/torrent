@@ -44,7 +44,7 @@ func (me *classicFileIo) rename(from, to string) error {
 	}
 	err := me.closeWriterLocked(from)
 	err = errors.Join(err, me.closeWriterLocked(to))
-	err = errors.Join(err, os.Rename(from, to))
+	err = errors.Join(err, renameNoReplace(from, to))
 	return err
 }
 
@@ -155,7 +155,12 @@ func (c classicFileReader) writeToN(w io.Writer, n int64) (written int64, err er
 		rem: n,
 		w:   w,
 	}
-	return c.File.WriteTo(&lw)
+	written, err = c.File.WriteTo(&lw)
+	// The limit stops the copy at n bytes; that is not a failed write.
+	if errors.Is(err, io.ErrShortWrite) && lw.rem == 0 {
+		err = nil
+	}
+	return
 }
 
 func (c classicFileReader) seekDataOrEof(offset int64) (ret int64, err error) {

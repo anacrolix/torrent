@@ -20,6 +20,7 @@ import (
 	"github.com/anacrolix/torrent/internal/mytimer"
 	"github.com/anacrolix/torrent/tracker"
 	trHttp "github.com/anacrolix/torrent/tracker/http"
+	"github.com/anacrolix/torrent/tracker/udp"
 )
 
 // Designed in a way to allow switching to an event model if required. If multiple slots are allowed
@@ -31,6 +32,9 @@ type regularTrackerAnnounceDispatcher struct {
 	slow          amortize.Value
 
 	trackerClients map[trackerAnnouncerKey]*trackerClientsValue
+	// UDP trackers share a socket per network, rather than holding one each for the life of the
+	// Client.
+	udpSockets     map[string]*udp.Socket
 	announceStates map[torrentTrackerAnnouncerKey]*announceState
 	// Save torrents so we can fetch announce request fields even when the torrent Client has
 	// dropped it. We should just prefer to remember the fields we need. Ideally this would map all
@@ -91,6 +95,29 @@ func (me *regularTrackerAnnounceDispatcher) init(client *Client) {
 	me.initTables()
 	g.MakeMap(&me.pendingTorrentInputUpdates)
 	me.initTimer()
+	client.onClose = append(client.onClose, me.closeUdpSockets)
+}
+
+// Returns the shared socket for UDP trackers on the given network, creating it if necessary. The
+// socket doesn't open a conn until it's used.
+func (me *regularTrackerAnnounceDispatcher) udpSocket(network string, config *ClientConfig, logger *slog.Logger) *udp.Socket {
+	if s, ok := me.udpSockets[network]; ok {
+		return s
+	}
+	s := &udp.Socket{
+		Network:      network,
+		ListenPacket: config.TrackerListenPacket,
+		Logger:       logger.With("udpTrackerNetwork", network),
+	}
+	g.MakeMapIfNil(&me.udpSockets)
+	me.udpSockets[network] = s
+	return s
+}
+
+func (me *regularTrackerAnnounceDispatcher) closeUdpSockets() {
+	for _, s := range me.udpSockets {
+		s.Close()
+	}
 }
 
 func (me *regularTrackerAnnounceDispatcher) initTables() {
@@ -631,11 +658,13 @@ func (me *regularTrackerAnnounceDispatcher) singleAnnounce(
 	// A logger that includes the nice torrent group so we know what the announce is for.
 	logger = logger.With(t.slogGroup())
 	req := t.announceRequest(event, key.ShortInfohash)
+	// Taken under the lock, since adding a tracker adds to trackerClients.
+	tc := me.trackerClients[key.url].client
 	me.torrentClient.unlock()
 	ctx, cancel := context.WithTimeout(context.TODO(), tracker.DefaultTrackerAnnounceTimeout)
 	defer cancel()
 	logger.Debug("announcing", "req", req)
-	resp, err := me.trackerClients[key.url].client.Announce(ctx, req, me.getAnnounceOpts())
+	resp, err := tc.Announce(ctx, req, me.getAnnounceOpts())
 	now := time.Now()
 	{
 		level := slog.LevelDebug
@@ -656,9 +685,10 @@ func (me *regularTrackerAnnounceDispatcher) singleAnnounce(
 			state.consecutiveFailures = 0
 			state.lastOk = lastAnnounceOk{
 				AnnouncedEvent: req.Event,
-				Interval:       time.Duration(resp.Interval) * time.Second,
-				NumPeers:       len(resp.Peers),
-				Completed:      now,
+				// The tracker controls this. Don't let it make us reannounce in a tight loop.
+				Interval:  max(time.Duration(resp.Interval)*time.Second, minAnnounceInterval),
+				NumPeers:  len(resp.Peers),
+				Completed: now,
 			}
 			if req.Event == tracker.Completed {
 				state.sentCompleted = true
@@ -853,6 +883,9 @@ func (me *regularTrackerAnnounceDispatcher) nextAnnounceEvent(key torrentTracker
 	return tracker.None, lastOk.Completed.Add(lastOk.Interval)
 }
 
+// The shortest reannounce interval we accept from a tracker.
+const minAnnounceInterval = time.Minute
+
 type lastAnnounceOk struct {
 	AnnouncedEvent tracker.AnnounceEvent
 	Interval       time.Duration
@@ -870,8 +903,8 @@ type announceState struct {
 	sentCompleted bool
 }
 
-func (cl *Client) startTrackerAnnouncer(u *url.URL, urlStr trackerAnnouncerKey) {
-	cl.regularTrackerAnnounceDispatcher.initTrackerClient(u, urlStr, cl.config, cl.slogger)
+func (cl *Client) startTrackerAnnouncer(u *url.URL, urlStr trackerAnnouncerKey) error {
+	return cl.regularTrackerAnnounceDispatcher.initTrackerClient(u, urlStr, cl.config, cl.slogger)
 }
 
 func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
@@ -879,10 +912,14 @@ func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 	urlStr trackerAnnouncerKey,
 	config *ClientConfig,
 	logger *slog.Logger,
-) {
+) error {
 	panicif.NotEq(u.String(), string(urlStr))
 	if g.MapContains(me.trackerClients, urlStr) {
-		return
+		return nil
+	}
+	// Need deep copy
+	if u.User != nil {
+		return errors.New("tracker urls with user info are not supported")
 	}
 	// Parts of the old Announce code, here for reference, to help with mapping configuration to the
 	// new global client tracker implementation.
@@ -934,19 +971,26 @@ func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 			HttpRequestDirector: me.HttpRequestDirector,
 		})
 	*/
+	var udpSocket *udp.Socket
+	switch u.Scheme {
+	case "udp", "udp4", "udp6":
+		udpSocket = me.udpSocket(u.Scheme, config, logger)
+	}
 	tc, err := tracker.NewClient(string(urlStr), tracker.NewClientOpts{
 		Http: trHttp.NewClientOpts{
-			Proxy:       config.HTTPProxy,
-			DialContext: config.TrackerDialContext,
-			ServerName:  u.Hostname(),
+			Proxy:              config.HTTPProxy,
+			DialContext:        config.TrackerDialContext,
+			ServerName:         u.Hostname(),
+			InsecureSkipVerify: config.TrackerInsecureSkipVerify,
 		},
 		UdpNetwork:   u.Scheme,
 		Slogger:      logger.With("trackerUrl", string(urlStr)),
 		ListenPacket: config.TrackerListenPacket,
+		UdpSocket:    udpSocket,
 	})
-	panicif.Err(err)
-	// Need deep copy
-	panicif.NotNil(u.User)
+	if err != nil {
+		return err
+	}
 	//ta := &regularTrackerAnnounceDispatcher{
 	//	trackerClient: tc,
 	//	torrentClient: cl,
@@ -961,6 +1005,7 @@ func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 	g.MakeMapIfNil(&me.trackerClients)
 	// TODO: Put the urlHost from here.
 	g.MapMustAssignNew(me.trackerClients, urlStr, &value)
+	return nil
 }
 
 // Returns nil if the Torrent has been GCd. Use this lazily as a way to stop caring about announcing
@@ -975,5 +1020,11 @@ func (me *regularTrackerAnnounceDispatcher) pendTorrentInputUpdate(t *Torrent) {
 	if t.cl.config.DisableTrackers {
 		return
 	}
+	if g.MapContains(me.pendingTorrentInputUpdates, t) {
+		return
+	}
 	me.pendingTorrentInputUpdates[t] = struct{}{}
+	// The timer may be waiting for a regular announce far in the future. Bring it forward so the
+	// update, such as a dropped torrent's Stopped announce, isn't held back until then.
+	me.updateTimer()
 }

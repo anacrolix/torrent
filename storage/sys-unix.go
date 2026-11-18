@@ -10,6 +10,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// fsync(2) works on a read-only descriptor, and needs one for a file promoted off its part file name,
+// which is made read-only.
+const fsyncOpenFlag = os.O_RDONLY
+
 // Returns io.EOF if there's no data after offset. That doesn't mean there isn't zeroes for a sparse
 // hole. Note that lseek returns -1 on error.
 func seekData(f *os.File, offset int64) (ret int64, err error) {

@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/anacrolix/dht/v2/krpc"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 
@@ -14,6 +15,11 @@ import (
 const (
 	pexRetryDelay = 10 * time.Second
 	pexInterval   = 1 * time.Minute
+	// Most added peers used from each address family of a received PEX message. BEP 11 asks
+	// senders for no more than 50 per message.
+	maxPexAddedPerMessage = 100
+	// Most live connections recorded as purported by the remote end of a connection.
+	maxPexRemoteLiveConns = 1000
 )
 
 // per-connection PEX state
@@ -21,7 +27,7 @@ type pexConnState struct {
 	enabled bool
 	xid     pp.ExtensionNumber
 	last    *pexEvent
-	timer   *time.Timer
+	timer   *releasedTimer
 	gate    chan struct{}
 	readyfn func()
 	torrent *Torrent
@@ -30,6 +36,8 @@ type pexConnState struct {
 	// Running record of live connections the remote end of the connection purports to have.
 	remoteLiveConns map[netip.AddrPort]g.Option[pp.PexPeerFlags]
 	lastRecv        time.Time
+	// The remote end's IP, if known.
+	remoteIp g.Option[netip.Addr]
 }
 
 func (s *pexConnState) IsEnabled() bool {
@@ -38,6 +46,10 @@ func (s *pexConnState) IsEnabled() bool {
 
 // Init is called from the reader goroutine upon the extended handshake completion
 func (s *pexConnState) Init(c *PeerConn) {
+	if s.enabled {
+		// The extended handshake can be repeated. Keep the existing state and timer.
+		return
+	}
 	xid, ok := c.PeerExtensionIDs[pp.ExtensionNamePex]
 	if !ok || xid == 0 || c.t.cl.config.DisablePEX {
 		return
@@ -49,10 +61,11 @@ func (s *pexConnState) Init(c *PeerConn) {
 	s.xid = xid
 	s.last = nil
 	s.torrent = c.t
+	s.remoteIp = c.bannableAddr
 	s.logger = c.logger.WithDefaultLevel(log.Debug).WithNames("pex")
 	s.readyfn = c.tickleWriter
 	s.gate = make(chan struct{}, 1)
-	s.timer = time.AfterFunc(0, func() {
+	s.timer = newReleasedTimer(0, func() {
 		s.gate <- struct{}{}
 		s.readyfn() // wake up the writer
 	})
@@ -109,19 +122,46 @@ func (s *pexConnState) updateRemoteLiveConns(rx pp.PexMsg) (errs []error) {
 		addrPort, _ := ipv6AddrPortFromKrpcNodeAddr(dropped)
 		delete(s.remoteLiveConns, addrPort)
 	}
-	for i, added := range rx.Added {
-		addr := netip.AddrFrom4(*(*[4]byte)(added.IP.To4()))
-		addrPort := netip.AddrPortFrom(addr, uint16(added.Port))
-		flags := g.SliceGet(rx.AddedFlags, i)
+	insert := func(addrPort netip.AddrPort, flags g.Option[pp.PexPeerFlags]) {
+		if len(s.remoteLiveConns) >= maxPexRemoteLiveConns {
+			if _, ok := s.remoteLiveConns[addrPort]; !ok {
+				return
+			}
+		}
 		g.MakeMapIfNil(&s.remoteLiveConns)
 		g.MapInsert(s.remoteLiveConns, addrPort, flags)
 	}
+	for i, added := range rx.Added {
+		addr := netip.AddrFrom4(*(*[4]byte)(added.IP.To4()))
+		insert(netip.AddrPortFrom(addr, uint16(added.Port)), g.SliceGet(rx.AddedFlags, i))
+	}
 	for i, added := range rx.Added6 {
 		addr := netip.AddrFrom16(*(*[16]byte)(added.IP.To16()))
-		addrPort := netip.AddrPortFrom(addr, uint16(added.Port))
-		flags := g.SliceGet(rx.Added6Flags, i)
-		g.MakeMapIfNil(&s.remoteLiveConns)
-		g.MapInsert(s.remoteLiveConns, addrPort, flags)
+		insert(netip.AddrPortFrom(addr, uint16(added.Port)), g.SliceGet(rx.Added6Flags, i))
+	}
+	return
+}
+
+// Limits the number of added peers taken from a message, and drops those the remote end may not
+// direct us to dial. Flags are kept aligned with their peers.
+func (s *pexConnState) filterAdded(
+	nas []krpc.NodeAddr,
+	fs []pp.PexPeerFlags,
+) (retNas []krpc.NodeAddr, retFs []pp.PexPeerFlags) {
+	for i, na := range nas {
+		if len(retNas) >= maxPexAddedPerMessage {
+			torrent.Add("pex added peers dropped past message limit", int64(len(nas)-i))
+			break
+		}
+		addr, ok := netip.AddrFromSlice(na.IP)
+		if !ok || !peerMayDirectDialTo(s.remoteIp, addr) {
+			torrent.Add("pex added peers dropped for address scope", 1)
+			continue
+		}
+		retNas = append(retNas, na)
+		if i < len(fs) {
+			retFs = append(retFs, fs[i])
+		}
 	}
 	return
 }
@@ -142,6 +182,8 @@ func (s *pexConnState) Recv(payload []byte) error {
 		return fmt.Errorf("last received only %v ago", timeSinceLastRecv)
 	}
 	s.lastRecv = time.Now()
+	rx.Added, rx.AddedFlags = s.filterAdded(rx.Added, rx.AddedFlags)
+	rx.Added6, rx.Added6Flags = s.filterAdded(rx.Added6, rx.Added6Flags)
 	s.updateRemoteLiveConns(rx)
 
 	var peers peerInfos
@@ -163,6 +205,12 @@ func (s *pexConnState) Recv(payload []byte) error {
 	// - detect malicious peers
 
 	return nil
+}
+
+// Stops PEX on the conn, for when we learn the torrent is private after PEX was enabled.
+func (s *pexConnState) disable() {
+	s.Close()
+	s.enabled = false
 }
 
 func (s *pexConnState) Close() {

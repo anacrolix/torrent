@@ -17,9 +17,16 @@ jobs:
   test:
     timeout-minutes: 20
     runs-on: windows-latest
+    # Run the toolchain setup-go installed, and fail if it isn't new enough,
+    # rather than silently downloading a different one.
+    env:
+      GOTOOLCHAIN: local
     strategy:
       matrix:
-        go-version: [stable, oldstable]
+        # go.mod tests the minimum version declared there; stable tests the newest
+        # release. oldstable was dropped: once go.mod requires a version newer than
+        # oldstable, GOTOOLCHAIN=auto just downloads that toolchain anyway.
+        go: [go.mod, stable]
       fail-fast: false
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +34,11 @@ jobs:
           submodules: true
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version: ${{ matrix.go != 'go.mod' && matrix.go || '' }}
+          go-version-file: ${{ matrix.go == 'go.mod' && 'go.mod' || '' }}
+          # Replaced by go-test-cache, which also saves updated test results.
+          cache: false
+      - uses: ./.github/actions/go-test-cache
       - name: Fix Windows dynamic port range
         shell: pwsh
         run: |
@@ -35,6 +46,6 @@ jobs:
           netsh int ipv4 set dynamicport udp start=20000 num=16384
       - run: go mod download
       - name: Test packages
-        run: go test -count=1 ./...
+        run: go test ./...
         env:
           CGO_ENABLED: "0"

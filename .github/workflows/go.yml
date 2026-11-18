@@ -17,9 +17,16 @@ jobs:
   test:
     timeout-minutes: 20
     runs-on: ${{ matrix.os }}
+    # Run the toolchain setup-go installed, and fail if it isn't new enough,
+    # rather than silently downloading a different one.
+    env:
+      GOTOOLCHAIN: local
     strategy:
       matrix:
-        go-version: [ stable, oldstable]
+        # go.mod tests the minimum version declared there; stable tests the newest
+        # release. oldstable was dropped: once go.mod requires a version newer than
+        # oldstable, GOTOOLCHAIN=auto just downloads that toolchain anyway.
+        go: [go.mod, stable]
         # windows-latest removed for now: known issues with file handles to
         # resolved. could set classic file io mode.
         os: [macos-latest, ubuntu-latest]
@@ -30,9 +37,38 @@ jobs:
           submodules: true
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
-      - run: brew install macfuse fuse-t && echo 'FUSE_FORCE_BACKEND=fuse-t' >> $GITHUB_ENV
+          go-version: ${{ matrix.go != 'go.mod' && matrix.go || '' }}
+          go-version-file: ${{ matrix.go == 'go.mod' && 'go.mod' || '' }}
+          # Replaced by go-test-cache, which also saves updated test results.
+          cache: false
+      - uses: ./.github/actions/go-test-cache
+      # The FUSE casks download installers from GitHub releases, which
+      # intermittently return 504s. Cache the downloads per cask version, and
+      # retry the install, so a flaky download doesn't fail the job.
+      - name: Resolve FUSE cask versions
+        id: fuse-casks
         if: matrix.os == 'macos-latest'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+        run: |
+          echo "key=$(brew info --cask --json=v2 macfuse fuse-t | jq -r '[.casks[] | .token + "-" + .version] | join("_")')" >> "$GITHUB_OUTPUT"
+          echo "cache=$(brew --cache)/downloads" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        if: matrix.os == 'macos-latest'
+        with:
+          path: ${{ steps.fuse-casks.outputs.cache }}
+          key: brew-casks-${{ runner.os }}-${{ runner.arch }}-${{ steps.fuse-casks.outputs.key }}
+      - name: Install FUSE
+        if: matrix.os == 'macos-latest'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+        run: |
+          for attempt in 1 2 3 4; do
+            brew install macfuse fuse-t && break
+            if [ "$attempt" = 4 ]; then exit 1; fi
+            sleep $((attempt * 30))
+          done
+          echo 'FUSE_FORCE_BACKEND=fuse-t' >> "$GITHUB_ENV"
       - run: |
           sudo apt update
           sudo apt install -y fuse
@@ -52,6 +88,10 @@ jobs:
       # Separate to remove downloading spam and possible caching improvement.
       - run: go mod download
       - run: just test
+      # Modules under tests/ with their own go.mod are skipped by ./... and need
+      # manual setup to run, so at least check they compile against this checkout.
+      - name: Vet separate test modules
+        run: go vet $(for m in tests/*/go.mod; do echo "./${m%/go.mod}"; done)
         # Test on 386 for atomic alignment and other bad 64-bit assumptions
       - if: matrix.os != 'macos-latest'
         run: GOARCH=386 go test -run @ ./...

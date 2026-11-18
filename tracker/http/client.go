@@ -3,10 +3,13 @@ package httpTracker
 import (
 	"context"
 	"crypto/tls"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 type Client struct {
@@ -31,6 +34,30 @@ type NewClientOpts struct {
 	// Maximum size of a tracker response body. Zero means DefaultMaxResponseBytes. Negative means
 	// no limit.
 	MaxResponseBytes int64
+	// Don't verify the tracker's TLS certificate. Certificates are verified by default.
+	InsecureSkipVerify bool
+	// Decides whether to follow a redirect, like http.Client.CheckRedirect. If nil,
+	// DefaultCheckRedirect is used.
+	CheckRedirect func(req *http.Request, via []*http.Request) error
+}
+
+// MaxRedirects is the most redirects DefaultCheckRedirect follows for one request.
+const MaxRedirects = 5
+
+// DefaultCheckRedirect follows at most MaxRedirects redirects, only to the same host as the
+// original request, and not from https to http.
+func DefaultCheckRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= MaxRedirects {
+		return fmt.Errorf("stopped after %d redirects", len(via))
+	}
+	first := via[0].URL
+	if !strings.EqualFold(req.URL.Hostname(), first.Hostname()) {
+		return fmt.Errorf("not following redirect to another host: %q", req.URL.Host)
+	}
+	if first.Scheme == "https" && req.URL.Scheme != "https" {
+		return errors.New("not following redirect from https to http")
+	}
+	return nil
 }
 
 func NewClient(url_ *url.URL, opts NewClientOpts) Client {
@@ -38,15 +65,20 @@ func NewClient(url_ *url.URL, opts NewClientOpts) Client {
 	if maxResponseBytes == 0 {
 		maxResponseBytes = DefaultMaxResponseBytes
 	}
+	checkRedirect := opts.CheckRedirect
+	if checkRedirect == nil {
+		checkRedirect = DefaultCheckRedirect
+	}
 	return Client{
 		url_:             url_,
 		maxResponseBytes: maxResponseBytes,
 		hc: &http.Client{
+			CheckRedirect: checkRedirect,
 			Transport: &http.Transport{
 				DialContext: opts.DialContext,
 				Proxy:       opts.Proxy,
 				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
+					InsecureSkipVerify: opts.InsecureSkipVerify,
 					ServerName:         opts.ServerName,
 				},
 				// This is for S3 trackers that hold connections open.

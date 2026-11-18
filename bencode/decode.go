@@ -16,6 +16,10 @@ import (
 // allocation when parsing, but also leaves the window open to implement a better solution.
 const DefaultDecodeMaxStrLen = 1<<27 - 1 // ~128MiB
 
+// Maximum length in bytes of an integer decoded into a *big.Int. That's far beyond what any known
+// use of bencode needs.
+const maxBigIntLen = 1 << 10
+
 // The default maximum nesting depth of bencode dicts and lists. The decoder recurses once per
 // nesting level, so without a limit a few million levels of nesting would exhaust the goroutine
 // stack (a fatal, unrecoverable error in Go). Real-world metainfo nests only a handful of levels
@@ -239,52 +243,73 @@ func (d *Decoder) parseStringLength() (int, error) {
 	return int(length), err
 }
 
+// Reads a string of the given length, into buf if it's set. The length comes from the input, so it's
+// only allocated up front if the input is in memory and holds the whole string, or if it's no more
+// than io.ReadAll would allocate anyway. Otherwise the string grows as the data arrives.
+func (d *Decoder) readString(length int, buf *bytes.Buffer) (b []byte) {
+	var n int
+	var err error
+	if r, ok := d.r.(*bytes.Reader); length <= bytes.MinRead || ok && r.Len() >= length {
+		if buf == nil {
+			b = make([]byte, length)
+		} else {
+			buf.Grow(length)
+			b = buf.AvailableBuffer()[:length]
+		}
+		n, err = io.ReadFull(d.r, b)
+	} else {
+		lr := io.LimitReader(d.r, int64(length))
+		if buf == nil {
+			b, err = io.ReadAll(lr)
+		} else {
+			_, err = buf.ReadFrom(lr)
+			b = buf.Bytes()
+		}
+		n = len(b)
+		if err == nil && n < length {
+			// The limited reader hides EOF. Report the short read as io.ReadFull would.
+			err = io.EOF
+			if n > 0 {
+				err = io.ErrUnexpectedEOF
+			}
+		}
+	}
+	d.Offset += int64(n)
+	if err != nil {
+		checkForUnexpectedEOF(err, d.Offset)
+		panic(&SyntaxError{
+			Offset: d.Offset,
+			What:   errors.New("unexpected I/O error: " + err.Error()),
+		})
+	}
+	return b
+}
+
 func (d *Decoder) parseString(v reflect.Value) error {
 	length, err := d.parseStringLength()
 	if err != nil {
 		return err
 	}
 	defer d.buf.Reset()
-	read := func(b []byte) {
-		n, err := io.ReadFull(d.r, b)
-		d.Offset += int64(n)
-		if err != nil {
-			checkForUnexpectedEOF(err, d.Offset)
-			panic(&SyntaxError{
-				Offset: d.Offset,
-				What:   errors.New("unexpected I/O error: " + err.Error()),
-			})
-		}
-	}
 
 	switch v.Kind() {
 	case reflect.String:
-		b := make([]byte, length)
-		read(b)
-		v.SetString(bytesAsString(b))
+		v.SetString(bytesAsString(d.readString(length, nil)))
 		return nil
 	case reflect.Slice:
 		if v.Type().Elem().Kind() != reflect.Uint8 {
 			break
 		}
-		b := make([]byte, length)
-		read(b)
-		v.SetBytes(b)
+		v.SetBytes(d.readString(length, nil))
 		return nil
 	case reflect.Array:
 		if v.Type().Elem().Kind() != reflect.Uint8 {
 			break
 		}
-		d.buf.Grow(length)
-		b := d.buf.Bytes()[:length]
-		read(b)
-		reflect.Copy(v, reflect.ValueOf(b))
+		reflect.Copy(v, reflect.ValueOf(d.readString(length, &d.buf)))
 		return nil
 	case reflect.Bool:
-		d.buf.Grow(length)
-		b := d.buf.Bytes()[:length]
-		read(b)
-		x, err := strconv.ParseBool(bytesAsString(b))
+		x, err := strconv.ParseBool(bytesAsString(d.readString(length, &d.buf)))
 		if err != nil {
 			x = length != 0
 		}
@@ -293,8 +318,7 @@ func (d *Decoder) parseString(v reflect.Value) error {
 	}
 	// Can't move this into default clause because some cases above fail through to here after
 	// additional checks.
-	d.buf.Grow(length)
-	read(d.buf.Bytes()[:length])
+	d.readString(length, &d.buf)
 	// I believe we return here to support "ignore_unmarshal_type_error".
 	return &UnmarshalTypeError{
 		BencodeTypeName:     "string",
@@ -723,6 +747,13 @@ func (d *Decoder) parseIntInterface() (ret interface{}) {
 	}
 	n, err := strconv.ParseInt(d.buf.String(), 10, 64)
 	if ne, ok := err.(*strconv.NumError); ok && ne.Err == strconv.ErrRange {
+		// Converting decimal digits to a big.Int takes superlinear time, so bound the input.
+		if d.buf.Len() > maxBigIntLen {
+			panic(&SyntaxError{
+				Offset: start,
+				What:   fmt.Errorf("integer length %v exceeds limit (%v)", d.buf.Len(), maxBigIntLen),
+			})
+		}
 		i := new(big.Int)
 		_, ok := i.SetString(d.buf.String(), 10)
 		if !ok {

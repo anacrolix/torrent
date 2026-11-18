@@ -4,7 +4,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/anacrolix/missinggo/expect"
+	"github.com/anacrolix/missinggo/v2/expect"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"

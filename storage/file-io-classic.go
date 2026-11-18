@@ -44,7 +44,7 @@ func (me *classicFileIo) rename(from, to string) error {
 	}
 	err := me.closeWriterLocked(from)
 	err = errors.Join(err, me.closeWriterLocked(to))
-	err = errors.Join(err, os.Rename(from, to))
+	err = errors.Join(err, renameNoReplace(from, to))
 	return err
 }
 

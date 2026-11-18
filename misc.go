@@ -154,15 +154,27 @@ func validateInfo(info *metainfo.Info) error {
 		}
 		// A hybrid info carries both a v1 hash list and a v2 file tree. If their piece counts
 		// disagree, later code indexes the v1 hashes by the v2 count and slices out of range.
-		if info.HasV1() && int64(len(info.Pieces)/20) != numPieces {
-			return fmt.Errorf("hybrid info has %v v1 piece hashes for %v pieces", len(info.Pieces)/20, numPieces)
+		if info.HasV1() {
+			if int64(len(info.Pieces)/20) != numPieces {
+				return fmt.Errorf("hybrid info has %v v1 piece hashes for %v pieces", len(info.Pieces)/20, numPieces)
+			}
+			// The v1 file lengths must span the same pieces as the v2 file tree. Otherwise the last
+			// piece's v1 length (metainfo.Piece.V1Length) comes out zero or negative and panics the
+			// piece hasher.
+			if (v1Total+info.PieceLength-1)/info.PieceLength != numPieces {
+				return fmt.Errorf("hybrid info v1 file lengths span %v pieces, not %v",
+					(v1Total+info.PieceLength-1)/info.PieceLength, numPieces)
+			}
 		}
 	}
 	if len(info.Pieces)%20 != 0 {
 		return errors.New("pieces has invalid length")
 	}
 	if info.PieceLength == 0 {
-		if info.TotalLength() != 0 {
+		// A zero piece length only fits an empty torrent with no pieces. Content or piece hashes
+		// make the piece count nonzero, and hashing the last piece then reaches Piece.V1Length with
+		// a zero length, which panics.
+		if info.TotalLength() != 0 || len(info.Pieces) != 0 {
 			return errors.New("zero piece length")
 		}
 	} else if !info.HasV2() {

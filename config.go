@@ -31,6 +31,8 @@ type ClientTrackerConfig struct {
 	DisableTrackers bool `long:"disable-trackers"`
 	// Defines DialContext func to use for HTTP tracker announcements
 	TrackerDialContext func(ctx context.Context, network, addr string) (net.Conn, error)
+	// Don't verify HTTPS tracker certificates. Certificates are verified by default.
+	TrackerInsecureSkipVerify bool
 	// Defines ListenPacket func to use for UDP tracker announcements
 	TrackerListenPacket func(network, addr string) (net.PacketConn, error)
 	// Deprecated. Takes a tracker's hostname and requests DNS A and AAAA records. Used in case DNS lookups
@@ -236,6 +238,13 @@ type ClientConfig struct {
 	// impact of a few bad apples. 4s loses 1% of successful handshakes that
 	// are obtained with 60s timeout, and 5% of unsuccessful handshakes.
 	HandshakesTimeout time.Duration
+	// Maximum number of accepted connections that may be in the handshake phase at once. Further
+	// accepted connections are closed until some handshakes complete or time out. Zero or less is
+	// unlimited.
+	MaxPendingIncomingHandshakes int
+	// Maximum number of accepted connections from a single IP that may be in the handshake phase at
+	// once. Zero or less is unlimited.
+	MaxPendingIncomingHandshakesPerIp int
 	// How long between writes before sending a keep alive message on a peer connection that we want
 	// to maintain.
 	KeepAliveTimeout time.Duration
@@ -342,6 +351,9 @@ func NewDefaultClientConfig() *ClientConfig {
 		StealRequestGrace:      initDurationFromEnv(stealRequestGraceEnvKey, defaultStealRequestGrace),
 		DialRateLimiter:        rate.NewLimiter(10, 10),
 		PieceHashersPerTorrent: 2,
+
+		MaxPendingIncomingHandshakes:      128,
+		MaxPendingIncomingHandshakesPerIp: 8,
 	}
 	cc.DhtStartingNodes = func(network string) dht.StartingNodesGetter {
 		return func() ([]dht.Addr, error) { return dht.GlobalBootstrapAddrs(network) }
@@ -354,6 +366,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		}
 		return t.MergeSpec(spec)
 	}
+	cc.MetainfoSourcesTimeout = time.Minute
 	return cc
 }
 
@@ -386,4 +399,8 @@ type MetainfoSourcesConfig struct {
 	// is provided to prevent a race as the fetcher for the source was bound to it. Returning an
 	// error will kill the respective sourcer.
 	MetainfoSourcesMerger func(t *Torrent, info *metainfo.MetaInfo) error
+	// Timeout for a single attempt to fetch metainfo from a source over HTTP. Without it a source
+	// that accepts the connection but never responds holds the attempt open until the torrent is
+	// dropped. Zero disables the timeout.
+	MetainfoSourcesTimeout time.Duration
 }

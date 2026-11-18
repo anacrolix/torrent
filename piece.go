@@ -32,10 +32,9 @@ type pieceState struct {
 	priority PiecePriority
 	// Value to twiddle to detect races.
 	race byte
-	// Currently being hashed.
-	hashing bool
-	// The piece state may have changed, and is being synchronized with storage.
-	marking bool
+	// Whether the piece is being hashed, or its result is being synchronized with storage. These
+	// are exclusive: a piece goes idle -> hashing -> marking -> idle.
+	check pieceCheckState
 	// The Completion.Ok field cached from the storage layer.
 	storageCompletionOk bool
 	// Sticks on once set for the first time.
@@ -413,7 +412,7 @@ func (p Piece) ignoreForRequests() bool {
 		// Piece completion unknown.
 		return true
 	}
-	if s.hashing || s.marking || !p.haveHash() || p.t.dataDownloadDisallowed.IsSet() {
+	if s.check != pieceCheckIdle || !p.haveHash() || p.t.dataDownloadDisallowed.IsSet() {
 		return true
 	}
 	// This is valid after we know that storage completion has been cached.
@@ -561,8 +560,9 @@ func (p Piece) numFiles() int {
 func (p Piece) nextNovelHashCount() (ret pieceVerifyCount) {
 	s := p.state()
 	ret = s.numVerifies + 1
-	if s.hashing {
-		// The next novel hash will be the one after the current one.
+	if s.check != pieceCheckIdle {
+		// The next novel hash will be the one after the current one. A hash that is marking has
+		// finished hashing but hasn't been counted in numVerifies yet.
 		ret++
 	}
 	return
@@ -586,3 +586,13 @@ func (p Piece) stalePublicPieceState() (ret unique.Handle[PieceState], stale boo
 	stale = ret != p.state().publicPieceState
 	return
 }
+
+type pieceCheckState uint8
+
+const (
+	pieceCheckIdle pieceCheckState = iota
+	// Currently being hashed.
+	pieceCheckHashing
+	// The piece state may have changed, and is being synchronized with storage.
+	pieceCheckMarking
+)

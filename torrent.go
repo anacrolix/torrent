@@ -1625,11 +1625,6 @@ func (t *Torrent) pieceAllDirty(piece pieceIndex) bool {
 	return t.piece(piece).allChunksDirty()
 }
 
-func (t *Torrent) readersChanged() {
-	t.updateReaderPieces()
-	t.updateAllPiecePriorities("Torrent.readersChanged")
-}
-
 func (t *Torrent) updateReaderPieces() {
 	t._readerNowPieces, t._readerReadaheadPieces = t.readerPiecePriorities()
 }

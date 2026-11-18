@@ -101,7 +101,8 @@ type Client struct {
 	// Accepted connections that are still in the handshake phase.
 	pendingIncomingHandshakes pendingIncomingHandshakes
 
-	websocketTrackers                websocketTrackers
+	// Webtorrent state, empty with the nowebtorrent build tag.
+	clientWebtorrent
 	regularTrackerAnnounceDispatcher regularTrackerAnnounceDispatcher
 
 	numWebSeedRequests map[webseedHostKeyHandle]int
@@ -380,7 +381,7 @@ func (cl *Client) init(cfg *ClientConfig) {
 		}
 	}
 
-	cl.initWebsocketTrackers()
+	cl.clientWebtorrent = cl.newClientWebtorrent()
 
 	cl.webseedRequestTimer = time.AfterFunc(webseedRequestUpdateTimerInterval, cl.updateWebseedRequestsTimerFunc)
 }

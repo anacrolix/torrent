@@ -21,8 +21,12 @@ import (
 // ICEServer describes a STUN/TURN server for WebRTC peer connections.
 type ICEServer = webrtc.ICEServer
 
-func (cl *Client) initWebsocketTrackers() {
-	cl.websocketTrackers = websocketTrackers{
+type clientWebtorrent struct {
+	websocketTrackers websocketTrackers
+}
+
+func (cl *Client) newClientWebtorrent() clientWebtorrent {
+	return clientWebtorrent{websocketTrackers: websocketTrackers{
 		PeerId:  cl.peerID,
 		Slogger: cl.slogger.With("name", "websocketTrackers"),
 		GetAnnounceRequest: func(
@@ -57,7 +61,7 @@ func (cl *Client) initWebsocketTrackers() {
 			}
 			go t.onWebRtcConn(dc, dcc)
 		},
-	}
+	}}
 }
 
 func (cl *Client) ICEServers() []webrtc.ICEServer {

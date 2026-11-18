@@ -16,9 +16,11 @@ type ICEServer struct {
 	Credential any
 }
 
-type websocketTrackers struct{}
+type clientWebtorrent struct{}
 
-func (cl *Client) initWebsocketTrackers() {}
+func (cl *Client) newClientWebtorrent() clientWebtorrent {
+	return clientWebtorrent{}
+}
 
 func (t *Torrent) startWebsocketAnnouncer(url.URL, [20]byte) torrentTrackerAnnouncer {
 	return nil

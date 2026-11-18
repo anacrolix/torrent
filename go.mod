@@ -1,6 +1,6 @@
 module github.com/anacrolix/torrent
 
-go 1.26.0
+go 1.27.0
 
 require (
 	github.com/RoaringBitmap/roaring/v2 v2.16.0
@@ -10,12 +10,12 @@ require (
 	github.com/anacrolix/chansync v0.8.0
 	github.com/anacrolix/dht/v2 v2.23.1-0.20260525063928-ec3a9bd99456
 	github.com/anacrolix/envpprof v1.4.0
-	github.com/anacrolix/generics v0.2.0
+	github.com/anacrolix/generics v0.2.1-0.20261118011427-05a545e5bbda
 	github.com/anacrolix/go-utp v0.0.0-20260908033909-9f1664acf866
 	github.com/anacrolix/gostdapp v0.2.1-0.20251125125325-fbac3f25c013
 	github.com/anacrolix/log v0.17.1-0.20251118025802-918f1157b7bb
 	github.com/anacrolix/missinggo/v2 v2.12.0
-	github.com/anacrolix/multiless v0.4.0
+	github.com/anacrolix/multiless v0.4.1-0.20261117234141-fbc4e053da19
 	github.com/anacrolix/possum/go v0.4.1-0.20250821022006-9d91a37b5d3d
 	github.com/anacrolix/squirrel v0.6.4
 	github.com/anacrolix/sync v0.5.5-0.20251119100342-d78dd1f686f1

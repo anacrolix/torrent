@@ -204,7 +204,7 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 		} else {
 			ml = ml.Int(t.pieceRequestOrder[leftPieceIndex], t.pieceRequestOrder[rightPieceIndex])
 		}
-		ml = multiless.EagerOrdered(ml, leftRequest, rightRequest)
+		ml = ml.EagerOrdered(leftRequest, rightRequest)
 	}
 	// Prefer request indexes in order for storage write performance. Since the heap request heap
 	// does not contain duplicates, if we order at the request index level we should never have any

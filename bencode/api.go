@@ -110,7 +110,9 @@ type Marshaler interface {
 }
 
 // Any type which implements this interface, will be unmarshaled using the
-// specified method.
+// specified method. The slice passed to UnmarshalBencode is only valid for the duration of the call
+// (it may alias the decoder's buffer or the input to Unmarshal), so it must be copied to be retained,
+// and must not be modified.
 type Unmarshaler interface {
 	UnmarshalBencode([]byte) error
 }
@@ -138,16 +140,15 @@ func MustMarshal(v interface{}) []byte {
 // will be valid. It's probably more consistent to use Decoder.Decode if you want to rely on this
 // behaviour (inspired by Rust's serde here).
 func Unmarshal(data []byte, v interface{}) (err error) {
-	buf := bytes.NewReader(data)
-	dec := Decoder{r: buf}
+	dec := Decoder{data: data, inMem: true}
 	err = dec.Decode(v)
 	if err != nil {
 		return
 	}
-	if buf.Len() != 0 {
-		return ErrUnusedTrailingBytes{buf.Len()}
+	if n := len(data) - int(dec.Offset); n != 0 {
+		return ErrUnusedTrailingBytes{n}
 	}
-	return dec.ReadEOF()
+	return nil
 }
 
 type ErrUnusedTrailingBytes struct {

@@ -1,7 +1,7 @@
 package metainfo
 
 import (
-	"errors"
+	"bufio"
 	"fmt"
 	"io"
 	"net/url"
@@ -31,40 +31,31 @@ type MetaInfo struct {
 	PieceLayers map[string]string `bencode:"piece layers,omitempty" mapstructure:",omitempty"`
 }
 
-// Load a MetaInfo from an io.Reader. Returns a non-nil error in case of failure. The reader is read
-// to EOF, and anything after the metainfo is an error (but the MetaInfo is still returned).
+// Load a MetaInfo from an io.Reader. Returns a non-nil error in case of failure.
 func Load(r io.Reader) (*MetaInfo, error) {
-	// Decoding from memory is several times faster than streaming through bencode.Decoder.
-	b, err := io.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
-	return loadBytes(b)
-}
-
-func loadBytes(b []byte) (*MetaInfo, error) {
 	var mi MetaInfo
-	err := bencode.Unmarshal(b, &mi)
-	var trailing bencode.ErrUnusedTrailingBytes
-	if errors.As(err, &trailing) {
-		return &mi, fmt.Errorf("error after decoding metainfo: %w", errExpectedEOF)
-	}
+	d := bencode.NewDecoder(r)
+	err := d.Decode(&mi)
 	if err != nil {
 		return nil, err
 	}
-	return &mi, nil
+	err = d.ReadEOF()
+	if err != nil {
+		err = fmt.Errorf("error after decoding metainfo: %w", err)
+	}
+	return &mi, err
 }
-
-// Matches what bencode.Decoder.ReadEOF returned for trailing data, which Load used before.
-var errExpectedEOF = errors.New("expected EOF")
 
 // Convenience function for loading a MetaInfo from a file.
 func LoadFromFile(filename string) (*MetaInfo, error) {
-	b, err := os.ReadFile(filename)
+	f, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
-	return loadBytes(b)
+	defer f.Close()
+	var buf bufio.Reader
+	buf.Reset(f)
+	return Load(&buf)
 }
 
 func (mi *MetaInfo) UnmarshalInfo() (info Info, err error) {

@@ -40,11 +40,6 @@ type Decoder struct {
 		io.ByteScanner
 		io.Reader
 	}
-	// When inMem is set, the input is data, and Offset is the read position in it. This is the
-	// path Unmarshal takes: tokens are scanned in place, and raw values passed to Unmarshalers are
-	// subslices of data instead of copies.
-	data  []byte
-	inMem bool
 	// Sum of bytes used to Decode values.
 	Offset int64
 	// Current nesting depth of dicts and lists during a Decode. It is 0 outside of a Decode call.
@@ -93,12 +88,6 @@ func (d *Decoder) Decode(v interface{}) (err error) {
 // Check for EOF in the decoder input stream. Used to assert the input ends on a clean message
 // boundary.
 func (d *Decoder) ReadEOF() error {
-	if d.inMem {
-		if d.Offset < int64(len(d.data)) {
-			return errors.New("expected EOF")
-		}
-		return nil
-	}
 	_, err := d.r.ReadByte()
 	if err == nil {
 		err := d.r.UnreadByte()
@@ -123,16 +112,7 @@ func checkForUnexpectedEOF(err error, offset int64) {
 }
 
 // Returns the next input byte, and whether there was one, without the error handling of readByte.
-// Like io.ByteReader but avoids the interface call for in-memory input.
 func (d *Decoder) nextByte() (byte, error) {
-	if d.inMem {
-		if d.Offset >= int64(len(d.data)) {
-			return 0, io.EOF
-		}
-		b := d.data[d.Offset]
-		d.Offset++
-		return b, nil
-	}
 	b, err := d.r.ReadByte()
 	if err == nil {
 		d.Offset++
@@ -143,19 +123,12 @@ func (d *Decoder) nextByte() (byte, error) {
 // Steps back over the byte just returned by nextByte.
 func (d *Decoder) unreadByte() {
 	d.Offset--
-	if !d.inMem {
-		if err := d.r.UnreadByte(); err != nil {
-			panic(err)
-		}
+	if err := d.r.UnreadByte(); err != nil {
+		panic(err)
 	}
 }
 
 func (d *Decoder) readByte() byte {
-	if d.inMem {
-		b, err := d.nextByte()
-		checkForUnexpectedEOF(err, d.Offset)
-		return b
-	}
 	b, err := d.r.ReadByte()
 	if err != nil {
 		checkForUnexpectedEOF(err, d.Offset)
@@ -166,21 +139,9 @@ func (d *Decoder) readByte() byte {
 	return b
 }
 
-// Reads up to and including sep, and returns the token before it, including the prefixLen bytes
-// already consumed before the call. For streamed input those bytes must be in d.buf, and the token
-// is only valid until d.buf is next modified. For in-memory input it aliases the input.
-func (d *Decoder) readToken(sep byte, prefixLen int) []byte {
-	if d.inMem {
-		start := int(d.Offset) - prefixLen
-		i := bytes.IndexByte(d.data[d.Offset:], sep)
-		if i < 0 {
-			d.Offset = int64(len(d.data))
-			checkForUnexpectedEOF(io.EOF, d.Offset)
-		}
-		end := int(d.Offset) + i
-		d.Offset = int64(end) + 1
-		return d.data[start:end:end]
-	}
+// Reads up to and including sep, and returns the token before it, including any bytes already
+// written to d.buf. The token is only valid until d.buf is next modified.
+func (d *Decoder) readToken(sep byte) []byte {
 	d.readUntil(sep)
 	return d.buf.Bytes()
 }
@@ -215,7 +176,7 @@ func (d *Decoder) throwSyntaxError(offset int64, err error) {
 
 // Assume the 'i' is already consumed. Read and validate the rest of an int, returning its digits.
 func (d *Decoder) readInt() ([]byte, error) {
-	b := d.readToken('e', 0)
+	b := d.readToken('e')
 	if err := checkIntToken(b); err != nil {
 		return nil, err
 	}
@@ -285,7 +246,7 @@ func checkIntToken(b []byte) error {
 func (d *Decoder) parseStringLength() (int, error) {
 	// We should have already consumed the first byte of the length into the Decoder buf.
 	start := d.Offset - 1
-	tok := d.readToken(':', 1)
+	tok := d.readToken(':')
 	if err := checkIntToken(tok); err != nil {
 		return 0, err
 	}
@@ -302,31 +263,12 @@ func (d *Decoder) parseStringLength() (int, error) {
 }
 
 // Reads a string of the given length, into buf if it's set. The length comes from the input, so it's
-// only allocated up front if the input is in memory and holds the whole string, or if it's no more
-// than io.ReadAll would allocate anyway. Otherwise the string grows as the data arrives.
-//
-// For in-memory input, the string is copied out unless buf is set, in which case it aliases the
-// input, so it must only be used transiently.
+// only allocated up front if the reader is a bytes.Reader that holds the whole string, or if it's no
+// more than io.ReadAll would allocate anyway. Otherwise the string grows as the data arrives.
 func (d *Decoder) readString(length int, buf *bytes.Buffer) (b []byte) {
 	var n int
 	var err error
-	if d.inMem {
-		n = min(length, len(d.data)-int(d.Offset))
-		b = d.data[d.Offset : d.Offset+int64(n) : d.Offset+int64(n)]
-		if buf == nil {
-			b = bytes.Clone(b)
-			if b == nil {
-				b = []byte{}
-			}
-		}
-		if n < length {
-			// Match what the io.Reader path reports for a short read.
-			err = io.EOF
-			if n > 0 {
-				err = io.ErrUnexpectedEOF
-			}
-		}
-	} else if r, ok := d.r.(*bytes.Reader); length <= bytes.MinRead || ok && r.Len() >= length {
+	if r, ok := d.r.(*bytes.Reader); length <= bytes.MinRead || ok && r.Len() >= length {
 		if buf == nil {
 			b = make([]byte, length)
 		} else {
@@ -406,6 +348,8 @@ func (d *Decoder) parseString(v reflect.Value) error {
 // Info for parsing a struct field from a dict value.
 type dictField struct {
 	Type reflect.Type
+	// The dict key.
+	Key string
 	// Field index path from the outer struct, through any embedded structs.
 	Index []int
 	Tags  tag
@@ -434,7 +378,7 @@ func parseStructFields(struct_ reflect.Type, index []int, each func(key string, 
 		if key == "" {
 			key = f.Name
 		}
-		each(key, dictField{f.Type, fieldIndex, tag})
+		each(key, dictField{f.Type, key, fieldIndex, tag})
 	}
 }
 
@@ -503,8 +447,8 @@ func (d *Decoder) parseDictMap(v reflect.Value) error {
 	}
 }
 
-// Parses a dict key for a struct. ok is false if the dict ended instead. The key aliases the input
-// for in-memory input, and is a copy otherwise.
+// Parses a dict key for a struct. ok is false if the dict ended instead. The key is only valid until
+// d.buf is next modified.
 func (d *Decoder) parseStructKey() (key []byte, ok bool, err error) {
 	b, err := d.nextByte()
 	if err != nil {
@@ -516,20 +460,12 @@ func (d *Decoder) parseStructKey() (key []byte, ok bool, err error) {
 	if b >= '0' && b <= '9' {
 		// The common case, a string key. This is what parseValue does for a string target.
 		d.buf.Reset()
-		if !d.inMem {
-			d.buf.WriteByte(b)
-		}
+		d.buf.WriteByte(b)
 		length, err := d.parseStringLength()
 		if err != nil {
 			return nil, false, err
 		}
-		if d.inMem {
-			key = d.readString(length, &d.buf)
-		} else {
-			key = d.readString(length, nil)
-		}
-		d.buf.Reset()
-		return key, true, nil
+		return d.readString(length, &d.buf), true, nil
 	}
 	d.unreadByte()
 	var s string
@@ -549,6 +485,8 @@ func (d *Decoder) parseDictStruct(v reflect.Value) error {
 		}
 		df, ok := fields[string(key)]
 		if !ok {
+			// The key is in d.buf, which parsing the value will overwrite.
+			key = bytes.Clone(key)
 			// There's nowhere to put the value, but it's still parsed (and validated) as it would
 			// be for an interface{}.
 			if_, _ := d.parseValueInterface()
@@ -570,11 +508,11 @@ func (d *Decoder) parseDictStruct(v reflect.Value) error {
 		if err != nil {
 			var target *UnmarshalTypeError
 			if !errors.As(err, &target) || !df.Tags.IgnoreUnmarshalTypeError() {
-				return fmt.Errorf("parsing value for key %q: %w", key, err)
+				return fmt.Errorf("parsing value for key %q: %w", df.Key, err)
 			}
 		}
 		if !ok {
-			return fmt.Errorf("missing value for key %q", key)
+			return fmt.Errorf("missing value for key %q", df.Key)
 		}
 		if !inPlace {
 			fv.Set(setValue)
@@ -640,46 +578,6 @@ func (d *Decoder) parseList(v reflect.Value) error {
 		v.Set(reflect.MakeSlice(v.Type(), 0, 0))
 	}
 	return nil
-}
-
-// Like readOneValue, but for in-memory input. It advances over the value without copying it.
-// It must stay equivalent to readOneValue in what it accepts and how it fails.
-func (d *Decoder) skipOneValue() bool {
-	b, err := d.nextByte()
-	if err != nil {
-		panic(err)
-	}
-	switch b {
-	case 'e':
-		d.unreadByte()
-		return false
-	case 'd', 'l':
-		defer d.leaveContainer()
-		d.enterContainer(d.Offset - 1)
-		for d.skipOneValue() {
-		}
-		// consume 'e' as well
-		d.readByte()
-	case 'i':
-		d.readToken('e', 0)
-	default:
-		if b >= '0' && b <= '9' {
-			tok := d.readToken(':', 1)
-			length, err := strconv.ParseInt(bytesAsString(tok), 10, 64)
-			checkForIntParseError(err, d.Offset-1)
-			if length > d.getMaxStrLen() {
-				d.throwSyntaxError(d.Offset-1, fmt.Errorf("parsed string length %v exceeds limit (%v)", length, d.getMaxStrLen()))
-			}
-			if rem := int64(len(d.data)) - d.Offset; length > rem {
-				d.Offset += rem
-				checkForUnexpectedEOF(io.EOF, d.Offset)
-			}
-			d.Offset += length
-			break
-		}
-		d.raiseUnknownValueType(b, d.Offset-1)
-	}
-	return true
 }
 
 func (d *Decoder) readOneValue() bool {
@@ -769,22 +667,13 @@ func (d *Decoder) parseUnmarshaler(v reflect.Value) bool {
 	case pointerUnmarshaler:
 		v = v.Addr()
 	}
-	var raw []byte
-	if d.inMem {
-		start := d.Offset
-		if !d.skipOneValue() {
-			return false
-		}
-		raw = d.data[start:d.Offset:d.Offset]
-	} else {
-		d.buf.Reset()
-		// Don't leave the raw value in the buffer, where it would corrupt the next integer read.
-		defer d.buf.Reset()
-		if !d.readOneValue() {
-			return false
-		}
-		raw = d.buf.Bytes()
+	d.buf.Reset()
+	// Don't leave the raw value in the buffer, where it would corrupt the next integer read.
+	defer d.buf.Reset()
+	if !d.readOneValue() {
+		return false
 	}
+	raw := d.buf.Bytes()
 	m := v.Interface().(Unmarshaler)
 	err := m.UnmarshalBencode(raw)
 	if err != nil {
@@ -839,10 +728,8 @@ func (d *Decoder) parseValue(v reflect.Value) (bool, error) {
 		if b >= '0' && b <= '9' {
 			// It's a string.
 			d.buf.Reset()
-			if !d.inMem {
-				// Write the first digit of the length to the buffer.
-				d.buf.WriteByte(b)
-			}
+			// Write the first digit of the length to the buffer.
+			d.buf.WriteByte(b)
 			return true, d.parseString(v)
 		}
 
@@ -881,10 +768,8 @@ func (d *Decoder) parseValueInterface() (interface{}, bool) {
 	default:
 		if b >= '0' && b <= '9' {
 			// string
-			if !d.inMem {
-				// append first digit of the length to the buffer
-				d.buf.WriteByte(b)
-			}
+			// append first digit of the length to the buffer
+			d.buf.WriteByte(b)
 			return d.parseStringInterface(), true
 		}
 
@@ -929,13 +814,6 @@ func (d *Decoder) parseIntInterface() (ret interface{}) {
 }
 
 func (d *Decoder) readBytes(length int) []byte {
-	if d.inMem {
-		rem := len(d.data) - int(d.Offset)
-		if rem < length {
-			panic(fmt.Errorf("read %v bytes expected %v", rem, length))
-		}
-		return bytes.Clone(d.data[d.Offset : d.Offset+int64(length)])
-	}
 	b, err := io.ReadAll(io.LimitReader(d.r, int64(length)))
 	if err != nil {
 		panic(err)

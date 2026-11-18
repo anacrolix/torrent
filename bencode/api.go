@@ -140,15 +140,16 @@ func MustMarshal(v interface{}) []byte {
 // will be valid. It's probably more consistent to use Decoder.Decode if you want to rely on this
 // behaviour (inspired by Rust's serde here).
 func Unmarshal(data []byte, v interface{}) (err error) {
-	dec := Decoder{data: data, inMem: true}
+	buf := bytes.NewReader(data)
+	dec := Decoder{r: buf}
 	err = dec.Decode(v)
 	if err != nil {
 		return
 	}
-	if n := len(data) - int(dec.Offset); n != 0 {
-		return ErrUnusedTrailingBytes{n}
+	if buf.Len() != 0 {
+		return ErrUnusedTrailingBytes{buf.Len()}
 	}
-	return nil
+	return dec.ReadEOF()
 }
 
 type ErrUnusedTrailingBytes struct {

@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	"expvar"
 	"fmt"
 	"io"
 	"log/slog"
@@ -35,7 +34,7 @@ import (
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/torrent/internal/amortize"
 	"github.com/anacrolix/torrent/internal/extracmp"
-	"github.com/cespare/xxhash"
+	"github.com/cespare/xxhash/v2"
 	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
 
@@ -99,6 +98,8 @@ type Client struct {
 
 	acceptLimiter map[ipStr]int
 	numHalfOpen   int
+	// Accepted connections that are still in the handshake phase.
+	pendingIncomingHandshakes pendingIncomingHandshakes
 
 	websocketTrackers                websocketTrackers
 	regularTrackerAnnounceDispatcher regularTrackerAnnounceDispatcher
@@ -170,8 +171,13 @@ func (cl *Client) LocalPort() (port int) {
 // paths — they must not receive peers via local discovery.
 func (cl *Client) OnLPDAnnouncement(addr string, infohashes []string) {
 	announced := make(map[*Torrent]struct{}, len(infohashes))
-	for _, ih := range infohashes {
-		if t, ok := cl.Torrent(metainfo.NewHashFromHex(ih)); ok {
+	for _, ihHex := range infohashes {
+		var ih metainfo.Hash
+		if err := ih.FromHexString(ihHex); err != nil {
+			cl.slogger.Debug("ignoring bad infohash in local peer discovery announce", "addr", addr, "err", err)
+			continue
+		}
+		if t, ok := cl.Torrent(ih); ok {
 			if t.isPrivate() {
 				continue
 			}
@@ -678,9 +684,15 @@ func (cl *Client) acceptConnections(l Listener) {
 					return log.Fmsg("rejecting accepted conn: %v", reject)
 				})
 				conn.Close()
-			} else {
-				go cl.incomingConnection(conn)
+				return
 			}
+			releaseHandshake, ok := cl.reservePendingIncomingHandshake(conn.RemoteAddr())
+			if !ok {
+				torrent.Add("accepted connections dropped at pending handshake limit", 1)
+				conn.Close()
+				return
+			}
+			go cl.incomingConnection(conn, releaseHandshake)
 			cl.logger.LazyLog(log.Debug, func() log.Msg {
 				return log.Fmsg("accepted %q connection at %q from %q",
 					l.Addr().Network(),
@@ -700,7 +712,9 @@ func regularNetConnPeerConnConnString(nc net.Conn) string {
 	return fmt.Sprintf("%s-%s", nc.LocalAddr(), nc.RemoteAddr())
 }
 
-func (cl *Client) incomingConnection(nc net.Conn) {
+// releaseHandshake is called when the handshake phase ends.
+func (cl *Client) incomingConnection(nc net.Conn, releaseHandshake func()) {
+	defer releaseHandshake()
 	defer nc.Close()
 	if tc, ok := nc.(*net.TCPConn); ok {
 		tc.SetLinger(0)
@@ -716,7 +730,7 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 			connString:      regularNetConnPeerConnConnString(nc),
 		})
 	c.Discovery = PeerSourceIncoming
-	cl.runReceivedConn(c)
+	cl.runReceivedConn(c, releaseHandshake)
 
 	cl.lock()
 	c.close()
@@ -1012,7 +1026,55 @@ func (cl *Client) incomingPeerPort() int {
 	return cl.LocalPort()
 }
 
+// The infohash identity presented in an outgoing handshake. The Torrent's infohashes can change
+// while a handshake is in flight: when info arrives for a hybrid torrent that was added by its v2
+// infohash, the v1 infohash is filled in and becomes canonical. The MSE secret key, the infohash
+// we send, and the check on the peer's reply must all agree, so they're taken from one snapshot.
+type outgoingHandshakeInfohash struct {
+	// Sent as the MSE secret key and in the BitTorrent handshake.
+	sent infohash.T
+	// The truncated v2 infohash, if known when the handshake started.
+	v2Short g.Option[infohash.T]
+}
+
+// Must be called with the Client lock held.
+func (t *Torrent) outgoingHandshakeInfohash() (ret outgoingHandshakeInfohash) {
+	ret.sent = *t.canonicalShortInfohash()
+	if t.infoHashV2.Ok {
+		ret.v2Short.Set(*t.infoHashV2.Value.ToShort())
+	}
+	return
+}
+
+// BEP 52: when initiating with the v1 infohash of a hybrid torrent, set the upgrade bit so the peer
+// may respond with the truncated v2 infohash.
+func (me outgoingHandshakeInfohash) upgradeBit() bool {
+	return me.v2Short.Ok && me.sent != me.v2Short.Value
+}
+
+// Checks the infohash in the peer's handshake reply. BEP 3 requires the same value we sent; the
+// only alternative is the BEP 52 upgrade to the truncated v2 infohash.
+func (me outgoingHandshakeInfohash) checkReply(reply infohash.T) error {
+	if reply == me.sent {
+		return nil
+	}
+	if me.upgradeBit() && reply == me.v2Short.Value {
+		return nil
+	}
+	return errors.New("bittorrent protocol handshake: peer infohash didn't match")
+}
+
+// Whether ih is the Torrent's truncated v2 infohash. This only ever goes from false to true (when a
+// 20-byte infohash turns out to be a truncated v2 infohash), so it's safe to check after the
+// handshake. Must be called with the Client lock held.
+func (t *Torrent) isTruncatedV2Infohash(ih infohash.T) bool {
+	return t.infoHashV2.Ok && *t.infoHashV2.Value.ToShort() == ih
+}
+
 func (cl *Client) initiateHandshakes(ctx context.Context, c *PeerConn, t *Torrent) (err error) {
+	cl.rLock()
+	ih := t.outgoingHandshakeInfohash()
+	cl.rUnlock()
 	if c.headerEncrypted {
 		var rw io.ReadWriter
 		rw, c.cryptoMethod, err = mse.InitiateHandshakeContext(
@@ -1021,7 +1083,7 @@ func (cl *Client) initiateHandshakes(ctx context.Context, c *PeerConn, t *Torren
 				io.Reader
 				io.Writer
 			}{c.r, c.w},
-			t.canonicalShortInfohash().Bytes(),
+			ih.sent.Bytes(),
 			nil,
 			cl.config.CryptoProvides,
 		)
@@ -1031,23 +1093,22 @@ func (cl *Client) initiateHandshakes(ctx context.Context, c *PeerConn, t *Torren
 		}
 	}
 	localReservedBits := cl.config.Extensions
-	handshakeIh := *t.canonicalShortInfohash()
-	// If we're sending the v1 infohash, and we know the v2 infohash, set the v2 upgrade bit. This
-	// means the peer can send the v2 infohash in the handshake to upgrade the connection.
-	localReservedBits.SetBit(pp.ExtensionBitV2Upgrade, g.Some(handshakeIh) == t.infoHash && t.infoHashV2.Ok)
-	ih, err := cl.connBtHandshake(context.TODO(), c, &handshakeIh, localReservedBits)
+	localReservedBits.SetBit(pp.ExtensionBitV2Upgrade, ih.upgradeBit())
+	sent := ih.sent
+	reply, err := cl.connBtHandshake(context.TODO(), c, &sent, localReservedBits)
 	if err != nil {
 		return fmt.Errorf("bittorrent protocol handshake: %w", err)
 	}
-	if g.Some(ih) == t.infoHash {
-		return nil
+	err = ih.checkReply(reply)
+	if err != nil {
+		return
 	}
-	if t.infoHashV2.Ok && *t.infoHashV2.Value.ToShort() == ih {
+	if reply != ih.sent {
 		torrent.Add("initiated handshakes upgraded to v2", 1)
-		c.v2 = true
-		return nil
 	}
-	err = errors.New("bittorrent protocol handshake: peer infohash didn't match")
+	cl.rLock()
+	c.v2 = t.isTruncatedV2Infohash(reply)
+	cl.rUnlock()
 	return
 }
 
@@ -1119,7 +1180,7 @@ func (cl *Client) receiveHandshakes(c *PeerConn) (t *Torrent, err error) {
 
 	cl.lock()
 	t = cl.torrentsByShortHash[ih]
-	if t != nil && t.infoHashV2.Ok && *t.infoHashV2.Value.ToShort() == ih {
+	if t != nil && t.isTruncatedV2Infohash(ih) {
 		torrent.Add("v2 handshakes received", 1)
 		c.v2 = true
 	}
@@ -1128,7 +1189,8 @@ func (cl *Client) receiveHandshakes(c *PeerConn) (t *Torrent, err error) {
 	return
 }
 
-var successfulPeerWireProtocolHandshakePeerReservedBytes expvar.Map
+// Keyed by the peer's reserved bytes, which it can choose freely.
+var successfulPeerWireProtocolHandshakePeerReservedBytes boundedExpvarMap
 
 func init() {
 	torrent.Set(
@@ -1141,8 +1203,8 @@ func (cl *Client) connBtHandshake(ctx context.Context, c *PeerConn, ih *metainfo
 	if err != nil {
 		return
 	}
-	successfulPeerWireProtocolHandshakePeerReservedBytes.Add(
-		hex.EncodeToString(res.PeerExtensionBits[:]), 1)
+	successfulPeerWireProtocolHandshakePeerReservedBytes.addSafeKey(
+		hex.EncodeToString(res.PeerExtensionBits[:]))
 	ret = res.Hash
 	c.PeerExtensionBytes = res.PeerExtensionBits
 	c.PeerID = res.PeerID
@@ -1153,12 +1215,13 @@ func (cl *Client) connBtHandshake(ctx context.Context, c *PeerConn, ih *metainfo
 	return
 }
 
-func (cl *Client) runReceivedConn(c *PeerConn) {
+func (cl *Client) runReceivedConn(c *PeerConn, releaseHandshake func()) {
 	err := c.conn.SetDeadline(time.Now().Add(cl.config.HandshakesTimeout))
 	if err != nil {
 		panic(err)
 	}
 	t, err := cl.receiveHandshakes(c)
+	releaseHandshake()
 	if err != nil {
 		cl.logger.LazyLog(log.Debug, func() log.Msg {
 			return log.Fmsg(
@@ -1168,9 +1231,11 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 			)
 		})
 		torrent.Add("error receiving handshake", 1)
-		cl.lock()
-		cl.onBadAccept(c.RemoteAddr)
-		cl.unlock()
+		if acceptedConnSourceVerified(c) {
+			cl.lock()
+			cl.onBadAccept(c.RemoteAddr)
+			cl.unlock()
+		}
 		return
 	}
 	if t == nil {
@@ -1257,7 +1322,7 @@ func (p *PeerConn) initUpdateRequestsTimer() {
 		}
 	}
 	if enableUpdateRequestsTimer {
-		p.updateRequestsTimer = time.AfterFunc(math.MaxInt64, p.updateRequestsTimerFunc)
+		p.updateRequestsTimer = newReleasedTimer(math.MaxInt64, p.updateRequestsTimerFunc)
 	}
 }
 
@@ -1360,6 +1425,9 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 		return fmt.Errorf("error unmarshalling bencode: %s", err)
 	}
 	piece := d.Piece
+	if piece < 0 {
+		return fmt.Errorf("invalid metadata piece index %d", piece)
+	}
 	switch d.Type {
 	case pp.DataMetadataExtensionMsgType:
 		c.modifyRelevantConnStats(add(1, func(cs *ConnStats) *Count { return &cs.MetadataChunksRead }))
@@ -1367,6 +1435,11 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 			return fmt.Errorf("got unexpected piece %d", piece)
 		}
 		c.metadataRequests[piece] = false
+		if d.TotalSize != len(t.metadataBytes) {
+			// The peer has a different idea of the metadata. Don't mix its data into ours.
+			c.protocolLogger.Levelf(log.Debug, "ignoring metadata piece for total size %v", d.TotalSize)
+			return nil
+		}
 		begin := len(payload) - d.PieceSize()
 		if begin < 0 || begin >= len(payload) {
 			return fmt.Errorf("data has bad offset in payload: %d", begin)
@@ -1474,6 +1547,7 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 
 		ignoreUnverifiedPieceCompletion: opts.IgnoreUnverifiedPieceCompletion,
 		initialPieceCheckDisabled:       opts.DisableInitialPieceCheck,
+		deferStorageOpen:                opts.DeferStorageOpen,
 	}
 	g.MakeMap(&t.webSeeds)
 	t.closedCtx, t.closedCtxCancel = context.WithCancelCause(context.Background())
@@ -1481,10 +1555,13 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 	var salt [8]byte
 	rand.Read(salt[:])
 	t.smartBanCache.Hash = func(b []byte) uint64 {
-		h := xxhash.New()
-		h.Write(salt[:])
-		h.Write(b)
-		return h.Sum64()
+		// Keep the digest on the stack to avoid a heap allocation per recorded and checked block on
+		// the receive hot path; xxhash.New would allocate one.
+		var d xxhash.Digest
+		d.Reset()
+		d.Write(salt[:])
+		d.Write(b)
+		return d.Sum64()
 	}
 	t.smartBanCache.Init()
 	t.networkingEnabled.Set()
@@ -1611,6 +1688,11 @@ type AddTorrentOpts struct {
 	// Whether to initially allow data download or upload
 	DisallowDataUpload   bool
 	DisallowDataDownload bool
+	// Don't open storage when the info becomes available. Nothing is read from or written to
+	// storage until Torrent.OpenStorage is called, so the info can be inspected first, such as to
+	// check what files it would touch. Until then no piece is complete and no data is requested
+	// or served. Storage is still used to open the torrent if set.
+	DeferStorageOpen bool
 }
 
 // Add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also
@@ -1770,7 +1852,10 @@ func (cl *Client) banPeerIP(ip net.IP) {
 	// We can't take this from string, because it will lose netip's v4on6. net.ParseIP parses v4
 	// addresses directly to v4on6, which doesn't compare equal with v4.
 	ipAddr, ok := netip.AddrFromSlice(ip)
-	panicif.False(ok)
+	if !ok {
+		cl.slogger.Warn("can't ban peer with unknown ip", "ip", ip)
+		return
+	}
 	g.MakeMapIfNil(&cl.badPeerIPs)
 	cl.badPeerIPs[ipAddr] = struct{}{}
 	for t := range cl.torrents {

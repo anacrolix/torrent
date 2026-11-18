@@ -29,3 +29,7 @@ type webRtcStatsReports map[string]any
 func (t *Torrent) GetWebRtcPeerConnStats() map[string]webRtcStatsReports {
 	return nil
 }
+
+// websocketTrackerStatus is never created with the nowebtorrent build tag. It
+// exists so code that checks for websocket announcers still compiles.
+type websocketTrackerStatus struct{ torrentTrackerAnnouncer }

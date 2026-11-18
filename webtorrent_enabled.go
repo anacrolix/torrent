@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	stdsync "sync"
 	"time"
 
 	"github.com/anacrolix/log"
@@ -120,8 +121,9 @@ func (t *Torrent) startWebsocketAnnouncer(u url.URL, shortInfohash [20]byte) tor
 	wtc, release := t.cl.websocketTrackers.Get(u.String(), shortInfohash)
 	// This needs to run before the Torrent is dropped from the Client, to prevent a new
 	// webtorrent.TrackerClient for the same info hash before the old one is cleaned up.
+	release = stdsync.OnceFunc(release)
 	t.onClose = append(t.onClose, release)
-	wst := websocketTrackerStatus{u, wtc}
+	wst := websocketTrackerStatus{url: u, tc: wtc, release: release}
 	go func() {
 		err := wtc.Announce(tracker.Started, shortInfohash)
 		if err != nil {

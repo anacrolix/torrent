@@ -208,7 +208,13 @@ func (cl *Client) request(
 ) (respBody []byte, addr net.Addr, err error) {
 	respChan := make(chan DispatchedResponse, 1)
 	t := cl.Dispatcher.NewTransaction(func(dr DispatchedResponse) {
-		respChan <- dr
+		// Only the first response is used. Don't block on later ones (a tracker can send the same
+		// response more than once), as this runs on the socket's read loop with the dispatcher
+		// lock held.
+		select {
+		case respChan <- dr:
+		default:
+		}
 	})
 	defer t.End()
 	ctx, cancel := context.WithCancel(ctx)
@@ -232,10 +238,13 @@ func (cl *Client) request(
 				err = log.WithLevel(log.Debug, err)
 			}
 			// Force a reconnection. Probably any error is worth doing this for, but the one we're
-			// specifically interested in is ConnectionIdMissmatchNul.
-			cl.mu.Lock()
-			cl.connIdIssued = time.Time{}
-			cl.mu.Unlock()
+			// specifically interested in is ConnectionIdMissmatchNul. A connect request runs with
+			// cl.mu already held by writeRequest, and has no connection ID to invalidate.
+			if action != ActionConnect {
+				cl.mu.Lock()
+				cl.connIdIssued = time.Time{}
+				cl.mu.Unlock()
+			}
 		default:
 			err = fmt.Errorf("unexpected response action %v", dr.Header.Action)
 		}

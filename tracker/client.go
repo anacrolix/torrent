@@ -24,11 +24,15 @@ type AnnounceOpt = trHttp.AnnounceOpt
 type NewClientOpts struct {
 	Http trHttp.NewClientOpts
 	// Overrides the network in the scheme. Probably a legacy thing.
-	UdpNetwork   string
+	UdpNetwork string
 	// Deprecated: Use Slogger.
-	Logger  log.Logger
-	Slogger *slog.Logger
+	Logger       log.Logger
+	Slogger      *slog.Logger
 	ListenPacket func(network, addr string) (net.PacketConn, error)
+	// If non-nil, UDP trackers send and receive through this shared socket instead of opening one
+	// each, and UdpNetwork and ListenPacket are ignored for them. Closing the Client doesn't close
+	// the socket.
+	UdpSocket *udp.Socket
 }
 
 func (opts NewClientOpts) slogger() *slog.Logger {
@@ -59,6 +63,7 @@ func NewClient(urlStr string, opts NewClientOpts) (Client, error) {
 			Host:         _url.Host,
 			Logger:       opts.slogger(),
 			ListenPacket: opts.ListenPacket,
+			Socket:       opts.UdpSocket,
 		})
 		if err != nil {
 			return nil, err

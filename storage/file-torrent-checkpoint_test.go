@@ -3,6 +3,9 @@ package storage
 import (
 	"io/fs"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 
@@ -135,4 +138,41 @@ func TestTorrentCheckpointBufferConcurrentQueuePiece(t *testing.T) {
 	}
 	wg.Wait()
 	qt.Assert(t, qt.IsNil(buffer.close()))
+}
+
+// A piece completed after its file was promoted is checkpointed through the promoted file, which
+// promotion makes read-only. Flushing it must not need write access, or the checkpoint fails and
+// keeps every later completion buffered until the torrent closes.
+func TestTorrentCheckpointFlushesReadOnlyPromotedFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("FlushFileBuffers requires write access")
+	}
+	dir := t.TempDir()
+	promoted := filepath.Join(dir, "a.bin")
+	qt.Assert(t, qt.IsNil(os.WriteFile(promoted, []byte{1}, filePerm&^0o222)))
+	info := &metainfo.Info{
+		PieceLength: 1,
+		Pieces:      make([]byte, 20),
+	}
+	persisted := &recordingPieceCompletion{}
+	pc := newBufferedPieceCompletion(persisted)
+	checkpointer, ok := pc.(PieceCompletionCheckpointer)
+	qt.Assert(t, qt.IsTrue(ok))
+	torrent := &fileTorrentImpl{
+		info:     info,
+		infoHash: metainfo.HashBytes([]byte("z")),
+		io:       newClassicFileIo(),
+	}
+	buffer := newTorrentCheckpointBuffer(torrent, checkpointer)
+	key := metainfo.PieceKey{InfoHash: torrent.infoHash, Index: 0}
+	qt.Assert(t, qt.IsNil(pc.Set(key, g.Some(true))))
+	qt.Assert(t, qt.IsNil(buffer.queuePiece(key, 1, []fileCheckpointTarget{{
+		primary:  promoted + partFileSuffix,
+		fallback: promoted,
+		length:   1,
+	}})))
+	qt.Assert(t, qt.IsNil(buffer.close()))
+	completion, err := persisted.Get(key)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.IsTrue(completion.Ok && completion.Complete))
 }

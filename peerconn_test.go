@@ -388,6 +388,57 @@ func TestRequestMissingHashesTrailingSingleHash(t *testing.T) {
 	qt.Assert(t, qt.IsTrue(trailing))
 }
 
+// A single-piece file takes no hash request, but its piece still counts towards where later files
+// begin. Otherwise a later file's pieces are looked up shifted onto the single piece, whose v2 hash
+// is never set, and that file's hashes are requested again after every reply.
+func TestRequestMissingHashesAfterSinglePieceFile(t *testing.T) {
+	const pieceLength = int64(1) << 14
+	cl := &Client{}
+	tor := &Torrent{
+		cl:        cl,
+		chunkSize: defaultChunkSize,
+		info: &metainfo.Info{
+			MetaVersion: 2,
+			Name:        "dummy",
+			PieceLength: pieceLength,
+			FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{
+					"a": {File: metainfo.FileTreeFile{
+						Length:     pieceLength,
+						PiecesRoot: string(make([]byte, 31)) + "\x01",
+					}},
+					"b": {File: metainfo.FileTreeFile{
+						Length:     4 * pieceLength,
+						PiecesRoot: string(make([]byte, 31)) + "\x02",
+					}},
+				},
+			},
+		},
+		pieces: make([]pieceState, 5),
+	}
+	tor.initFiles()
+	c := &PeerConn{
+		Peer: Peer{
+			cl: cl,
+			t:  tor,
+		},
+	}
+	c.legacyPeerImpl = c
+	c.peerImpl = c
+	c.v2 = true
+	c.peerSentHaveAll = true
+	c.initMessageWriter()
+	c.requestMissingHashes()
+	qt.Assert(t, qt.HasLen(c.sentHashRequests, 1))
+	// The reply arrives: the request is done, and b's piece hashes are set.
+	clear(c.sentHashRequests)
+	for i := 1; i < 5; i++ {
+		tor.pieces[i].hashV2 = &[32]byte{byte(i)}
+	}
+	c.requestMissingHashes()
+	qt.Check(t, qt.HasLen(c.sentHashRequests, 0))
+}
+
 func TestConnPexPeerFlags(t *testing.T) {
 	var (
 		tcpAddr = &net.TCPAddr{IP: net.IPv6loopback, Port: 4848}

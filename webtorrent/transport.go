@@ -263,10 +263,10 @@ func initDataChannel(
 type DataChannelConn struct {
 	ioCloserFunc
 	rawDataChannel datachannel.ReadWriteCloser
-	streamReader *bufio.Reader
+	streamReader   *bufio.Reader
 }
 
-// Pion reads whole SCTP messages, so buffer them for smaller stream reads.
+// Buffer whole SCTP messages for smaller stream reads; messages must fit in this buffer.
 const rtcReadBufferSize = 256 * 1024
 
 func newDataChannelStreamReader(raw io.Reader) *bufio.Reader {
@@ -326,6 +326,6 @@ func wrapDataChannel(
 			return nil
 		}),
 		rawDataChannel: dcrwc,
-		streamReader: newDataChannelStreamReader(dcrwc),
+		streamReader:   newDataChannelStreamReader(dcrwc),
 	}
 }

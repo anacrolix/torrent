@@ -3,6 +3,7 @@ package peer_protocol
 import (
 	"bufio"
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 
@@ -151,4 +152,33 @@ func TestUnmarshalPortMsg(t *testing.T) {
 	if m.Port != 0xaabb {
 		t.FailNow()
 	}
+}
+
+// Writes a limited number of bytes, then fails.
+type failingMessageWriter struct {
+	left int
+}
+
+func (me *failingMessageWriter) WriteByte(byte) error {
+	if me.left == 0 {
+		return io.ErrShortWrite
+	}
+	me.left--
+	return nil
+}
+
+func (me *failingMessageWriter) Write(b []byte) (int, error) {
+	if len(b) > me.left {
+		return 0, io.ErrShortWrite
+	}
+	me.left -= len(b)
+	return len(b), nil
+}
+
+// A writer error while writing a piece message's data is returned.
+func TestPieceMessageWriteToBodyError(t *testing.T) {
+	msg := Message{Type: Piece, Index: 1, Begin: 2, Piece: []byte("data")}
+	// The length prefix, type and index and begin fit; the data doesn't.
+	err := msg.WriteTo(&failingMessageWriter{left: 4 + 1 + 8})
+	qt.Check(t, qt.ErrorIs(err, io.ErrShortWrite))
 }

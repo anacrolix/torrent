@@ -110,7 +110,9 @@ type Marshaler interface {
 }
 
 // Any type which implements this interface, will be unmarshaled using the
-// specified method.
+// specified method. The slice passed to UnmarshalBencode is only valid for the duration of the call
+// (it aliases the decoder's internal buffer), so it must be copied to be retained, and must not be
+// modified.
 type Unmarshaler interface {
 	UnmarshalBencode([]byte) error
 }

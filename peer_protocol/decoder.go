@@ -235,6 +235,10 @@ func readSeq(r io.Reader, data ...any) (err error) {
 }
 
 func unmarshalBitfield(b []byte) (bf []bool) {
+	if len(b) != 0 {
+		// Bitfields have a bit per piece, so appending without a capacity reallocates many times.
+		bf = make([]bool, 0, 8*len(b))
+	}
 	for _, c := range b {
 		for i := 7; i >= 0; i-- {
 			bf = append(bf, (c>>uint(i))&1 == 1)

@@ -58,6 +58,13 @@ type webseedRequestHeapElem struct {
 - Initiate missing requests that fit into the available limits.
 */
 func (cl *Client) updateWebseedRequests() {
+	// cl.activeWebseedRequests can transiently contain entries for torrents that have already
+	// been removed from cl.torrents: requests remove themselves from cl.activeWebseedRequests
+	// asynchronously after they notice they were cancelled (see webseedPeer.deleteActiveRequest),
+	// while a torrent is removed from cl.torrents synchronously when it's dropped (see
+	// Torrent.close). iterCurrentWebseedRequestsFromClient filters those stale entries out so it
+	// stays consistent with iterCurrentWebseedRequests, which can only ever see live torrents.
+	// See https://github.com/anacrolix/torrent/issues/1098.
 	existingRequests := maps.Collect(cl.iterCurrentWebseedRequestsFromClient())
 	panicif.False(maps.Equal(existingRequests, maps.Collect(cl.iterCurrentWebseedRequests())))
 
@@ -505,11 +512,12 @@ func (cl *Client) yieldKeyAndValue(
 func (cl *Client) iterCurrentWebseedRequestsFromClient() iter.Seq2[webseedUniqueRequestKey, webseedRequestOrderValue] {
 	return func(yield func(webseedUniqueRequestKey, webseedRequestOrderValue) bool) {
 		for key, ar := range cl.activeWebseedRequests {
-			// A dropped torrent leaves cl.torrents synchronously, but its
-			// in-flight requests only leave this map when each one closes
-			// (deleteActiveRequest). Until then they are nobody's to schedule
-			// or cancel — the drop already did that — and counting them would
-			// make this view disagree with the per-torrent one.
+			// A dropped torrent leaves cl.torrents synchronously, but its in-flight requests only
+			// leave this map when each one closes. Ignore requests belonging to torrents that are
+			// no longer live. See https://github.com/anacrolix/torrent/issues/1098.
+			if key.t.closed.IsSet() {
+				continue
+			}
 			if _, live := cl.torrents[key.t]; !live {
 				continue
 			}

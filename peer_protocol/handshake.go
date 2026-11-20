@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math/bits"
+	"slices"
 	"strings"
 	"unsafe"
 
@@ -156,11 +157,11 @@ func Handshake(
 		panicif.SendBlocks(postCh, bb)
 	}
 
-	post(protocolBytes())
-	post(extensions[:])
+	// Each post is a write to the socket, so fields that are sent together are posted together.
 	if ih != nil { // We already know what we want.
-		post(ih[:])
-		post(peerID[:])
+		post(slices.Concat(protocolBytes(), extensions[:], ih[:], peerID[:]))
+	} else {
+		post(slices.Concat(protocolBytes(), extensions[:]))
 	}
 
 	// Putting an array on the heap still escapes.
@@ -192,8 +193,7 @@ func Handshake(
 	// could prevent them trying to reconnect, falsely believing there was
 	// just a problem.
 	if ih == nil { // We were waiting for the peer to tell us what they wanted.
-		post(res.Hash[:])
-		post(peerID[:])
+		post(slices.Concat(res.Hash[:], peerID[:]))
 	}
 
 	return

@@ -1,9 +1,11 @@
 package webtorrent
 
 import (
+	"bufio"
 	"context"
 	"expvar"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strconv"
@@ -261,10 +263,18 @@ func initDataChannel(
 type DataChannelConn struct {
 	ioCloserFunc
 	rawDataChannel datachannel.ReadWriteCloser
+	streamReader   *bufio.Reader
+}
+
+// Buffer whole SCTP messages for smaller stream reads; messages must fit in this buffer.
+const rtcReadBufferSize = 256 * 1024
+
+func newDataChannelStreamReader(raw io.Reader) *bufio.Reader {
+	return bufio.NewReaderSize(raw, rtcReadBufferSize)
 }
 
 func (d DataChannelConn) Read(p []byte) (int, error) {
-	return d.rawDataChannel.Read(p)
+	return d.streamReader.Read(p)
 }
 
 // Limit write size for WebRTC data channels. See https://github.com/pion/datachannel/issues/59. The
@@ -316,5 +326,6 @@ func wrapDataChannel(
 			return nil
 		}),
 		rawDataChannel: dcrwc,
+		streamReader:   newDataChannelStreamReader(dcrwc),
 	}
 }

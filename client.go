@@ -1586,6 +1586,10 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 		ignoreUnverifiedPieceCompletion: opts.IgnoreUnverifiedPieceCompletion,
 		initialPieceCheckDisabled:       opts.DisableInitialPieceCheck,
 		deferStorageOpen:                opts.DeferStorageOpen,
+		dataUploadDisallowed:            opts.DisallowDataUpload,
+	}
+	if opts.DisallowDataDownload {
+		t.dataDownloadDisallowed.Set()
 	}
 	g.MakeMap(&t.webSeeds)
 	t.closedCtx, t.closedCtxCancel = context.WithCancelCause(context.Background())

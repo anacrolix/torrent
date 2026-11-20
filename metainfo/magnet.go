@@ -114,8 +114,9 @@ func parseEncodedV1Infohash(encoded string) (ih infohash.T, err error) {
 		err = fmt.Errorf("error decoding xt: %w", err)
 		return
 	}
-	if n != 20 {
-		panic(n)
+	if n != len(ih) {
+		err = fmt.Errorf("decoded xt has %d bytes, expected %d", n, len(ih))
+		return
 	}
 	return
 }

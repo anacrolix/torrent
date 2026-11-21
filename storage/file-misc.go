@@ -46,8 +46,12 @@ func fsync(filePath string) (err error) {
 // caller should make sure the file name provided is safe/sanitized. An existing file at name is left
 // as it is: there's no torrent data to put in it, so there's no reason to truncate it.
 func CreateNativeZeroLengthFile(name string) error {
-	os.MkdirAll(filepath.Dir(name), dirPerm)
-	f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, filePerm)
+	return createNativeZeroLengthFile(name, defaultFileModes)
+}
+
+func createNativeZeroLengthFile(name string, modes fileModes) error {
+	os.MkdirAll(filepath.Dir(name), modes.dir)
+	f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, modes.file)
 	if err == nil {
 		return f.Close()
 	}

@@ -13,11 +13,14 @@ type classicFileIo struct {
 	mu      sync.Mutex
 	writers map[string]*os.File
 	closed  bool
+	modes   fileModes
 }
 
 func newClassicFileIo() fileIo {
-	return &classicFileIo{}
+	return &classicFileIo{modes: defaultFileModes}
 }
+
+func (me *classicFileIo) setModes(modes fileModes) { me.modes = modes }
 
 func (me *classicFileIo) Close() error {
 	me.mu.Lock()
@@ -94,7 +97,7 @@ func (me *classicFileIo) openForWrite(p string, size int64) (f fileWriter, err e
 	if cached, ok := me.writers[p]; ok {
 		return classicFileWriter{cached}, nil
 	}
-	cached, err := openFileExtra(p, os.O_RDWR)
+	cached, err := openFileExtra(p, os.O_RDWR, me.modes)
 	if err != nil {
 		return nil, err
 	}

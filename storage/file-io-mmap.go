@@ -30,11 +30,11 @@ func init() {
 func newDefaultFileIo() fileIo {
 	s, ok := os.LookupEnv("TORRENT_STORAGE_DEFAULT_FILE_IO")
 	if !ok {
-		return &mmapFileIo{}
+		return &mmapFileIo{modes: defaultFileModes}
 	}
 	switch s {
 	case "mmap":
-		return &mmapFileIo{}
+		return &mmapFileIo{modes: defaultFileModes}
 	case "classic":
 		return newClassicFileIo()
 	default:
@@ -48,7 +48,10 @@ type mmapFileIo struct {
 	// relinquishes its extra ref so we never clean up anyway.
 	paths  map[string]*fileMmap
 	closed bool
+	modes  fileModes
 }
+
+func (me *mmapFileIo) setModes(modes fileModes) { me.modes = modes }
 
 func (me *mmapFileIo) Close() error {
 	me.mu.Lock()
@@ -200,7 +203,7 @@ func (me *mmapFileIo) openForWrite(name string, size int64) (_ fileWriter, err e
 		}
 	}
 	// TODO: A bunch of this can be done without holding the lock.
-	f, err := openFileExtra(name, os.O_RDWR)
+	f, err := openFileExtra(name, os.O_RDWR, me.modes)
 	if err != nil {
 		return
 	}

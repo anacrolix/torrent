@@ -12,6 +12,7 @@ import (
 func TestLockDomainsFollowStorageCapacity(t *testing.T) {
 	cl := new(Client)
 	cl.init(TestingConfig(t))
+	t.Cleanup(func() { cl.Close() })
 	f := func() (int64, bool) { return 0, false }
 	capacity := storage.TorrentCapacity(&f)
 	addTorrent := func(i byte, capacity storage.TorrentCapacity) *Torrent {
@@ -40,6 +41,7 @@ func TestLockDomainsFollowStorageCapacity(t *testing.T) {
 func TestDeferExclusive(t *testing.T) {
 	cl := new(Client)
 	cl.init(TestingConfig(t))
+	t.Cleanup(func() { cl.Close() })
 	tor, _ := cl.AddTorrentOpt(AddTorrentOpts{InfoHash: testingTorrentInfoHash})
 	var ran []string
 	tor.lockDomain()

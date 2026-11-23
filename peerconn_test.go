@@ -822,8 +822,8 @@ func BenchmarkServePeerRequests(b *testing.B) {
 	req := Request{ChunkSpec: ChunkSpec{Length: defaultChunkSize}}
 	b.SetBytes(int64(req.Length))
 	b.ReportAllocs()
-	cl.lock()
-	defer cl.unlock()
+	cn.locker().Lock()
+	defer cn.locker().Unlock()
 	for i := range b.N {
 		req.Begin = pp.Integer(i%64) * defaultChunkSize
 		qt.Assert(b, qt.IsNil(cn.onReadRequest(req, false)))

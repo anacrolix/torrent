@@ -11,7 +11,7 @@ import (
 // with the race detector: counter has no other protection.
 func TestTurnsDoNotOverlap(t *testing.T) {
 	var counter, batches int
-	a := New(func() { batches++ })
+	a := New(nil, func() { batches++ })
 	const senders, perSender = 8, 2000
 	var wg sync.WaitGroup
 	for range senders {
@@ -36,7 +36,7 @@ func TestTurnsDoNotOverlap(t *testing.T) {
 }
 
 func TestPostKeepsOrder(t *testing.T) {
-	a := New(nil)
+	a := New(nil, nil)
 	var got []int
 	for i := range 1000 {
 		a.Post(func() { got = append(got, i) })
@@ -54,7 +54,7 @@ func TestPostKeepsOrder(t *testing.T) {
 
 // A turn can post to its own Actor, and Close runs what was queued before it.
 func TestPostFromTurn(t *testing.T) {
-	a := New(nil)
+	a := New(nil, nil)
 	ran := make(chan struct{})
 	a.Post(func() {
 		a.Post(func() { close(ran) })
@@ -112,7 +112,7 @@ func benchHandoff(b *testing.B, how string, senders, batch int) {
 	)
 	switch how {
 	case "post", "call":
-		a = New(nil)
+		a = New(nil, nil)
 	case "chan":
 		ch = make(chan func(), 256)
 		chWg.Go(func() {

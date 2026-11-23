@@ -11,6 +11,9 @@ import "sync"
 // Turns normally run on the Actor's own goroutine. Call runs its function on the calling goroutine
 // when the Actor is idle, so that a synchronous query costs about as much as taking a mutex.
 type Actor struct {
+	// Runs before each batch of turns. While code that hasn't moved to turns still guards the same
+	// state with a lock, this takes that lock.
+	beforeBatch func()
 	// Runs after each batch of turns, before the Actor goes idle or takes the next batch. This is
 	// where state changed by the batch is published: waking waiters, flushing writes and so on.
 	afterBatch func()
@@ -21,22 +24,31 @@ type Actor struct {
 	// A drained queue, kept to reuse its backing array.
 	spare []func()
 	// A batch of turns, or an inline Call, is running.
-	busy   bool
-	closed bool
+	busy bool
+	// The goroutine is started by the first turn that can't run inline.
+	started bool
+	closed  bool
 	// Holds a token when the Actor's goroutine should check the queue again.
 	wake chan struct{}
 	done chan struct{}
 }
 
-// New starts an Actor. afterBatch may be nil.
-func New(afterBatch func()) *Actor {
-	a := &Actor{
-		afterBatch: afterBatch,
-		wake:       make(chan struct{}, 1),
-		done:       make(chan struct{}),
+// New returns an Actor. Either function may be nil.
+func New(beforeBatch, afterBatch func()) *Actor {
+	return &Actor{
+		beforeBatch: beforeBatch,
+		afterBatch:  afterBatch,
+		wake:        make(chan struct{}, 1),
+		done:        make(chan struct{}),
 	}
-	go a.run()
-	return a
+}
+
+// Called with mu held, when a turn has been queued.
+func (a *Actor) startLocked() {
+	if !a.started {
+		a.started = true
+		go a.run()
+	}
 }
 
 func (a *Actor) signal() {
@@ -57,6 +69,7 @@ func (a *Actor) Post(f func()) {
 		return
 	}
 	a.queue = append(a.queue, f)
+	a.startLocked()
 	// The first turn queued while idle is the only one that needs to wake the goroutine. If the
 	// Actor is busy, whoever is running turns checks the queue when it finishes.
 	wake := len(a.queue) == 1 && !a.busy
@@ -78,6 +91,9 @@ func (a *Actor) Call(f func()) bool {
 		// Nothing is running and nothing is ahead of us, so take the turn on this goroutine.
 		a.busy = true
 		a.mu.Unlock()
+		if a.beforeBatch != nil {
+			a.beforeBatch()
+		}
 		f()
 		a.finishBatch()
 		return true
@@ -89,6 +105,7 @@ func (a *Actor) Call(f func()) bool {
 		ran = true
 		close(done)
 	})
+	a.startLocked()
 	a.mu.Unlock()
 	select {
 	case <-done:
@@ -119,7 +136,14 @@ func (a *Actor) finishBatch() {
 func (a *Actor) Close() {
 	a.mu.Lock()
 	a.closed = true
+	started := a.started
+	a.started = true
 	a.mu.Unlock()
+	if !started {
+		// Nothing was ever queued, and nothing can be now.
+		close(a.done)
+		return
+	}
 	a.signal()
 	<-a.done
 }
@@ -142,6 +166,9 @@ func (a *Actor) run() {
 		a.spare = nil
 		a.busy = true
 		a.mu.Unlock()
+		if a.beforeBatch != nil {
+			a.beforeBatch()
+		}
 		for _, f := range batch {
 			f()
 		}

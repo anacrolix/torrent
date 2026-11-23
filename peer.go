@@ -152,8 +152,11 @@ func (cn *Peer) updateExpectingChunks() {
 	}
 }
 
-func (cn *Peer) locker() *lockWithDeferreds {
-	return cn.t.cl.locker()
+// Locks the Peer's Torrent in domain mode. Webseed peers use exclusive mode, since webseed
+// requests are planned Client-wide. See lockDomain.
+func (cn *Peer) locker() torrentLocker {
+	_, webseed := cn.peerImpl.(*webseedPeer)
+	return torrentLocker{t: cn.t, exclusive: webseed}
 }
 
 // The best guess at number of pieces in the torrent for this peer.
@@ -341,17 +344,16 @@ func (c *Peer) doChunkReadStats(size int64) {
 }
 
 // Handle a received chunk from a peer. TODO: Break this out into non-wire protocol specific
-// handling. Avoid shoehorning into a pp.Message. Called with the Client lock held, which is released
+// handling. Avoid shoehorning into a pp.Message. Called with the Peer's locker held, which is released
 // while the chunk is written to storage.
 func (c *Peer) receiveChunk(msg *pp.Message) error {
 	w, err := c.receiveChunkPrologue(msg)
 	if err != nil || w == nil {
 		return err
 	}
-	cl := c.t.cl
-	cl.unlock()
+	c.locker().Unlock()
 	writeErr := w.write()
-	cl.lock()
+	c.locker().Lock()
 	c.receiveChunkEpilogue(w, writeErr)
 	return nil
 }

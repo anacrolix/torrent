@@ -14,24 +14,27 @@ import (
 
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	"github.com/anacrolix/torrent/storage"
 )
 
 // One conn on each of several Torrents, each running mainReadLoop concurrently. With "one-client"
 // every Torrent shares a Client, and so its lock. With "client-per-torrent" each Torrent has its
 // own Client, which is the most that giving each Torrent its own lock or event loop could gain.
+// "shared-capacity" is one Client whose Torrents share an (uncapped) storage capacity, and so a
+// request order and a lock domain.
 func BenchmarkContentionTorrents(b *testing.B) {
 	for _, kind := range []string{"piece", "have"} {
-		for _, layout := range []string{"one-client", "client-per-torrent"} {
+		for _, layout := range []string{"one-client", "client-per-torrent", "shared-capacity"} {
 			for _, n := range []int{1, 2, 4, 8} {
 				b.Run(fmt.Sprintf("%s/%s/torrents=%d", kind, layout, n), func(b *testing.B) {
-					benchContentionTorrents(b, kind, layout == "one-client", n)
+					benchContentionTorrents(b, kind, layout != "client-per-torrent", layout == "shared-capacity", n)
 				})
 			}
 		}
 	}
 }
 
-func benchContentionTorrents(b *testing.B, kind string, shareClient bool, numTorrents int) {
+func benchContentionTorrents(b *testing.B, kind string, shareClient, shareCapacity bool, numTorrents int) {
 	const (
 		numPieces = 256
 		chunkSize = defaultChunkSize
@@ -55,6 +58,11 @@ func benchContentionTorrents(b *testing.B, kind string, shareClient bool, numTor
 		sharedClient = newClient()
 	}
 	torrents := make([]*benchTorrent, numTorrents)
+	var capacity storage.TorrentCapacity
+	if shareCapacity {
+		f := func() (int64, bool) { return 0, false }
+		capacity = &f
+	}
 	var chunksPerPiece int
 	for i := range torrents {
 		bt := &benchTorrent{cl: sharedClient, ts: &torrentStorage{}}
@@ -66,7 +74,7 @@ func benchContentionTorrents(b *testing.B, kind string, shareClient bool, numTor
 		ih[19] = byte(i + 1)
 		bt.t, _ = cl.AddTorrentOpt(AddTorrentOpts{
 			InfoHash:                 ih,
-			Storage:                  &torrentStorageClient{bt.ts},
+			Storage:                  &torrentStorageClient{ts: bt.ts, capacity: capacity},
 			DisableInitialPieceCheck: true,
 		})
 		qt.Assert(b, qt.IsNil(bt.t.setInfoUnlocked(&metainfo.Info{
@@ -110,9 +118,9 @@ func benchContentionTorrents(b *testing.B, kind string, shareClient bool, numTor
 	errs := make(chan error, numTorrents)
 	for _, bt := range torrents {
 		go func() {
-			bt.cl.lock()
+			bt.t.lockDomain()
 			err := bt.cn.mainReadLoop()
-			bt.cl.unlock()
+			bt.t.unlockDomain()
 			if errors.Is(err, io.EOF) {
 				err = nil
 			}
@@ -124,13 +132,13 @@ func benchContentionTorrents(b *testing.B, kind string, shareClient bool, numTor
 		var wg sync.WaitGroup
 		for _, bt := range torrents {
 			if isPiece {
-				bt.cl.lock()
+				bt.t.lockDomain()
 				bt.t.pendAllChunkSpecs(0)
 				g.MakeMapIfNil(&bt.cn.validReceiveChunks)
 				for ri := bt.t.pieceRequestIndexBegin(0); ri < bt.t.pieceRequestIndexBegin(1); ri++ {
 					bt.cn.validReceiveChunks[ri] = 1
 				}
-				bt.cl.unlock()
+				bt.t.unlockDomain()
 				bt.ts.allChunksWritten.Add(chunksPerPiece)
 			}
 			wg.Go(func() {

@@ -987,6 +987,15 @@ func (c *PeerConn) mainReadLoop() (err error) {
 	}()
 	t := c.t
 	cl := t.cl
+	// Handles a message that may touch Client-wide state, such as extension messages that add
+	// peers or metadata, in exclusive mode.
+	exclusive := func(f func() error) error {
+		t.unlockDomain()
+		cl.lock()
+		defer t.lockDomain()
+		defer cl.unlock()
+		return f()
+	}
 
 	decoder := pp.Decoder{
 		R:         bufio.NewReaderSize(c.r, 1<<17),
@@ -1008,11 +1017,11 @@ func (c *PeerConn) mainReadLoop() (err error) {
 				t.chunkPool.Put(cw.piecePtr)
 			}
 		} else {
-			cl.unlock()
+			t.unlockDomain()
 			for i := range chunkWrites {
 				chunkWrites[i].err = chunkWrites[i].w.write()
 			}
-			cl.lock()
+			t.lockDomain()
 			for _, cw := range chunkWrites {
 				c.receiveChunkEpilogue(cw.w, cw.err)
 				t.chunkPool.Put(cw.piecePtr)
@@ -1027,12 +1036,12 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		if wait, taken := c.messageWriter.readLoopShouldWait(); wait {
 			flushChunkWrites()
 			lockedDecodes = 0
-			cl.unlock()
+			t.unlockDomain()
 			select {
 			case <-taken:
 			case <-c.closed.Done():
 			}
-			cl.lock()
+			t.lockDomain()
 			if t.closed.IsSet() || c.closed.IsSet() {
 				return nil
 			}
@@ -1057,8 +1066,8 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		} else {
 			lockedDecodes = 0
 			func() {
-				cl.unlock()
-				defer cl.lock()
+				t.unlockDomain()
+				defer t.lockDomain()
 				err = decoder.Decode(&msg)
 				if err != nil {
 					err = fmt.Errorf("decoding message: %w", err)
@@ -1167,7 +1176,10 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			req := newRequestFromMessage(&msg)
 			c.onPeerSentCancel(req)
 		case pp.Port:
-			c.onPeerSentPort(msg.Port)
+			err = exclusive(func() error {
+				c.onPeerSentPort(msg.Port)
+				return nil
+			})
 		case pp.Suggest:
 			torrent.Add("suggests received", 1)
 			log.Fmsg("peer suggested piece %d", msg.Index).AddValues(c, msg.Index).LogLevel(log.Debug, c.t.logger)
@@ -1191,11 +1203,13 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			c.peerAllowedFast.Add(pieceIndex(msg.Index))
 			c.onNeedUpdateRequests("PeerConn.mainReadLoop allowed fast")
 		case pp.Extended:
-			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
+			err = exclusive(func() error {
+				return c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
+			})
 		case pp.Hashes:
-			err = c.onReadHashes(&msg)
+			err = exclusive(func() error { return c.onReadHashes(&msg) })
 		case pp.HashRequest:
-			err = c.onHashRequest(&msg)
+			err = exclusive(func() error { return c.onHashRequest(&msg) })
 		case pp.HashReject:
 			c.protocolLogger.Levelf(log.Info, "received unimplemented BitTorrent v2 message: %v", msg.Type)
 		default:
@@ -1404,7 +1418,7 @@ func (cn *PeerConn) providedBadData() {
 		cn.drop()
 		return
 	}
-	cn.t.cl.banPeerIP(ip)
+	cn.t.deferExclusive(func() { cn.t.cl.banPeerIP(ip) })
 }
 
 // This is called when something has changed that should wake the writer, such as putting stuff into

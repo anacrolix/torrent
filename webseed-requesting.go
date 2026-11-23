@@ -58,6 +58,7 @@ type webseedRequestHeapElem struct {
 - Initiate missing requests that fit into the available limits.
 */
 func (cl *Client) updateWebseedRequests() {
+	cl.assertExclusive()
 	existingRequests := maps.Collect(cl.iterCurrentWebseedRequestsFromClient())
 	panicif.False(maps.Equal(existingRequests, maps.Collect(cl.iterCurrentWebseedRequests())))
 
@@ -551,6 +552,7 @@ func (cl *Client) iterCurrentWebseedRequests() iter.Seq2[webseedUniqueRequestKey
 }
 
 func (cl *Client) scheduleImmediateWebseedRequestUpdate(reason updateRequestReason) {
+	cl.assertExclusive()
 	if !cl.webseedRequestTimer.Stop() {
 		// Timer function already running, let it do its thing.
 		return

@@ -70,16 +70,16 @@ func (me PieceStateRuns) String() (s string) {
 // Returns the state of pieces of the torrent. They are grouped into runs of same state. The sum of
 // the state run-lengths is the number of pieces in the torrent.
 func (t *Torrent) PieceStateRuns() (runs PieceStateRuns) {
-	t.cl.rLock()
+	t.rLockDomain()
 	runs = t.pieceStateRuns()
-	t.cl.rUnlock()
+	t.rUnlockDomain()
 	return
 }
 
 func (t *Torrent) PieceState(piece pieceIndex) (ps PieceState) {
-	t.cl.rLock()
+	t.rLockDomain()
 	ps = t.pieceState(piece)
-	t.cl.rUnlock()
+	t.rUnlockDomain()
 	return
 }
 
@@ -91,8 +91,8 @@ func (t *Torrent) NumPieces() pieceIndex {
 
 // Get missing bytes count for specific piece.
 func (t *Torrent) PieceBytesMissing(piece int) int64 {
-	t.cl.rLock()
-	defer t.cl.rUnlock()
+	t.rLockDomain()
+	defer t.rUnlockDomain()
 
 	return int64(t.piece(piece).bytesLeft())
 }
@@ -118,8 +118,8 @@ func (t *Torrent) Drop() {
 // for download rate, as it can go down when pieces are lost or fail checks.
 // Sample Torrent.Stats.DataBytesRead for actual file data download rate.
 func (t *Torrent) BytesCompleted() int64 {
-	t.cl.rLock()
-	defer t.cl.rUnlock()
+	t.rLockDomain()
+	defer t.rUnlockDomain()
 	return t.bytesCompleted()
 }
 
@@ -132,9 +132,9 @@ func (t *Torrent) SubscribePieceStateChanges() *pubsub.Subscription[PieceStateCh
 // Returns true if the torrent is currently being seeded. This occurs when the
 // client is willing to upload without wanting anything in return.
 func (t *Torrent) Seeding() (ret bool) {
-	t.cl.rLock()
+	t.rLockDomain()
 	ret = t.seeding()
-	t.cl.rUnlock()
+	t.rUnlockDomain()
 	return
 }
 
@@ -163,8 +163,8 @@ func (t *Torrent) Length() int64 {
 // Returns a run-time generated metainfo for the torrent that includes the
 // info bytes and announce-list as currently known to the client.
 func (t *Torrent) Metainfo() metainfo.MetaInfo {
-	t.cl.rLock()
-	defer t.cl.rUnlock()
+	t.rLockDomain()
+	defer t.rUnlockDomain()
 	return t.newMetaInfo()
 }
 
@@ -290,8 +290,8 @@ func (t *Torrent) Piece(i pieceIndex) Piece {
 }
 
 func (t *Torrent) PeerConns() []*PeerConn {
-	t.cl.rLock()
-	defer t.cl.rUnlock()
+	t.rLockDomain()
+	defer t.rUnlockDomain()
 	ret := make([]*PeerConn, 0, len(t.conns))
 	for c := range t.conns {
 		ret = append(ret, c)
@@ -301,8 +301,8 @@ func (t *Torrent) PeerConns() []*PeerConn {
 
 // TODO: Misleading method name. Webseed peers are not PeerConns.
 func (t *Torrent) WebseedPeerConns() []*Peer {
-	t.cl.rLock()
-	defer t.cl.rUnlock()
+	t.rLockDomain()
+	defer t.rUnlockDomain()
 	ret := make([]*Peer, 0, len(t.conns))
 	for _, c := range t.webSeeds {
 		ret = append(ret, &c.peer)

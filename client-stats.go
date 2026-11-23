@@ -43,7 +43,7 @@ func (cl *Client) statsLocked() (stats ClientStats) {
 	stats.AllConnStats = cl.connStats.Copy()
 	stats.TorrentStatCounters = copyCountFields(&cl.counters)
 	for t := range cl.torrents {
-		stats.TorrentGauges.Add(t.gauges())
+		stats.TorrentGauges.Add(t.gaugesForClientStats())
 	}
 
 	stats.ActiveHalfOpenAttempts = cl.numHalfOpen
@@ -55,4 +55,15 @@ func (cl *Client) statsLocked() (stats ClientStats) {
 	stats.NumPeersProbablyOnlyConnectedDueToHolepunch = len(cl.probablyOnlyConnectedDueToHolepunch)
 
 	return
+}
+
+// Reads the Torrent's gauges with the Client lock held in any mode. Outside exclusive mode, each
+// domain is read locked in turn, so the totals across Torrents may not be from a single instant.
+func (t *Torrent) gaugesForClientStats() TorrentGauges {
+	if t.cl._mu.held {
+		return t.gauges()
+	}
+	t.domain.mu.internal.RLock()
+	defer t.domain.mu.internal.RUnlock()
+	return t.gauges()
 }

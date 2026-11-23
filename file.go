@@ -53,9 +53,9 @@ func (f *File) Length() int64 {
 // Number of bytes of the entire file we have completed. This is the sum of
 // completed pieces, and dirtied chunks of incomplete pieces.
 func (f *File) BytesCompleted() (n int64) {
-	f.t.cl.rLock()
+	f.t.rLockDomain()
 	n = f.bytesCompletedLocked()
-	f.t.cl.rUnlock()
+	f.t.rUnlockDomain()
 	return
 }
 
@@ -147,8 +147,8 @@ type FilePieceState struct {
 
 // Returns the state of pieces in this file.
 func (f *File) State() (ret []FilePieceState) {
-	f.t.cl.rLock()
-	defer f.t.cl.rUnlock()
+	f.t.rLockDomain()
+	defer f.t.rUnlockDomain()
 	pieceSize := int64(f.t.usualPieceSize())
 	off := f.offset % pieceSize
 	remaining := f.length
@@ -200,9 +200,9 @@ func (f *File) SetPriority(prio PiecePriority) {
 
 // Returns the priority per File.SetPriority.
 func (f *File) Priority() (prio PiecePriority) {
-	f.t.cl.rLock()
+	f.t.rLockDomain()
 	prio = f.prio
-	f.t.cl.rUnlock()
+	f.t.rUnlockDomain()
 	return
 }
 

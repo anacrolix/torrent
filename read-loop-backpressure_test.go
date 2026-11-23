@@ -43,8 +43,8 @@ func TestReadLoopWaitsForWriteBuffer(t *testing.T) {
 	readLoopDone := make(chan struct{})
 	go func() {
 		defer close(readLoopDone)
-		cl.lock()
-		defer cl.unlock()
+		tt.lockDomain()
+		defer tt.unlockDomain()
 		c.mainReadLoop()
 	}()
 	cl.unlock()

@@ -107,23 +107,24 @@ func (me *torrentStorage) WriteAt(b []byte, off int64) (int, error) {
 }
 
 type torrentStorageClient struct {
-	ts *torrentStorage
+	ts       *torrentStorage
+	capacity storage.TorrentCapacity
 }
 
 func (t torrentStorageClient) OpenTorrent(ctx context.Context, info *metainfo.Info, infoHash metainfo.Hash) (storage.TorrentImpl, error) {
 	ts := t.ts
-	return storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}, nil
+	return storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close, Capacity: t.capacity}, nil
 }
 
 func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	var cl Client
 	cfg := TestingConfig(b)
 	ts := &torrentStorage{}
-	cfg.DefaultStorage = &torrentStorageClient{ts}
+	cfg.DefaultStorage = &torrentStorageClient{ts: ts}
 	cl.init(cfg)
 	t, _ := cl.AddTorrentOpt(AddTorrentOpts{
 		InfoHash:                 testingTorrentInfoHash,
-		Storage:                  &torrentStorageClient{ts},
+		Storage:                  &torrentStorageClient{ts: ts},
 		DisableInitialPieceCheck: true,
 	})
 	qt.Assert(b, qt.IsNil(t.setInfoUnlocked(&metainfo.Info{
@@ -170,8 +171,9 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		cl.lock()
+		t.lockDomain()
 		err := cn.mainReadLoop()
+		t.unlockDomain()
 		if errors.Is(err, io.EOF) {
 			err = nil
 		}
@@ -225,9 +227,12 @@ func TestPeerConnRejectsUnsolicitedHashes(t *testing.T) {
 	knownRoot[0] = 1
 	cl := &Client{}
 	cl._mu.client = cl
+	cl.unlockHandlers.init()
+	cl._mu.unlockHandlers = &cl.unlockHandlers
 	cl.slogger = slog.Default()
 	tor := &Torrent{
 		cl:        cl,
+		domain:    cl.newLockDomain(),
 		chunkSize: defaultChunkSize,
 		files: &[]*File{{
 			piecesRoot: g.Some(knownRoot),
@@ -251,9 +256,9 @@ func TestPeerConnRejectsUnsolicitedHashes(t *testing.T) {
 		r: bytes.NewReader(msgBuf.Bytes()),
 	}
 
-	cl.lock()
+	cn.t.lockDomain()
 	err := cn.mainReadLoop()
-	cl.unlock()
+	cn.t.unlockDomain()
 	qt.Assert(t, qt.IsNotNil(err))
 	qt.Assert(t, qt.StringContains(err.Error(), "unsolicited hashes message"))
 }
@@ -648,13 +653,13 @@ func TestServePeerRequestTorrentClosedStorageReadFails(t *testing.T) {
 	var cl Client
 	cfg := TestingConfig(t)
 	ts := &torrentStorage{}
-	cfg.DefaultStorage = &torrentStorageClient{ts}
+	cfg.DefaultStorage = &torrentStorageClient{ts: ts}
 	cl.init(cfg)
 	t.Cleanup(func() { cl.Close() })
 
 	tor, _ := cl.AddTorrentOpt(AddTorrentOpts{
 		InfoHash:                 testingTorrentInfoHash,
-		Storage:                  &torrentStorageClient{ts},
+		Storage:                  &torrentStorageClient{ts: ts},
 		DisableInitialPieceCheck: true,
 	})
 	qt.Assert(t, qt.IsNil(tor.setInfoUnlocked(&metainfo.Info{
@@ -675,8 +680,8 @@ func TestServePeerRequestTorrentClosedStorageReadFails(t *testing.T) {
 	// Simulate the torrent being dropped while the connection is still active.
 	tor.Drop()
 
-	cl.lock()
-	defer cl.unlock()
+	pc.locker().Lock()
+	defer pc.locker().Unlock()
 	pc.servePeerRequest(req)
 
 	qt.Check(t, qt.IsFalse(g.MapContains(pc.unreadPeerRequests, req)))
@@ -715,7 +720,7 @@ func TestPeerConnPeerRequestDataLifecycle(t *testing.T) {
 	}
 
 	t.Run("close", func(t *testing.T) {
-		pc, r, baseline := newConn(t, &torrentStorageClient{&torrentStorage{}})
+		pc, r, baseline := newConn(t, &torrentStorageClient{ts: &torrentStorage{}})
 		prd := pc.getPeerRequestData(r.Length.Int())
 		g.MakeMapIfNil(&pc.readyPeerRequests)
 		pc.readyPeerRequests[r] = prd
@@ -724,7 +729,7 @@ func TestPeerConnPeerRequestDataLifecycle(t *testing.T) {
 	})
 
 	t.Run("cancel", func(t *testing.T) {
-		pc, r, baseline := newConn(t, &torrentStorageClient{&torrentStorage{}})
+		pc, r, baseline := newConn(t, &torrentStorageClient{ts: &torrentStorage{}})
 		prd := pc.getPeerRequestData(r.Length.Int())
 		g.MakeMapIfNil(&pc.unreadPeerRequests)
 		g.MakeMapIfNil(&pc.readyPeerRequests)
@@ -735,7 +740,7 @@ func TestPeerConnPeerRequestDataLifecycle(t *testing.T) {
 	})
 
 	t.Run("choke cleanup", func(t *testing.T) {
-		pc, r, baseline := newConn(t, &torrentStorageClient{&torrentStorage{}})
+		pc, r, baseline := newConn(t, &torrentStorageClient{ts: &torrentStorage{}})
 		prd := pc.getPeerRequestData(r.Length.Int())
 		g.MakeMapIfNil(&pc.readyPeerRequests)
 		pc.readyPeerRequests[r] = prd
@@ -756,7 +761,7 @@ func TestPeerConnPeerRequestDataLifecycle(t *testing.T) {
 	})
 
 	t.Run("read error", func(t *testing.T) {
-		pc, r, baseline := newConn(t, &torrentStorageClient{&torrentStorage{}})
+		pc, r, baseline := newConn(t, &torrentStorageClient{ts: &torrentStorage{}})
 		_, err := pc.readPeerRequestData(r)
 		qt.Assert(t, qt.IsNotNil(err))
 		qt.Check(t, qt.Equals(outstandingChunkPoolBuffers(), baseline))

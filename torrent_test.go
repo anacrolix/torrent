@@ -152,7 +152,7 @@ func TestPieceHashFailed(t *testing.T) {
 	tt.cl.lock()
 	qt.Assert(t, qt.IsNil(tt.setInfoBytesLocked(mi.InfoBytes, nil)))
 	tt.cl.unlock()
-	tt.cl.lock()
+	tt.lockDomain()
 	tt.dirtyChunks.AddRange(
 		uint64(tt.pieceRequestIndexBegin(1)),
 		uint64(tt.pieceRequestIndexBegin(1)+3))
@@ -160,7 +160,7 @@ func TestPieceHashFailed(t *testing.T) {
 	tt.pieceHashed(1, false, nil)
 	// Dirty chunks should be cleared so we can try again.
 	qt.Assert(t, qt.IsFalse(tt.pieceAllDirty(1)))
-	tt.cl.unlock()
+	tt.unlockDomain()
 }
 
 // Check the behaviour of Torrent.Metainfo when metadata is not completed.

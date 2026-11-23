@@ -236,10 +236,10 @@ func (r *reader) waitAvailable(
 ) (avail int64, err error) {
 	t := r.t
 	for {
-		t.cl.rLock()
+		t.rLockDomain()
 		avail = r.available(pos, wanted)
 		readerCond := t.piece(int((r.offset + pos) / t.info.PieceLength)).state().readerCond.Signaled()
-		t.cl.rUnlock()
+		t.rUnlockDomain()
 		if avail != 0 {
 			return
 		}

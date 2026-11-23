@@ -63,6 +63,7 @@ func (t *Torrent) initPieceRequestOrder() {
 	if t.storage == nil {
 		return
 	}
+	t.assignLockDomain()
 	g.MakeMapIfNil(&t.cl.pieceRequestOrder)
 	key := t.clientPieceRequestOrderKey()
 	cpro := t.cl.pieceRequestOrder

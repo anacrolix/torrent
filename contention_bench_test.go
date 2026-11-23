@@ -41,11 +41,11 @@ func benchContention(b *testing.B, kind string, k int) {
 		b.Cleanup(func() { f.Close() })
 		ts.file = f
 	}
-	cfg.DefaultStorage = &torrentStorageClient{ts}
+	cfg.DefaultStorage = &torrentStorageClient{ts: ts}
 	cl.init(cfg)
 	t, _ := cl.AddTorrentOpt(AddTorrentOpts{
 		InfoHash:                 testingTorrentInfoHash,
-		Storage:                  &torrentStorageClient{ts},
+		Storage:                  &torrentStorageClient{ts: ts},
 		DisableInitialPieceCheck: true,
 	})
 	const numPieces = 256
@@ -111,9 +111,9 @@ func benchContention(b *testing.B, kind string, k int) {
 	errs := make(chan error, k)
 	for _, c := range conns {
 		go func() {
-			cl.lock()
+			c.cn.t.lockDomain()
 			err := c.cn.mainReadLoop()
-			cl.unlock()
+			c.cn.t.unlockDomain()
 			if errors.Is(err, io.EOF) {
 				err = nil
 			}

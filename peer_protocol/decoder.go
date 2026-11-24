@@ -18,6 +18,10 @@ type Decoder struct {
 	// buffers are freshly allocated.
 	Pool      ChunkBufferPool
 	MaxLength Integer // TODO: Should this include the length header or not?
+	// Reused across Decode calls, which are serial per connection, so the per-message readers do
+	// not allocate.
+	dr decodeReader
+	er expectReader
 }
 
 // ChunkBufferPool sources reusable buffers for piece message data. Buffers are *[]byte so they can
@@ -52,6 +56,13 @@ func (dr *decodeReader) ReadByte() (c byte, err error) {
 	return
 }
 
+// readInteger reads a big-endian Integer from within the message without a scratch buffer.
+func (dr *decodeReader) readInteger(i *Integer) error {
+	n, err := readBufferedInteger(dr.br, dr.lr.N, i)
+	dr.lr.N -= int64(n)
+	return err
+}
+
 func (dr *decodeReader) Read(p []byte) (n int, err error) {
 	n, err = dr.lr.Read(p)
 	if dr.lr.N != 0 && err == io.EOF {
@@ -79,6 +90,14 @@ func (er expectReader) ReadByte() (c byte, err error) {
 	return
 }
 
+func (er expectReader) readInteger(i *Integer) error {
+	err := er.dr.readInteger(i)
+	if err == io.EOF {
+		err = io.ErrUnexpectedEOF
+	}
+	return err
+}
+
 func (er expectReader) Read(p []byte) (n int, err error) {
 	n, err = er.dr.Read(p)
 	if err == io.EOF {
@@ -94,10 +113,9 @@ func (er expectReader) UnreadLength() int64 {
 // io.EOF is returned if the source terminates cleanly on a message boundary. TODO: Raise error
 // level for protocol errors, log them, or add an error type.
 func (d *Decoder) Decode(msg *Message) (err error) {
-	var dr decodeReader
 	{
 		var length Integer
-		err = length.Read(d.R)
+		_, err = readBufferedInteger(d.R, 4, &length)
 		if err != nil {
 			return fmt.Errorf("reading message length: %w", err)
 		}
@@ -108,15 +126,16 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 			msg.Keepalive = true
 			return
 		}
-		dr.Init(d.R, int64(length))
+		d.dr.Init(d.R, int64(length))
 	}
-	r := expectReader{&dr}
+	d.er.dr = &d.dr
+	r := &d.er
 	c, err := r.ReadByte()
 	if err != nil {
 		return
 	}
 	msg.Type = MessageType(c)
-	err = readMessageAfterType(msg, &r, d.Pool)
+	err = readMessageAfterType(msg, r, d.Pool)
 	if err != nil {
 		err = fmt.Errorf("reading fields for message type %v: %w", msg.Type, err)
 		return
@@ -131,10 +150,10 @@ func readMessageAfterType(msg *Message, r *expectReader, piecePool ChunkBufferPo
 	switch msg.Type {
 	case Choke, Unchoke, Interested, NotInterested, HaveAll, HaveNone:
 	case Have, AllowedFast, Suggest:
-		err = msg.Index.Read(r)
+		err = r.readInteger(&msg.Index)
 	case Request, Cancel, Reject:
 		for _, data := range []*Integer{&msg.Index, &msg.Begin, &msg.Length} {
-			err = data.Read(r)
+			err = r.readInteger(data)
 			if err != nil {
 				break
 			}
@@ -145,7 +164,7 @@ func readMessageAfterType(msg *Message, r *expectReader, piecePool ChunkBufferPo
 		msg.Bitfield = unmarshalBitfield(b)
 	case Piece:
 		for _, pi := range []*Integer{&msg.Index, &msg.Begin} {
-			err = pi.Read(r)
+			err = r.readInteger(pi)
 			if err != nil {
 				return
 			}

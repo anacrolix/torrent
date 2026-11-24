@@ -36,7 +36,11 @@ type NewFileClientOpts struct {
 	// returning an error. Set this where something else writes the same files, such as another
 	// downloader for the same content or a sync tool.
 	DisableMmap bool
-	Logger      *slog.Logger
+	// By default, OpenTorrent fails if a torrent's file path that already exists goes through a
+	// symlink that resolves outside the torrent's directory. Set this to follow such symlinks, for
+	// example where directories under the download directory are symlinks to other disks.
+	FollowSymlinksOutOfTorrentDir bool
+	Logger                        *slog.Logger
 }
 
 // The specific part-files option or the default.
@@ -92,18 +96,37 @@ func (fs *fileClientImpl) OpenTorrent(
 	fs.opts.Logger.DebugContext(ctx, "opened file torrent storage", slog.String("dir", dir))
 	metainfoFileInfos := info.UpvertedFiles()
 	files := make([]fileExtra, len(metainfoFileInfos))
+	filePaths := make([]string, len(metainfoFileInfos))
 	for i, fileInfo := range metainfoFileInfos {
 		filePath := filepath.Join(dir, fs.opts.FilePathMaker(FilePathMakerOpts{
 			Info: info,
 			File: &fileInfo,
 		}))
+		if filepath.Clean(filePath) == filepath.Clean(dir) && !info.IsDir() {
+			// A single-file torrent with no usable name, such as "" or ".", would be stored at the
+			// torrent directory itself. Name the file after the infohash instead.
+			filePath = filepath.Join(dir, infoHash.HexString())
+		}
 		if !isSubFilepath(dir, filePath) {
 			err = fmt.Errorf("file %v: path %q is not sub path of %q", i, filePath, dir)
 			return
 		}
 		files[i].safeOsPath = filePath
-		if metainfoFileInfos[i].Length == 0 {
-			err = CreateNativeZeroLengthFile(filePath)
+		filePaths[i] = filePath
+	}
+	err = checkTorrentFilePaths(dir, filePaths, metainfoFileInfos, fs.opts.partFiles())
+	if err != nil {
+		return
+	}
+	if !fs.opts.FollowSymlinksOutOfTorrentDir {
+		err = checkTorrentFileLinks(dir, filePaths, fs.opts.partFiles())
+		if err != nil {
+			return
+		}
+	}
+	for i, fileInfo := range metainfoFileInfos {
+		if fileInfo.Length == 0 {
+			err = CreateNativeZeroLengthFile(files[i].safeOsPath)
 			if err != nil {
 				err = fmt.Errorf("creating zero length file: %w", err)
 				return

@@ -53,7 +53,11 @@ type boundedExpvarMap struct {
 func (me *boundedExpvarMap) add(key string) {
 	// expvar.Var.String must produce valid JSON. "ut_payme\xeet_address" was being entered here
 	// which caused problems later when unmarshalling.
-	key = strconv.Quote(key)
+	me.addSafeKey(strconv.Quote(key))
+}
+
+// Adds a key that's already safe to output as JSON.
+func (me *boundedExpvarMap) addSafeKey(key string) {
 	me.mu.Lock()
 	if _, ok := me.keys[key]; !ok {
 		if len(me.keys) >= maxBoundedExpvarMapKeys {

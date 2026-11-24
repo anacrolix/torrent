@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"slices"
 	"sync"
 	"testing"
 
@@ -385,6 +386,57 @@ func TestRequestMissingHashesTrailingSingleHash(t *testing.T) {
 		}
 	}
 	qt.Assert(t, qt.IsTrue(trailing))
+}
+
+// A single-piece file takes no hash request, but its piece still counts towards where later files
+// begin. Otherwise a later file's pieces are looked up shifted onto the single piece, whose v2 hash
+// is never set, and that file's hashes are requested again after every reply.
+func TestRequestMissingHashesAfterSinglePieceFile(t *testing.T) {
+	const pieceLength = int64(1) << 14
+	cl := &Client{}
+	tor := &Torrent{
+		cl:        cl,
+		chunkSize: defaultChunkSize,
+		info: &metainfo.Info{
+			MetaVersion: 2,
+			Name:        "dummy",
+			PieceLength: pieceLength,
+			FileTree: metainfo.FileTree{
+				Dir: map[string]metainfo.FileTree{
+					"a": {File: metainfo.FileTreeFile{
+						Length:     pieceLength,
+						PiecesRoot: string(make([]byte, 31)) + "\x01",
+					}},
+					"b": {File: metainfo.FileTreeFile{
+						Length:     4 * pieceLength,
+						PiecesRoot: string(make([]byte, 31)) + "\x02",
+					}},
+				},
+			},
+		},
+		pieces: make([]pieceState, 5),
+	}
+	tor.initFiles()
+	c := &PeerConn{
+		Peer: Peer{
+			cl: cl,
+			t:  tor,
+		},
+	}
+	c.legacyPeerImpl = c
+	c.peerImpl = c
+	c.v2 = true
+	c.peerSentHaveAll = true
+	c.initMessageWriter()
+	c.requestMissingHashes()
+	qt.Assert(t, qt.HasLen(c.sentHashRequests, 1))
+	// The reply arrives: the request is done, and b's piece hashes are set.
+	clear(c.sentHashRequests)
+	for i := 1; i < 5; i++ {
+		tor.pieces[i].hashV2 = &[32]byte{byte(i)}
+	}
+	c.requestMissingHashes()
+	qt.Check(t, qt.HasLen(c.sentHashRequests, 0))
 }
 
 func TestConnPexPeerFlags(t *testing.T) {
@@ -773,5 +825,77 @@ func BenchmarkServePeerRequests(b *testing.B) {
 		cn.servePeerRequest(req)
 		qt.Assert(b, qt.IsTrue(g.MapContains(cn.readyPeerRequests, req)))
 		cn.sendChunk(req, writeAndDiscard)
+	}
+}
+
+// Returns a conn on a v2 torrent with one file of numPieces pieces whose piece layer is
+// pieceHashes, having sent hash requests for each of reqs.
+func newV2HashesTestConn(pieceHashes [][32]byte, reqs ...pp.Message) *PeerConn {
+	numPieces := len(pieceHashes)
+	piecesRoot := infohash_v2.T(merkle.Root(pieceHashes))
+	cl := &Client{}
+	tor := &Torrent{
+		cl:        cl,
+		chunkSize: defaultChunkSize,
+		info: &metainfo.Info{
+			PieceLength: 1,
+			Pieces:      make([]byte, numPieces*metainfo.HashSize),
+		},
+		pieces: make([]pieceState, numPieces),
+		files: &[]*File{{
+			length:     int64(numPieces),
+			fi:         metainfo.FileInfo{Length: int64(numPieces), PiecesRoot: g.Some(piecesRoot)},
+			piecesRoot: g.Some(piecesRoot),
+		}},
+	}
+	(*tor.files)[0].t = tor
+	cn := &PeerConn{
+		Peer: Peer{
+			cl: cl,
+			t:  tor,
+		},
+		sentHashRequests: map[hashRequest]struct{}{},
+	}
+	for _, r := range reqs {
+		r.PiecesRoot = piecesRoot
+		cn.sentHashRequests[hashRequestFromMessage(r)] = struct{}{}
+	}
+	return cn
+}
+
+// Wrong piece layer hashes can only be detected once all of a file's hashes have arrived, and
+// must then be treated as a protocol error rather than silently re-requested.
+func TestPeerConnRejectsWrongHashes(t *testing.T) {
+	pieceHashes := [][32]byte{{1}, {2}, {3}, {4}}
+	for _, correct := range []bool{false, true} {
+		parts := []pp.Message{
+			{Type: pp.Hashes, Index: 0, Length: 2},
+			{Type: pp.Hashes, Index: 2, Length: 2},
+		}
+		cn := newV2HashesTestConn(pieceHashes, parts...)
+		piecesRoot := (*cn.t.files)[0].piecesRoot.Unwrap()
+		for i := range parts {
+			parts[i].PiecesRoot = piecesRoot
+			parts[i].Hashes = slices.Clone(pieceHashes[parts[i].Index : parts[i].Index+parts[i].Length])
+		}
+		if !correct {
+			parts[1].Hashes[1] = [32]byte{5}
+		}
+		qt.Assert(t, qt.IsNil(cn.onReadHashes(&parts[0])))
+		qt.Check(t, qt.IsNil(cn.t.pieces[0].hashV2), qt.Commentf("set before all hashes arrived"))
+		err := cn.onReadHashes(&parts[1])
+		qt.Check(t, qt.HasLen(cn.receivedHashPieces, 0))
+		if correct {
+			qt.Assert(t, qt.IsNil(err))
+			for i := range pieceHashes {
+				qt.Check(t, qt.DeepEquals(cn.t.pieces[i].hashV2, &pieceHashes[i]))
+			}
+		} else {
+			qt.Assert(t, qt.IsNotNil(err))
+			qt.Check(t, qt.StringContains(err.Error(), "piece hashes for file"))
+			for i := range pieceHashes {
+				qt.Check(t, qt.IsNil(cn.t.pieces[i].hashV2))
+			}
+		}
 	}
 }

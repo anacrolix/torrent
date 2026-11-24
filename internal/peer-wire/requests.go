@@ -13,11 +13,14 @@ import (
 
 type RequestIndex = requestStrategy.RequestIndex
 
-// Our requests to the peer. Requests are identified by index in the torrent's chunks; mapping
-// to and from wire messages is left to the caller, which knows the chunk layout.
+// Our requests to the peer. Each is tracked both by the wire Request we sent, which is what the
+// peer's Piece, Reject and our Cancel refer to (BEP 3, BEP 6), and by the RequestIndex the request
+// strategy uses. Messages are matched on the exact index, begin and length that was requested, so
+// mapping between the two is never needed on receipt.
 
-// RequestState returns our interest and outstanding requests, for the request strategy. Don't
-// modify it: use SetInterested, SentRequest, DeleteRequest, SentCancel, RecvReject and RecvChunk.
+// RequestState returns our interest and outstanding requests by RequestIndex, for the request
+// strategy. Don't modify it: use SetInterested, SentRequest, DeleteRequest, SentCancel,
+// RecvReject and RecvChunk.
 func (s *State) RequestState() *requestStrategy.PeerRequestState {
 	if s.requests.Requests == nil {
 		s.requests.Requests = &orderedBitmap[RequestIndex]{}
@@ -66,86 +69,125 @@ func (s *State) LowOnRequests() bool {
 	return s.NumRequests() == 0 && s.requests.Cancelled.IsEmpty()
 }
 
-// SentRequest records that we sent a Request for the chunk. It returns false if the request is
-// already outstanding, in which case there's nothing to send.
-func (s *State) SentRequest(r RequestIndex) (added bool) {
+// SentRequest records that we sent req, which the request strategy knows as r. It returns false
+// if the request is already outstanding, in which case there's nothing to send.
+func (s *State) SentRequest(r RequestIndex, req Request) (added bool) {
 	if s.RequestOutstanding(r) {
+		panicif.NotEq(s.sentRequests[req], r)
 		return false
 	}
+	// A cancelled request awaiting its reject can't be reissued: the reply would be ambiguous.
+	panicif.True(s.RequestCancelled(r))
+	_, ok := s.sentRequests[req]
+	panicif.True(ok)
 	s.RequestState().Requests.Add(r)
-	s.ExpectChunk(r)
+	if s.sentRequests == nil {
+		s.sentRequests = make(map[Request]RequestIndex)
+	}
+	s.sentRequests[req] = r
+	s.ExpectChunk(req)
 	return true
 }
 
-// ExpectChunk records that a Piece for the chunk is acceptable, without making a request. Each
+// ExpectChunk records that a Piece answering req is acceptable, without making a request. Each
 // call allows one Piece. SentRequest does this itself.
-func (s *State) ExpectChunk(r RequestIndex) {
+func (s *State) ExpectChunk(req Request) {
 	if s.validReceiveChunks == nil {
-		s.validReceiveChunks = make(map[RequestIndex]int)
+		s.validReceiveChunks = make(map[Request]int)
 	}
-	s.validReceiveChunks[r]++
+	s.validReceiveChunks[req]++
 }
 
-// ExpectingChunk returns whether a Piece for the chunk would be accepted. Chunks stay acceptable
+// ExpectingChunk returns whether a Piece answering req would be accepted. Chunks stay acceptable
 // after their request is deleted, since the peer may already have sent them.
-func (s *State) ExpectingChunk(r RequestIndex) bool {
-	return s.validReceiveChunks[r] > 0
+func (s *State) ExpectingChunk(req Request) bool {
+	return s.validReceiveChunks[req] > 0
 }
 
-func (s *State) decExpectedChunk(r RequestIndex) {
-	count := s.validReceiveChunks[r]
+func (s *State) decExpectedChunk(req Request) {
+	count := s.validReceiveChunks[req]
 	panicif.LessThanOrEqual(count, 0)
 	if count == 1 {
-		delete(s.validReceiveChunks, r)
+		delete(s.validReceiveChunks, req)
 	} else {
-		s.validReceiveChunks[r] = count - 1
+		s.validReceiveChunks[req] = count - 1
 	}
+}
+
+// Removes an outstanding request, checking it was sent as req.
+func (s *State) removeRequest(r RequestIndex, req Request) bool {
+	if s.requests.Requests == nil || !s.requests.Requests.CheckedRemove(r) {
+		return false
+	}
+	sent, ok := s.sentRequests[req]
+	panicif.False(ok)
+	panicif.NotEq(sent, r)
+	delete(s.sentRequests, req)
+	return true
 }
 
 // DeleteRequest forgets an outstanding request without telling the peer, for example when a
-// peer without the fast extension chokes us. A Piece for it is still accepted. It returns false
-// if the request wasn't outstanding.
-func (s *State) DeleteRequest(r RequestIndex) bool {
-	return s.requests.Requests != nil && s.requests.Requests.CheckedRemove(r)
+// peer without the fast extension chokes us. A Piece for it is still accepted, but not a Reject.
+// It returns false if the request wasn't outstanding.
+func (s *State) DeleteRequest(r RequestIndex, req Request) bool {
+	return s.removeRequest(r, req)
 }
 
 // SentCancel records that we sent a Cancel for an outstanding request. If expectReject, the
-// peer acknowledges cancels with Reject (BEP 6), and we wait for that or the chunk before the
+// peer acknowledges cancels with Reject or the Piece (BEP 6), and we wait for that before the
 // chunk can be requested again. It returns false if the request wasn't outstanding.
-func (s *State) SentCancel(r RequestIndex, expectReject bool) bool {
-	if !s.DeleteRequest(r) {
+func (s *State) SentCancel(r RequestIndex, req Request, expectReject bool) bool {
+	if !s.removeRequest(r, req) {
 		return false
 	}
 	if expectReject {
 		panicif.False(s.requests.Cancelled.CheckedAdd(r))
+		s.sentRequests[req] = r
 	}
 	return true
 }
 
-// RecvReject handles a Reject for one of our requests. outstanding is true if the request hadn't
-// been cancelled. ok is false if we have no such request or cancel, which is a protocol error.
-func (s *State) RecvReject(r RequestIndex) (outstanding, ok bool) {
-	if s.DeleteRequest(r) {
-		outstanding = true
-	} else if !s.requests.Cancelled.CheckedRemove(r) {
-		return false, false
+// Looks up a request or cancel awaiting a reply by the wire request the reply names. outstanding
+// is false if it was cancelled.
+func (s *State) takeSentRequest(req Request) (r RequestIndex, outstanding, ok bool) {
+	r, ok = s.sentRequests[req]
+	if !ok {
+		return
 	}
-	s.decExpectedChunk(r)
-	return outstanding, true
+	delete(s.sentRequests, req)
+	if s.RequestOutstanding(r) {
+		panicif.False(s.requests.Requests.CheckedRemove(r))
+		outstanding = true
+	} else {
+		panicif.False(s.requests.Cancelled.CheckedRemove(r))
+	}
+	return
+}
+
+// RecvReject handles a Reject, which names the request it rejects (BEP 6). outstanding is true
+// if the request hadn't been cancelled. ok is false if we have no such request or cancel, which is
+// a protocol error. r is the rejected request's index.
+func (s *State) RecvReject(req Request) (r RequestIndex, outstanding, ok bool) {
+	r, outstanding, ok = s.takeSentRequest(req)
+	if ok {
+		s.decExpectedChunk(req)
+	}
+	return
 }
 
 var ErrUnexpectedChunk = errors.New("received unexpected chunk")
 
-// RecvChunk handles a Piece. requested is true if the request was outstanding, and intended is
-// true if it was outstanding or cancelled. A Piece we weren't expecting is an error.
-func (s *State) RecvChunk(r RequestIndex) (requested, intended bool, err error) {
-	if !s.ExpectingChunk(r) {
+// RecvChunk handles a Piece. req is the index, begin and data length of the Piece, which must be
+// exactly what was requested. requested is true if the request was outstanding, and intended is
+// true if it was outstanding or cancelled; r is its index if so. A Piece we weren't expecting is
+// an error (BEP 6 says to close the connection).
+func (s *State) RecvChunk(req Request) (r RequestIndex, requested, intended bool, err error) {
+	if !s.ExpectingChunk(req) {
 		err = ErrUnexpectedChunk
 		return
 	}
-	s.decExpectedChunk(r)
-	requested = s.DeleteRequest(r)
-	intended = requested || s.requests.Cancelled.CheckedRemove(r)
+	s.decExpectedChunk(req)
+	r, requested, intended = s.takeSentRequest(req)
 	return
 }
 

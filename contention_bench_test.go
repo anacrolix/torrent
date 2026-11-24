@@ -126,7 +126,7 @@ func benchContention(b *testing.B, kind string, k int) {
 			for i, c := range conns {
 				t.pendAllChunkSpecs(i)
 				for ri := t.pieceRequestIndexBegin(i); ri < t.pieceRequestIndexBegin(i+1); ri++ {
-					c.cn.wire.ExpectChunk(ri)
+					c.cn.wire.ExpectChunk(t.requestIndexToRequest(ri))
 				}
 			}
 			cl.unlock()

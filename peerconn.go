@@ -1088,7 +1088,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			err = c.peerSentHaveNone()
 		case pp.Reject:
 			req := newRequestFromMessage(&msg)
-			if !c.remoteRejectedRequest(c.t.requestIndexFromRequest(req)) {
+			if !c.remoteRejectedRequest(req) {
 				err = fmt.Errorf("received invalid reject for request %v", req)
 				c.protocolLogger.Levelf(log.Debug, "%v", err)
 			}
@@ -1887,13 +1887,13 @@ func (cn *PeerConn) request(r RequestIndex) (more bool, err error) {
 	if cn.wire.NumRequests() >= cn.nominalMaxRequests() {
 		return true, errors.New("too many outstanding requests")
 	}
-	panicif.False(cn.wire.SentRequest(r))
+	ppReq := cn.t.requestIndexToRequest(r)
+	panicif.False(cn.wire.SentRequest(r, ppReq))
 	cn.t.requestState[r] = requestState{
 		peer: weak.Make(cn),
 		when: time.Now(),
 	}
 	cn.updateExpectingChunks()
-	ppReq := cn.t.requestIndexToRequest(r)
 	for _, f := range cn.callbacks.SentRequest {
 		f(PeerRequestEvent{cn.peerPtr(), ppReq})
 	}
@@ -1901,7 +1901,7 @@ func (cn *PeerConn) request(r RequestIndex) (more bool, err error) {
 }
 
 func (me *PeerConn) cancel(r RequestIndex) {
-	if !me.wire.SentCancel(r, me.remoteRejectsCancels()) {
+	if !me.wire.SentCancel(r, me.t.requestIndexToRequest(r), me.remoteRejectsCancels()) {
 		panic("request not existing should have been guarded")
 	}
 	me.onDeletedRequest(r)
@@ -1922,9 +1922,10 @@ func (cn *PeerConn) onNeedUpdateRequests(reason updateRequestReason) {
 	cn.locker().DeferUniqueUnaryFunc(cn, cn.handleOnNeedUpdateRequests)
 }
 
-// Returns true if it was valid to reject the request.
-func (c *PeerConn) remoteRejectedRequest(r RequestIndex) bool {
-	outstanding, ok := c.wire.RecvReject(r)
+// Returns true if it was valid to reject the request. The Reject must name exactly a request we
+// sent and haven't had answered.
+func (c *PeerConn) remoteRejectedRequest(req Request) bool {
+	r, outstanding, ok := c.wire.RecvReject(req)
 	if !ok {
 		return false
 	}
@@ -1941,7 +1942,7 @@ func (c *PeerConn) remoteRejectedRequest(r RequestIndex) bool {
 // Returns true if an outstanding request is removed. Cancelled requests should be handled
 // separately.
 func (c *PeerConn) deleteRequest(r RequestIndex) bool {
-	if !c.wire.DeleteRequest(r) {
+	if !c.wire.DeleteRequest(r, c.t.requestIndexToRequest(r)) {
 		return false
 	}
 	c.onDeletedRequest(r)
@@ -2000,7 +2001,7 @@ func (p *PeerConn) isLowOnRequests() bool {
 }
 
 func (c *PeerConn) checkReceivedChunk(req RequestIndex, msg *pp.Message, ppReq Request) (intended bool, err error) {
-	if !c.wire.ExpectingChunk(req) {
+	if !c.wire.ExpectingChunk(ppReq) {
 		ChunksReceived.Add("unexpected", 1)
 		err = peerWire.ErrUnexpectedChunk
 		return
@@ -2019,9 +2020,15 @@ func (c *PeerConn) checkReceivedChunk(req RequestIndex, msg *pp.Message, ppReq R
 			}
 		}
 		// Request has been satisfied.
-		var requested bool
-		requested, intended, err = c.wire.RecvChunk(req)
+		var (
+			requested bool
+			sentIndex RequestIndex
+		)
+		sentIndex, requested, intended, err = c.wire.RecvChunk(ppReq)
 		panicif.Err(err)
+		if intended {
+			panicif.NotEq(sentIndex, req)
+		}
 		if requested {
 			c.onDeletedRequest(req)
 		}

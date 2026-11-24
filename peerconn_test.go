@@ -187,7 +187,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			// writeSem is unlocked.
 			t.pendAllChunkSpecs(0)
 			eachRequestIndex(func(ri RequestIndex) {
-				cn.wire.ExpectChunk(ri)
+				cn.wire.ExpectChunk(cn.t.requestIndexToRequest(ri))
 			})
 			cl.unlock()
 			ts.allChunksWritten.Add(int(numRequests))

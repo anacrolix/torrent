@@ -56,7 +56,9 @@ type State struct {
 	// The number of Piece messages we'll accept per chunk. Due to latency, buffering, and
 	// implementation differences, we may receive chunks that are no longer requested. This could
 	// use a roaring.BSI if the memory use becomes noticeable.
-	validReceiveChunks map[RequestIndex]int
+	validReceiveChunks map[Request]int
+	// Our requests and cancels awaiting a Piece or Reject, by what was sent on the wire.
+	sentRequests map[Request]RequestIndex
 
 	// Requests from the peer that are outstanding.
 	peerRequests map[Request]struct{}

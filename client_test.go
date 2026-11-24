@@ -1041,10 +1041,12 @@ func TestDroppedTorrentsNotReturned(t *testing.T) {
 type closeRecordingPacketConn struct {
 	net.PacketConn
 	closed *sync.WaitGroup
+	// The socket's reader and Client.Close may both close the conn.
+	once *sync.Once
 }
 
 func (me closeRecordingPacketConn) Close() error {
-	me.closed.Done()
+	me.once.Do(me.closed.Done)
 	return me.PacketConn.Close()
 }
 
@@ -1069,7 +1071,7 @@ func TestClientCloseClosesTrackerClients(t *testing.T) {
 		defer mu.Unlock()
 		created++
 		open.Add(1)
-		return closeRecordingPacketConn{pc, &open}, nil
+		return closeRecordingPacketConn{pc, &open, new(sync.Once)}, nil
 	}
 	cl, err := NewClient(cfg)
 	qt.Assert(t, qt.IsNil(err))

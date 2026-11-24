@@ -79,6 +79,10 @@ type PeerConn struct {
 	uploadTimer *time.Timer
 	pex         pexConnState
 
+	// Our outstanding requests and cancels awaiting replies, by RequestIndex, for the request
+	// strategy. wireState has the same requests as sent on the wire. Use requestIndexes.
+	requestState requestStrategy.PeerRequestState
+
 	// Outstanding peer requests (see wireState) are either waiting to be read from storage, or ready to
 	// be uploaded.
 	unreadPeerRequests map[Request]struct{}
@@ -129,8 +133,8 @@ func (cn *PeerConn) peerImplStatusLines() []string {
 		fmt.Sprintf("pex: %s", cn.pexStatus()),
 		fmt.Sprintf(
 			"reqq: %d+%v/(%d/%d):%d/%d, flags: %s",
-			cn.wireState.RequestState().Requests.GetCardinality(),
-			cn.wireState.RequestState().Cancelled.GetCardinality(),
+			cn.requestIndexes().Requests.GetCardinality(),
+			cn.requestIndexes().Cancelled.GetCardinality(),
 			cn.nominalMaxRequests(),
 			cn.PeerMaxRequests,
 			cn.numPeerRequests(),
@@ -975,7 +979,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		}
 		switch msg.Type {
 		case pp.Choke:
-			changed, deleted := c.wireState.RecvChoke()
+			changed, dropped := c.wireState.RecvChoke()
 			if !changed {
 				break
 			}
@@ -985,7 +989,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			// meanwhile. I think a peer's ability to abuse this should be limited: they could let
 			// us request a lot of stuff, then choke us and never reject, but they're only a single
 			// peer, our chunk balancing should smooth over this abuse.
-			c.onDeletedRequests(deleted, "choked by non-fast PeerConn")
+			c.onDroppedRequests(dropped, "choked by non-fast PeerConn")
 			c.updateExpectingChunks()
 		case pp.Unchoke:
 			if !c.wireState.RecvUnchoke() {
@@ -995,7 +999,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 				break
 			}
 			preservedCount := 0
-			c.wireState.RequestState().Requests.Iterate(func(x RequestIndex) bool {
+			c.requestIndexes().Requests.Iterate(func(x RequestIndex) bool {
 				if !c.wireState.PeerAllowedFast().Contains(c.t.pieceIndexOfRequestIndex(x)) {
 					preservedCount++
 				}
@@ -1294,8 +1298,11 @@ func (c *PeerConn) tickleWriter() {
 func (c *PeerConn) sendChunk(r Request, msg func(pp.Message) bool) (more bool) {
 	prd, ok := c.takeReadyPeerRequest(r)
 	panicif.False(ok)
-	panicif.False(c.wireState.SentPiece(r))
-	panicif.NotEq(len(prd.buf), r.Length.Int())
+	// wireState checks the Piece we're about to send answers exactly an outstanding request.
+	panicif.Err(c.wireState.SentPiece(Request{
+		Index:     r.Index,
+		ChunkSpec: ChunkSpec{Begin: r.Begin, Length: pp.Integer(len(prd.buf))},
+	}))
 	c.lastChunkSent = time.Now()
 	more = msg(pp.Message{
 		Type:  pp.Piece,
@@ -1655,7 +1662,7 @@ func (cn *PeerConn) expectingChunks() bool {
 	haveAllowedFastRequests := false
 	cn.wireState.PeerAllowedFast().Iterate(func(i pieceIndex) bool {
 		haveAllowedFastRequests = roaringBitmapRangeCardinality[RequestIndex](
-			cn.wireState.RequestState().Requests,
+			cn.requestIndexes().Requests,
 			cn.t.pieceRequestIndexBegin(i),
 			cn.t.pieceRequestIndexBegin(i+1),
 		) == 0
@@ -1714,7 +1721,7 @@ func (cn *PeerConn) iterContiguousPieceRequests(f func(piece pieceIndex, count i
 			count = 1
 		}
 	}
-	cn.wireState.RequestState().Requests.Iterate(func(requestIndex requestStrategy.RequestIndex) bool {
+	cn.requestIndexes().Requests.Iterate(func(requestIndex requestStrategy.RequestIndex) bool {
 		next(g.Some(cn.t.pieceIndexOfRequestIndex(requestIndex)))
 		return true
 	})
@@ -1767,7 +1774,7 @@ func (cn *PeerConn) shouldRequest(r RequestIndex) error {
 		return err
 	}
 	pi := cn.t.pieceIndexOfRequestIndex(r)
-	if cn.wireState.RequestCancelled(r) {
+	if cn.requestIndexes().Cancelled.Contains(r) {
 		return errors.New("request is cancelled and waiting acknowledgement")
 	}
 	if !cn.peerHasPiece(pi) {
@@ -1791,7 +1798,7 @@ func (cn *PeerConn) shouldRequest(r RequestIndex) error {
 	if cn.wireState.PeerChoking() && !cn.wireState.PeerAllowedFast().Contains(pi) {
 		// This could occur if we made a request with the fast extension, and then got choked and
 		// haven't had the request rejected yet.
-		if !cn.wireState.RequestOutstanding(r) {
+		if !cn.requestIndexes().Requests.Contains(r) {
 			panic("peer choking and piece not allowed fast")
 		}
 	}
@@ -1810,14 +1817,15 @@ func (cn *PeerConn) request(r RequestIndex) (more bool, err error) {
 	if err := cn.shouldRequest(r); err != nil {
 		panic(err)
 	}
-	if cn.wireState.RequestOutstanding(r) {
+	if cn.requestIndexes().Requests.Contains(r) {
 		return true, nil
 	}
 	if cn.wireState.NumRequests() >= cn.nominalMaxRequests() {
 		return true, errors.New("too many outstanding requests")
 	}
 	ppReq := cn.t.requestIndexToRequest(r)
-	panicif.False(cn.wireState.SentRequest(r, ppReq))
+	panicif.False(cn.wireState.SentRequest(ppReq))
+	cn.requestIndexes().Requests.Add(r)
 	cn.t.requestState[r] = requestState{
 		peer: weak.Make(cn),
 		when: time.Now(),
@@ -1830,8 +1838,13 @@ func (cn *PeerConn) request(r RequestIndex) (more bool, err error) {
 }
 
 func (me *PeerConn) cancel(r RequestIndex) {
-	if !me.wireState.SentCancel(r, me.t.requestIndexToRequest(r)) {
+	req := me.t.requestIndexToRequest(r)
+	if !me.wireState.SentCancel(req) {
 		panic("request not existing should have been guarded")
+	}
+	panicif.False(me.requestIndexes().Requests.CheckedRemove(r))
+	if me.wireState.RequestCancelled(req) {
+		panicif.False(me.requestIndexes().Cancelled.CheckedAdd(r))
 	}
 	me.onDeletedRequest(r)
 	me.handleCancel(r)
@@ -1854,10 +1867,11 @@ func (cn *PeerConn) onNeedUpdateRequests(reason updateRequestReason) {
 // Returns true if it was valid to reject the request. The Reject must name exactly a request we
 // sent and haven't had answered.
 func (c *PeerConn) remoteRejectedRequest(req Request) bool {
-	r, outstanding, ok := c.wireState.RecvReject(req)
+	outstanding, ok := c.wireState.RecvReject(req)
 	if !ok {
 		return false
 	}
+	r := c.repliedRequest(req, outstanding)
 	if outstanding {
 		c.onDeletedRequest(r)
 		c.decPeakRequests()
@@ -1881,12 +1895,41 @@ func (c *PeerConn) onDeletedRequest(r RequestIndex) {
 	delete(c.t.requestState, r)
 }
 
+// Our request and cancel indexes, for the request strategy.
+func (c *PeerConn) requestIndexes() *requestStrategy.PeerRequestState {
+	if c.requestState.Requests == nil {
+		c.requestState.Requests = &orderedBitmap[RequestIndex]{}
+	}
+	return &c.requestState
+}
+
+// Maps a wire request of ours back to its RequestIndex. wireState matched it exactly against what
+// we sent, which came from requestIndexToRequest, so the round trip must be exact.
+func (c *PeerConn) requestIndexOfSent(req Request) RequestIndex {
+	r := c.t.requestIndexFromRequest(req)
+	panicif.NotEq(c.t.requestIndexToRequest(r), req)
+	return r
+}
+
+// Removes a request or cancel that wireState says the peer replied to, returning its index.
+func (c *PeerConn) repliedRequest(req Request, outstanding bool) RequestIndex {
+	r := c.requestIndexOfSent(req)
+	if outstanding {
+		panicif.False(c.requestIndexes().Requests.CheckedRemove(r))
+	} else {
+		panicif.False(c.requestIndexes().Cancelled.CheckedRemove(r))
+	}
+	return r
+}
+
 // Effects of wireState forgetting our outstanding requests without the peer replying.
-func (c *PeerConn) onDeletedRequests(deleted []RequestIndex, reason updateRequestReason) {
-	if len(deleted) == 0 {
+func (c *PeerConn) onDroppedRequests(dropped []Request, reason updateRequestReason) {
+	if len(dropped) == 0 {
 		return
 	}
-	for _, r := range deleted {
+	for _, req := range dropped {
+		r := c.requestIndexOfSent(req)
+		panicif.False(c.requestIndexes().Requests.CheckedRemove(r))
 		c.onDeletedRequest(r)
 	}
 	c.assertNoRequests()
@@ -1900,17 +1943,18 @@ func (c *PeerConn) onDeletedRequests(deleted []RequestIndex, reason updateReques
 // The connection is closed: wireState forgets everything outstanding, and we drop our buffers and
 // apply the effects of our requests going away. It's safe to call more than once.
 func (c *PeerConn) onWireClosed(reason updateRequestReason) {
-	deleted := c.wireState.Closed()
+	dropped := c.wireState.Closed()
 	c.dropAllLocalPeerRequests()
-	c.onDeletedRequests(deleted, reason)
+	c.onDroppedRequests(dropped, reason)
 }
 
 func (c *PeerConn) assertNoRequests() {
 	panicif.NotZero(c.wireState.NumRequests())
+	panicif.NotZero(c.requestIndexes().Requests.GetCardinality())
 }
 
 func (c *PeerConn) cancelAllRequests() {
-	c.wireState.RequestState().Requests.IterateSnapshot(func(x RequestIndex) bool {
+	c.requestIndexes().Requests.IterateSnapshot(func(x RequestIndex) bool {
 		c.cancel(x)
 		return true
 	})
@@ -1939,20 +1983,17 @@ func (c *PeerConn) checkReceivedChunk(req RequestIndex, msg *pp.Message, ppReq R
 	// have actually already received the piece, while we have the Client unlocked to write the data
 	// out.
 	{
-		if c.wireState.RequestOutstanding(req) {
+		if c.wireState.RequestOutstanding(ppReq) {
 			for _, f := range c.callbacks.ReceivedRequested {
 				f(PeerMessageEvent{c.peerPtr(), msg})
 			}
 		}
 		// Request has been satisfied.
-		var (
-			requested bool
-			sentIndex RequestIndex
-		)
-		sentIndex, requested, intended, err = c.wireState.RecvChunk(ppReq)
+		var requested bool
+		requested, intended, err = c.wireState.RecvChunk(ppReq)
 		panicif.Err(err)
 		if intended {
-			panicif.NotEq(sentIndex, req)
+			panicif.NotEq(c.repliedRequest(ppReq, requested), req)
 		}
 		if requested {
 			c.onDeletedRequest(req)

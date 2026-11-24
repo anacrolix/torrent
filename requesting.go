@@ -276,12 +276,12 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 					// have made the request previously (presumably while unchoked), and haven't had
 					// the peer respond yet (and the request was retained because we are using the
 					// fast extension).
-					if p.wireState.PeerChoking() && !p.wireState.RequestOutstanding(r) {
+					if p.wireState.PeerChoking() && !p.requestIndexes().Requests.Contains(r) {
 						// We can't request this right now.
 						return
 					}
 				}
-				cancelled := &p.wireState.RequestState().Cancelled
+				cancelled := &p.requestIndexes().Cancelled
 				if !cancelled.IsEmpty() && cancelled.Contains(r) {
 					// Can't re-request while awaiting acknowledgement.
 					return
@@ -404,7 +404,7 @@ func (p *Peer) allowSendNotInterested() bool {
 // some piece order randomization within the preferred state calculated earlier in next. Cancels are
 // not done here, those are handled synchronously. We only track pending cancel acknowledgements.
 func (p *PeerConn) applyRequestState(next desiredRequestState) {
-	current := p.wireState.RequestState()
+	current := p.requestIndexes()
 	// Make interest sticky
 	if !next.Interested && p.wireState.Interested() {
 		if !p.allowSendNotInterested() {

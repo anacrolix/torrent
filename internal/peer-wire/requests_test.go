@@ -21,7 +21,7 @@ func TestInterest(t *testing.T) {
 }
 
 // A chunk of 16 KiB at index i in piece 0, as a fixed chunk layout would make it.
-func chunk(i RequestIndex) Request {
+func chunk(i int) Request {
 	return Request{Index: 0, ChunkSpec: types.ChunkSpec{Begin: pp.Integer(i) * 16 << 10, Length: 16 << 10}}
 }
 
@@ -50,8 +50,8 @@ func TestHandshook(t *testing.T) {
 	qt.Check(t, qt.IsFalse(s.ExpectsCancelReplies()))
 }
 
-func sendRequest(s *State, i RequestIndex) bool {
-	return s.SentRequest(i, chunk(i))
+func sendRequest(s *State, i int) bool {
+	return s.SentRequest(chunk(i))
 }
 
 func TestRequestThenChunk(t *testing.T) {
@@ -61,22 +61,21 @@ func TestRequestThenChunk(t *testing.T) {
 	qt.Check(t, qt.IsFalse(sendRequest(&s, 3)))
 	qt.Check(t, qt.Equals(s.NumRequests(), 1))
 	qt.Check(t, qt.IsFalse(s.LowOnRequests()))
-	r, requested, intended, err := s.RecvChunk(chunk(3))
+	requested, intended, err := s.RecvChunk(chunk(3))
 	qt.Assert(t, qt.IsNil(err))
-	qt.Check(t, qt.Equals(r, 3))
 	qt.Check(t, qt.IsTrue(requested))
 	qt.Check(t, qt.IsTrue(intended))
 	qt.Check(t, qt.IsTrue(s.LowOnRequests()))
 	// Only one chunk per request.
-	_, _, _, err = s.RecvChunk(chunk(3))
+	_, _, err = s.RecvChunk(chunk(3))
 	qt.Check(t, qt.ErrorIs(err, ErrUnexpectedChunk))
-	_, _, ok := s.RecvReject(chunk(3))
+	_, ok := s.RecvReject(chunk(3))
 	qt.Check(t, qt.IsFalse(ok))
 }
 
 func TestUnrequestedChunk(t *testing.T) {
 	var s State
-	_, _, _, err := s.RecvChunk(chunk(0))
+	_, _, err := s.RecvChunk(chunk(0))
 	qt.Check(t, qt.ErrorIs(err, ErrUnexpectedChunk))
 }
 
@@ -91,16 +90,15 @@ func TestRepliesMustMatchRequestExactly(t *testing.T) {
 		{Index: want.Index, ChunkSpec: types.ChunkSpec{Begin: want.Begin, Length: want.Length - 1}},
 		{Index: want.Index + 1, ChunkSpec: want.ChunkSpec},
 	} {
-		_, _, ok := s.RecvReject(other)
+		_, ok := s.RecvReject(other)
 		qt.Check(t, qt.IsFalse(ok))
-		_, _, _, err := s.RecvChunk(other)
+		_, _, err := s.RecvChunk(other)
 		qt.Check(t, qt.ErrorIs(err, ErrUnexpectedChunk))
 	}
-	qt.Check(t, qt.IsTrue(s.RequestOutstanding(1)))
-	r, outstanding, ok := s.RecvReject(want)
+	qt.Check(t, qt.IsTrue(s.RequestOutstanding(chunk(1))))
+	outstanding, ok := s.RecvReject(want)
 	qt.Check(t, qt.IsTrue(ok))
 	qt.Check(t, qt.IsTrue(outstanding))
-	qt.Check(t, qt.Equals(r, 1))
 }
 
 func TestChokeWithoutFastDeletesRequests(t *testing.T) {
@@ -110,17 +108,17 @@ func TestChokeWithoutFastDeletesRequests(t *testing.T) {
 	sendRequest(&s, 2)
 	changed, deleted := s.RecvChoke()
 	qt.Check(t, qt.IsTrue(changed))
-	slices.Sort(deleted)
-	qt.Check(t, qt.DeepEquals(deleted, []RequestIndex{1, 2}))
+	slices.SortFunc(deleted, func(a, b Request) int { return int(a.Begin) - int(b.Begin) })
+	qt.Check(t, qt.DeepEquals(deleted, []Request{chunk(1), chunk(2)}))
 	qt.Check(t, qt.IsTrue(s.LowOnRequests()))
 	// Repeated chokes change nothing.
 	changed, deleted = s.RecvChoke()
 	qt.Check(t, qt.IsFalse(changed))
 	qt.Check(t, qt.HasLen(deleted, 0))
 	// There's nothing left to reject, but the chunks may already be on their way.
-	_, _, ok := s.RecvReject(chunk(1))
+	_, ok := s.RecvReject(chunk(1))
 	qt.Check(t, qt.IsFalse(ok))
-	_, requested, intended, err := s.RecvChunk(chunk(1))
+	requested, intended, err := s.RecvChunk(chunk(1))
 	qt.Assert(t, qt.IsNil(err))
 	qt.Check(t, qt.IsFalse(requested))
 	qt.Check(t, qt.IsFalse(intended))
@@ -133,9 +131,9 @@ func TestChokeWithFastKeepsRequests(t *testing.T) {
 	changed, deleted := s.RecvChoke()
 	qt.Check(t, qt.IsTrue(changed))
 	qt.Check(t, qt.HasLen(deleted, 0))
-	qt.Check(t, qt.IsTrue(s.RequestOutstanding(1)))
+	qt.Check(t, qt.IsTrue(s.RequestOutstanding(chunk(1))))
 	// The peer still owes a reply.
-	_, outstanding, ok := s.RecvReject(chunk(1))
+	outstanding, ok := s.RecvReject(chunk(1))
 	qt.Check(t, qt.IsTrue(ok))
 	qt.Check(t, qt.IsTrue(outstanding))
 }
@@ -144,32 +142,31 @@ func TestClosedDeletesRequests(t *testing.T) {
 	s := fastState()
 	sendRequest(&s, 1)
 	sendRequest(&s, 2)
-	s.SentCancel(2, chunk(2))
+	s.SentCancel(chunk(2))
 	s.SentUnchoke()
 	s.RecvRequest(peerRequest(0), 1)
 	deleted := s.Closed()
-	qt.Check(t, qt.DeepEquals(deleted, []RequestIndex{1}))
+	qt.Check(t, qt.DeepEquals(deleted, []Request{chunk(1)}))
 	qt.Check(t, qt.Equals(s.NumRequests(), 0))
 	qt.Check(t, qt.Equals(s.NumPeerRequests(), 0))
 	qt.Check(t, qt.HasLen(s.Closed(), 0))
 	// The chunk may still arrive.
-	_, _, _, err := s.RecvChunk(chunk(1))
+	_, _, err := s.RecvChunk(chunk(1))
 	qt.Check(t, qt.IsNil(err))
 }
 
 func TestCancelAwaitingReject(t *testing.T) {
 	s := fastState()
-	qt.Check(t, qt.IsFalse(s.SentCancel(2, chunk(2))))
+	qt.Check(t, qt.IsFalse(s.SentCancel(chunk(2))))
 	sendRequest(&s, 2)
-	qt.Check(t, qt.IsTrue(s.SentCancel(2, chunk(2))))
-	qt.Check(t, qt.IsFalse(s.RequestOutstanding(2)))
-	qt.Check(t, qt.IsTrue(s.RequestCancelled(2)))
+	qt.Check(t, qt.IsTrue(s.SentCancel(chunk(2))))
+	qt.Check(t, qt.IsFalse(s.RequestOutstanding(chunk(2))))
+	qt.Check(t, qt.IsTrue(s.RequestCancelled(chunk(2))))
 	// Waiting for the ack still counts as something outstanding.
 	qt.Check(t, qt.IsFalse(s.LowOnRequests()))
-	r, outstanding, ok := s.RecvReject(chunk(2))
+	outstanding, ok := s.RecvReject(chunk(2))
 	qt.Check(t, qt.IsTrue(ok))
 	qt.Check(t, qt.IsFalse(outstanding))
-	qt.Check(t, qt.Equals(r, 2))
 	qt.Check(t, qt.IsTrue(s.LowOnRequests()))
 	// The rejected chunk is no longer acceptable.
 	qt.Check(t, qt.IsFalse(s.ExpectingChunk(chunk(2))))
@@ -178,14 +175,14 @@ func TestCancelAwaitingReject(t *testing.T) {
 func TestCancelledChunkArrivesAnyway(t *testing.T) {
 	s := fastState()
 	sendRequest(&s, 2)
-	s.SentCancel(2, chunk(2))
-	_, requested, intended, err := s.RecvChunk(chunk(2))
+	s.SentCancel(chunk(2))
+	requested, intended, err := s.RecvChunk(chunk(2))
 	qt.Assert(t, qt.IsNil(err))
 	qt.Check(t, qt.IsFalse(requested))
 	qt.Check(t, qt.IsTrue(intended))
-	qt.Check(t, qt.IsFalse(s.RequestCancelled(2)))
+	qt.Check(t, qt.IsFalse(s.RequestCancelled(chunk(2))))
 	// BEP 6: a cancelled request gets one reply, the Reject or the Piece.
-	_, _, ok := s.RecvReject(chunk(2))
+	_, ok := s.RecvReject(chunk(2))
 	qt.Check(t, qt.IsFalse(ok))
 }
 
@@ -193,13 +190,13 @@ func TestCancelWithoutReject(t *testing.T) {
 	// Without the fast extension, cancels aren't answered.
 	var s State
 	sendRequest(&s, 4)
-	qt.Check(t, qt.IsTrue(s.SentCancel(4, chunk(4))))
-	qt.Check(t, qt.IsFalse(s.RequestCancelled(4)))
+	qt.Check(t, qt.IsTrue(s.SentCancel(chunk(4))))
+	qt.Check(t, qt.IsFalse(s.RequestCancelled(chunk(4))))
 	qt.Check(t, qt.IsTrue(s.LowOnRequests()))
 	// It can be requested again straight away, and both chunks are accepted.
 	qt.Check(t, qt.IsTrue(sendRequest(&s, 4)))
 	for range 2 {
-		_, _, _, err := s.RecvChunk(chunk(4))
+		_, _, err := s.RecvChunk(chunk(4))
 		qt.Check(t, qt.IsNil(err))
 	}
 	qt.Check(t, qt.IsFalse(s.ExpectingChunk(chunk(4))))
@@ -208,29 +205,18 @@ func TestCancelWithoutReject(t *testing.T) {
 func TestRejectOutstanding(t *testing.T) {
 	var s State
 	sendRequest(&s, 5)
-	_, outstanding, ok := s.RecvReject(chunk(5))
+	outstanding, ok := s.RecvReject(chunk(5))
 	qt.Check(t, qt.IsTrue(ok))
 	qt.Check(t, qt.IsTrue(outstanding))
 	qt.Check(t, qt.IsFalse(s.ExpectingChunk(chunk(5))))
 }
 
-func TestSentRequestMismatchPanics(t *testing.T) {
-	var s State
+func TestResendWhileCancelAwaitsReplyPanics(t *testing.T) {
+	s := fastState()
 	sendRequest(&s, 1)
-	qt.Check(t, qt.PanicMatches(func() { s.SentCancel(1, chunk(2)) }, ".*"))
-}
-
-func TestRequestsIterateInOrderAdded(t *testing.T) {
-	var s State
-	for _, r := range []RequestIndex{9, 2, 5} {
-		sendRequest(&s, r)
-	}
-	var got []RequestIndex
-	s.RequestState().Requests.Iterate(func(r RequestIndex) bool {
-		got = append(got, r)
-		return true
-	})
-	qt.Check(t, qt.DeepEquals(got, []RequestIndex{9, 2, 5}))
+	qt.Assert(t, qt.IsTrue(s.SentCancel(chunk(1))))
+	qt.Check(t, qt.IsFalse(s.SentCancel(chunk(1))))
+	qt.Check(t, qt.PanicMatches(func() { sendRequest(&s, 1) }, ".*"))
 }
 
 func peerRequest(index int) Request {
@@ -278,8 +264,12 @@ func TestPeerRequestReplies(t *testing.T) {
 	for i := range 3 {
 		s.RecvRequest(peerRequest(i), 3)
 	}
-	qt.Check(t, qt.IsTrue(s.SentPiece(peerRequest(0))))
-	qt.Check(t, qt.IsFalse(s.SentPiece(peerRequest(0))))
+	// A Piece must match a request exactly.
+	short := peerRequest(0)
+	short.Length--
+	qt.Check(t, qt.ErrorIs(s.SentPiece(short), ErrUnrequestedPiece))
+	qt.Check(t, qt.IsNil(s.SentPiece(peerRequest(0))))
+	qt.Check(t, qt.ErrorIs(s.SentPiece(peerRequest(0)), ErrUnrequestedPiece))
 	qt.Check(t, qt.IsTrue(s.SentReject(peerRequest(1))))
 	// Rejecting a request that was never accepted is fine.
 	qt.Check(t, qt.IsFalse(s.SentReject(peerRequest(9))))

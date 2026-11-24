@@ -110,7 +110,8 @@ func TestRequestCandidateLimitSkipsRequestsHeldByOtherPeers(t *testing.T) {
 	limit := requestingPeer.requestCandidateLimit()
 	qt.Assert(t, qt.Equals(limit, 32))
 	for req := range RequestIndex(limit) {
-		holdingPeer.wireState.SentRequest(req, tor.requestIndexToRequest(req))
+		holdingPeer.wireState.SentRequest(tor.requestIndexToRequest(req))
+		holdingPeer.requestIndexes().Requests.Add(req)
 		tor.requestState[req] = requestState{peer: weak.Make(holdingPeer)}
 	}
 

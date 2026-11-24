@@ -12,7 +12,6 @@ import (
 	"github.com/RoaringBitmap/roaring/v2"
 	g "github.com/anacrolix/generics"
 
-	requestStrategy "github.com/anacrolix/torrent/internal/request-strategy"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 )
@@ -58,14 +57,15 @@ type State struct {
 	// Whether the peer has sent a Port message.
 	portReceived bool
 
-	// Our interest, outstanding requests, and cancels awaiting a response. See RequestState.
-	requests requestStrategy.PeerRequestState
+	// We've told the peer we're interested.
+	interested bool
+	// Our requests awaiting a Piece or Reject.
+	ourRequests map[Request]struct{}
+	// Our cancels awaiting a Piece or Reject. See ExpectsCancelReplies.
+	cancelled map[Request]struct{}
 	// The number of Piece messages we'll accept per chunk. Due to latency, buffering, and
-	// implementation differences, we may receive chunks that are no longer requested. This could
-	// use a roaring.BSI if the memory use becomes noticeable.
+	// implementation differences, we may receive chunks that are no longer requested.
 	validReceiveChunks map[Request]int
-	// Our requests and cancels awaiting a Piece or Reject, by what was sent on the wire.
-	sentRequests map[Request]RequestIndex
 
 	// Requests from the peer that are outstanding.
 	peerRequests map[Request]struct{}
@@ -140,7 +140,7 @@ func (s *State) SentUnchoke() (changed bool) {
 
 // Closed records that the connection is closed. Nothing more is sent or received. The peer's
 // requests are forgotten, and so are our outstanding requests, which are returned.
-func (s *State) Closed() (deletedRequests []RequestIndex) {
+func (s *State) Closed() (droppedRequests []Request) {
 	clear(s.peerRequests)
 	return s.dropRequests()
 }
@@ -153,15 +153,15 @@ func (s *State) PeerChoking() bool {
 // RecvChoke handles a Choke message. changed is false if the peer was already choking us. Without
 // the fast extension the peer discards our requests (BEP 3), so they're no longer outstanding and
 // are returned as deleted. With it, they stay outstanding until the peer rejects or serves them.
-func (s *State) RecvChoke() (changed bool, deletedRequests []RequestIndex) {
+func (s *State) RecvChoke() (changed bool, droppedRequests []Request) {
 	if s.peerChoking {
 		return false, nil
 	}
 	s.peerChoking = true
 	if !s.fast {
-		deletedRequests = s.dropRequests()
+		droppedRequests = s.dropRequests()
 	}
-	return true, deletedRequests
+	return true, droppedRequests
 }
 
 // RecvUnchoke handles an Unchoke message. It returns false if the peer wasn't choking us. Some

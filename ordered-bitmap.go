@@ -1,4 +1,4 @@
-package peerWire
+package torrent
 
 import (
 	"iter"

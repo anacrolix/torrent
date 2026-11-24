@@ -1041,10 +1041,12 @@ func TestDroppedTorrentsNotReturned(t *testing.T) {
 type closeRecordingPacketConn struct {
 	net.PacketConn
 	closed *sync.WaitGroup
+	once   *sync.Once
 }
 
 func (me closeRecordingPacketConn) Close() error {
-	me.closed.Done()
+	// The conn can legitimately be closed more than once, by Socket.Close and by its reader.
+	me.once.Do(me.closed.Done)
 	return me.PacketConn.Close()
 }
 
@@ -1069,7 +1071,7 @@ func TestClientCloseClosesTrackerClients(t *testing.T) {
 		defer mu.Unlock()
 		created++
 		open.Add(1)
-		return closeRecordingPacketConn{pc, &open}, nil
+		return closeRecordingPacketConn{pc, &open, new(sync.Once)}, nil
 	}
 	cl, err := NewClient(cfg)
 	qt.Assert(t, qt.IsNil(err))
@@ -1092,6 +1094,46 @@ func TestClientCloseClosesTrackerClients(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	cl.Close()
+	done := make(chan struct{})
+	go func() {
+		open.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("tracker client sockets still open after Client.Close")
+	}
+}
+
+func TestClientCloseTwiceAndAddTrackersAfterClose(t *testing.T) {
+	tracker, err := net.ListenPacket("udp", "127.0.0.1:0")
+	qt.Assert(t, qt.IsNil(err))
+	defer tracker.Close()
+
+	var open sync.WaitGroup
+	cfg := TestingConfig(t)
+	cfg.DisableTrackers = false
+	cfg.TrackerListenPacket = func(network, addr string) (net.PacketConn, error) {
+		pc, err := net.ListenPacket(network, addr)
+		if err != nil {
+			return nil, err
+		}
+		open.Add(1)
+		return closeRecordingPacketConn{pc, &open, new(sync.Once)}, nil
+	}
+	cl, err := NewClient(cfg)
+	qt.Assert(t, qt.IsNil(err))
+	tor, _, err := cl.AddTorrentSpec(&TorrentSpec{
+		AddTorrentOpts: AddTorrentOpts{InfoHash: metainfo.HashBytes([]byte("close-twice"))},
+		Trackers:       [][]string{{"udp://" + tracker.LocalAddr().String() + "/announce"}},
+	})
+	qt.Assert(t, qt.IsNil(err))
+	qt.Check(t, qt.HasLen(cl.Close(), 0))
+	// Closing again must not close the tracker clients again.
+	qt.Check(t, qt.HasLen(cl.Close(), 0))
+	// Adding trackers late must not create tracker clients that are never closed.
+	tor.AddTrackers([][]string{{"udp://" + tracker.LocalAddr().String() + "/other"}})
 	done := make(chan struct{})
 	go func() {
 		open.Wait()

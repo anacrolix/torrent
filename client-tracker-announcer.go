@@ -33,6 +33,9 @@ type regularTrackerAnnounceDispatcher struct {
 	slow          amortize.Value
 
 	trackerClients map[trackerAnnouncerKey]*trackerClientsValue
+	// Set by close, under the Client lock. No tracker clients are created and no announces start
+	// after this.
+	closed bool
 	// UDP trackers share a socket per network, rather than holding one each for the life of the
 	// Client.
 	udpSockets     map[string]*udp.Socket
@@ -469,6 +472,10 @@ func (me *regularTrackerAnnounceDispatcher) timerFunc() mytimer.TimeValue {
 
 // The progress method, called by the timer.
 func (me *regularTrackerAnnounceDispatcher) step() mytimer.TimeValue {
+	if me.closed {
+		// The tracker clients are closed, so any announce would fail.
+		return mytimer.Never()
+	}
 	if len(me.pendingTorrentInputUpdates) != 0 {
 		started := time.Now()
 		inputs := len(me.pendingTorrentInputUpdates)
@@ -671,6 +678,9 @@ func (me *regularTrackerAnnounceDispatcher) updateTorrentInput(t *Torrent) {
 }
 
 func (me *regularTrackerAnnounceDispatcher) nextTimerDelay() mytimer.TimeValue {
+	if me.closed {
+		return mytimer.Never()
+	}
 	if len(me.pendingTorrentInputUpdates) != 0 {
 		return mytimer.Immediate()
 	}
@@ -995,6 +1005,9 @@ func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 	logger *slog.Logger,
 ) error {
 	panicif.NotEq(u.String(), string(urlStr))
+	if me.closed {
+		return errors.New("tracker announcer closed")
+	}
 	if g.MapContains(me.trackerClients, urlStr) {
 		return nil
 	}
@@ -1089,8 +1102,13 @@ func (me *regularTrackerAnnounceDispatcher) initTrackerClient(
 	return nil
 }
 
-// Closes the tracker clients. Announces still in flight fail.
+// Closes the tracker clients and stops further announces. Announces still in flight fail. Safe to
+// call more than once. The caller must hold the Client lock.
 func (me *regularTrackerAnnounceDispatcher) close() (errs []error) {
+	if me.closed {
+		return
+	}
+	me.closed = true
 	for _, v := range me.trackerClients {
 		if err := v.client.Close(); err != nil {
 			errs = append(errs, err)

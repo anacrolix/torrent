@@ -18,9 +18,9 @@ import (
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/multiless"
 
+	peerWire "github.com/anacrolix/torrent/internal/peer-wire"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
-	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 )
 
 type (
@@ -76,18 +76,13 @@ type (
 		lastBecameInterested time.Time
 		priorInterest        time.Duration
 
-		choking bool
-
 		// Stuff controlled by the remote peer.
-		peerInterested        bool
-		peerChoking           bool
 		PeerPrefersEncryption bool // as indicated by 'e' field in extension handshake
-		// The highest possible number of pieces the torrent could have based on
-		// communication with the peer. Generally only useful until we have the
-		// torrent info.
-		peerMinPieces pieceIndex
 
-		peerAllowedFast typedRoaring.Bitmap[pieceIndex]
+		// What we know about the peer from the BitTorrent messages exchanged with it: choke and
+		// interest, claimed pieces, allowed fast etc. This belongs in PeerConn, but the request
+		// code is shared with webseeds, which leave it zero (never choked, no allowed fast).
+		wire peerWire.State
 	}
 
 	PeerSource string
@@ -161,7 +156,7 @@ func (cn *Peer) bestPeerNumPieces() pieceIndex {
 	if cn.t.haveInfo() {
 		return cn.t.numPieces()
 	}
-	return cn.peerMinPieces
+	return cn.wire.PeerMinPieces()
 }
 
 // How many pieces we think the peer has.
@@ -405,7 +400,7 @@ func (c *Peer) receiveChunkPrologue(msg *pp.Message) (_ *pendingChunkWrite, err 
 		c.recordBlockForSmartBan(req, data)
 	})
 
-	if c.peerChoking {
+	if c.wire.PeerChoking() {
 		ChunksReceived.Add("while choked", 1)
 	}
 

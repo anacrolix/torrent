@@ -374,7 +374,7 @@ func TestRequestMissingHashesTrailingSingleHash(t *testing.T) {
 	c.legacyPeerImpl = c
 	c.peerImpl = c
 	c.v2 = true
-	c.peerSentHaveAll = true
+	c.wire.RecvHaveAll()
 	c.initMessageWriter()
 	c.requestMissingHashes()
 	// The trailing block must be requested with the BEP 52 minimum length of 2.
@@ -426,7 +426,7 @@ func TestRequestMissingHashesAfterSinglePieceFile(t *testing.T) {
 	c.legacyPeerImpl = c
 	c.peerImpl = c
 	c.v2 = true
-	c.peerSentHaveAll = true
+	c.wire.RecvHaveAll()
 	c.initMessageWriter()
 	c.requestMissingHashes()
 	qt.Assert(t, qt.HasLen(c.sentHashRequests, 1))
@@ -528,7 +528,7 @@ func TestHaveAllThenBitfield(t *testing.T) {
 	qt.Assert(t, qt.IsNil(pc.onPeerSentHaveAll()))
 	qt.Check(t, qt.DeepEquals(pc.t.connsWithAllPieces, map[*Peer]struct{}{&pc.Peer: {}}))
 	pc.peerSentBitfield([]bool{false, false, true, false, true, true, false, false})
-	qt.Check(t, qt.Equals(pc.peerMinPieces, 6))
+	qt.Check(t, qt.Equals(pc.wire.PeerMinPieces(), 6))
 	qt.Check(t, qt.HasLen(pc.t.connsWithAllPieces, 0))
 	qt.Assert(t, qt.IsNil(pc.t.setInfoUnlocked(&metainfo.Info{
 		Name:        "herp",
@@ -609,7 +609,7 @@ func TestReceiveLargeRequest(t *testing.T) {
 	pc.setTorrent(tor)
 	tor._completedPieces.Add(0)
 	pc.PeerExtensionBytes.SetBit(pp.ExtensionBitFast, true)
-	pc.choking = false
+	pc.wire.SetChoking(false)
 	pc.initMessageWriter()
 	req := Request{}
 	req.Length = defaultChunkSize
@@ -739,7 +739,7 @@ func TestPeerConnPeerRequestDataLifecycle(t *testing.T) {
 		prd := pc.getPeerRequestData(r.Length.Int())
 		g.MakeMapIfNil(&pc.readyPeerRequests)
 		pc.readyPeerRequests[r] = prd
-		pc.choking = true
+		pc.wire.SetChoking(true)
 		pc.deleteAllPeerRequests()
 		qt.Check(t, qt.Equals(outstandingChunkPoolBuffers(), baseline))
 	})
@@ -805,7 +805,7 @@ func BenchmarkServePeerRequests(b *testing.B) {
 	cn := cl.newConnection(nil, newConnectionOpts{network: "test"})
 	cn.setTorrent(t)
 	cn.PeerExtensionBytes.SetBit(pp.ExtensionBitFast, true)
-	cn.choking = false
+	cn.wire.SetChoking(false)
 	cn.initMessageWriter()
 	// Marshals the message like the real writer, then drops it so the buffer doesn't grow.
 	writeAndDiscard := func(msg pp.Message) bool {

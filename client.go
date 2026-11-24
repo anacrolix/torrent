@@ -43,6 +43,7 @@ import (
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/check"
+	peerWire "github.com/anacrolix/torrent/internal/peer-wire"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
@@ -1419,11 +1420,11 @@ func (pc *PeerConn) sendInitialMessages() {
 		if pc.fastEnabled() {
 			if t.haveAllPieces() {
 				pc.write(pp.Message{Type: pp.HaveAll})
-				pc.sentHaves.AddRange(0, uint64(pc.t.NumPieces()))
+				pc.wire.SetSentHaveAll(pc.t.NumPieces())
 				return
 			} else if !t.haveAnyPieces() {
 				pc.write(pp.Message{Type: pp.HaveNone})
-				pc.sentHaves.Clear()
+				pc.wire.SetSentHaveNone()
 				return
 			}
 		}
@@ -1469,10 +1470,9 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 	switch d.Type {
 	case pp.DataMetadataExtensionMsgType:
 		c.modifyRelevantConnStats(add(1, func(cs *ConnStats) *Count { return &cs.MetadataChunksRead }))
-		if !c.requestedMetadataPiece(piece) {
+		if !c.wire.RecvMetadataPiece(piece) {
 			return fmt.Errorf("got unexpected piece %d", piece)
 		}
-		c.metadataRequests[piece] = false
 		if d.TotalSize != len(t.metadataBytes) {
 			// The peer has a different idea of the metadata. Don't mix its data into ours.
 			c.protocolLogger.Levelf(log.Debug, "ignoring metadata piece for total size %v", d.TotalSize)
@@ -1925,10 +1925,9 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 	}
 	c = &PeerConn{
 		Peer: Peer{
-			cl:          cl,
-			outgoing:    opts.outgoing,
-			choking:     true,
-			peerChoking: true,
+			cl:       cl,
+			outgoing: opts.outgoing,
+			wire:     peerWire.NewState(),
 
 			RemoteAddr:      opts.remoteAddr,
 			localPublicAddr: opts.localPublicAddr,

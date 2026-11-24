@@ -299,7 +299,7 @@ func TestMetadataSizeNotResetByOnePeer(t *testing.T) {
 	qt.Check(t, qt.HasLen(tt.metadataBytes, realSize))
 	qt.Check(t, qt.IsTrue(tt.haveMetadataPiece(0)))
 	// Data for b's size isn't mixed into ours.
-	b.metadataRequests = []bool{true}
+	b.wire.SetMetadataPieceRequested(0)
 	payload := append(bencode.MustMarshal(pp.ExtendedMetadataRequestMsg{
 		Piece:     0,
 		TotalSize: realSize + 1,

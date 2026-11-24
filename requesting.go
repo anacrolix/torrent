@@ -126,10 +126,10 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 	// Push requests that can't be served right now to the end. But we don't throw them away unless
 	// there's a better alternative. This is for when we're using the fast extension and get choked
 	// but our requests could still be good when we get unchoked.
-	if p.peer.peerChoking {
+	if p.peer.wire.PeerChoking() {
 		ml = ml.Bool(
-			!p.peer.peerAllowedFast.Contains(leftPieceIndex),
-			!p.peer.peerAllowedFast.Contains(rightPieceIndex),
+			!p.peer.wire.PeerAllowedFast().Contains(leftPieceIndex),
+			!p.peer.wire.PeerAllowedFast().Contains(rightPieceIndex),
 		)
 	}
 	leftPiece := p.pieceStates.Get(leftPieceIndex)
@@ -265,7 +265,7 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 				return true
 			}
 			requestHeap.pieceStates.Set(pieceIndex, pieceExtra)
-			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
+			allowedFast := p.wire.PeerAllowedFast().Contains(pieceIndex)
 			t.iterUndirtiedRequestIndexesInPiece(&it, pieceIndex, func(r requestStrategy.RequestIndex) {
 				if !allowedFast {
 					// We must signal interest to request this. TODO: We could set interested if the
@@ -276,7 +276,7 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 					// have made the request previously (presumably while unchoked), and haven't had
 					// the peer respond yet (and the request was retained because we are using the
 					// fast extension).
-					if p.peerChoking && !p.requestState.Requests.Contains(r) {
+					if p.wire.PeerChoking() && !p.requestState.Requests.Contains(r) {
 						// We can't request this right now.
 						return
 					}

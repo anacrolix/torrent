@@ -796,8 +796,8 @@ func (t *Torrent) updateMetadataSize() {
 	}
 	counts := make(map[int]int)
 	for c := range t.conns {
-		if c.peerMetadataSize != 0 {
-			counts[c.peerMetadataSize]++
+		if size := c.wire.PeerMetadataSize(); size != 0 {
+			counts[size]++
 		}
 	}
 	best := len(t.metadataBytes)
@@ -1118,6 +1118,14 @@ func (t *Torrent) writePeerStatuses(w io.Writer, peers iter.Seq[*Peer]) {
 
 func (t *Torrent) haveInfo() bool {
 	return t.info != nil
+}
+
+// The number of pieces, if the info is known.
+func (t *Torrent) numPiecesOption() g.Option[pieceIndex] {
+	if !t.haveInfo() {
+		return g.None[pieceIndex]()
+	}
+	return g.Some(t.numPieces())
 }
 
 // isPrivate reports whether the torrent's metainfo carries BEP 27's
@@ -1677,7 +1685,7 @@ func (t *Torrent) updatePeerRequestsForPiece(piece pieceIndex, reason updateRequ
 			if !c.peerHasPiece(piece) {
 				return
 			}
-			if c.requestState.Interested && c.peerChoking && !c.peerAllowedFast.Contains(piece) {
+			if c.requestState.Interested && c.wire.PeerChoking() && !c.wire.PeerAllowedFast().Contains(piece) {
 				return
 			}
 			c.onNeedUpdateRequests(reason)
@@ -2119,7 +2127,7 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 	}
 	_, ret = t.conns[c]
 	delete(t.conns, c)
-	if ret && c.peerMetadataSize != 0 {
+	if ret && c.wire.PeerMetadataSize() != 0 {
 		// The conn no longer counts towards the metadata size.
 		t.updateMetadataSize()
 	}

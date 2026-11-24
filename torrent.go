@@ -3712,7 +3712,10 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 		return nil
 	case utHolepunch.Connect:
 		holepunchAddr := msg.AddrPort
-		t.logger.Printf("got holepunch connect request for %v from %p", holepunchAddr, sender)
+		initiated := sender.wireState.RecvHolepunchConnect(holepunchAddr)
+		t.logger.Printf(
+			"got holepunch connect request for %v from %p (initiated by us: %v)",
+			holepunchAddr, sender, initiated)
 		// Connects skip the dial rate limiter so the punch is timely, and any peer can send them
 		// for any address. Respect the half-open limits so a peer can't make us dial without bound.
 		if len(t.halfOpen) >= t.cl.config.HalfOpenConnsPerTorrent ||
@@ -3749,6 +3752,10 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 		return nil
 	case utHolepunch.Error:
 		torrent.Add("holepunch error messages received", 1)
+		if !sender.wireState.RecvHolepunchError(msg.AddrPort) {
+			// Only a relay answering our rendezvous sends Error.
+			torrent.Add("holepunch unsolicited error messages received", 1)
+		}
 		t.logger.Levelf(log.Debug, "received ut_holepunch error message from %v: %v", sender, msg.ErrCode)
 		return nil
 	default:
@@ -3778,6 +3785,10 @@ func (t *Torrent) trySendHolepunchRendezvous(addrPort netip.AddrPort) error {
 			if _, ok := pc.wireState.PeerPexLiveConn(addrPort); !ok {
 				continue
 			}
+		}
+		if !pc.wireState.SentRendezvous(addrPort) {
+			torrent.Add("holepunch rendezvous skipped for relay awaiting too many replies", 1)
+			continue
 		}
 		t.logger.Levelf(log.Debug, "sent ut_holepunch rendezvous message to %v for %v", pc, addrPort)
 		sendUtHolepunchMsg(pc, utHolepunch.Rendezvous, addrPort, 0)

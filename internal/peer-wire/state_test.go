@@ -249,10 +249,23 @@ func TestSentHaves(t *testing.T) {
 
 func TestAllowedFast(t *testing.T) {
 	s := NewState()
-	s.RecvAllowedFast(3)
-	s.RecvAllowedFast(3)
-	s.RecvAllowedFast(9)
+	qt.Check(t, qt.IsTrue(s.RecvAllowedFast(3, unknownPieces)))
+	qt.Check(t, qt.IsFalse(s.RecvAllowedFast(3, unknownPieces)))
+	qt.Check(t, qt.IsTrue(s.RecvAllowedFast(9, unknownPieces)))
+	qt.Check(t, qt.IsFalse(s.RecvAllowedFast(-1, unknownPieces)))
+	qt.Check(t, qt.IsFalse(s.RecvAllowedFast(10, g.Some(10))))
 	checkBitmap(t, &s.PeerAllowedFast().Bitmap, 3, 9)
+	// Learning the piece count drops pieces past the end.
+	s.SetNumPieces(5)
+	checkBitmap(t, &s.PeerAllowedFast().Bitmap, 3)
+}
+
+func TestAllowedFastBounded(t *testing.T) {
+	var s State
+	for i := range 2 * MaxPeerAllowedFast {
+		s.RecvAllowedFast(i*1000, unknownPieces)
+	}
+	qt.Check(t, qt.Equals(s.PeerAllowedFast().GetCardinality(), uint64(MaxPeerAllowedFast)))
 }
 
 func TestMetadataRequests(t *testing.T) {

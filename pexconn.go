@@ -14,7 +14,7 @@ import (
 
 const (
 	pexRetryDelay = 10 * time.Second
-	pexInterval   = 1 * time.Minute
+	pexInterval   = peerWire.PexSendInterval
 )
 
 // Per-connection PEX state for sending, and for acting on what the peer sends. What the peer has
@@ -89,13 +89,18 @@ func (s *pexConnState) numPending() int {
 
 // Share is called from the writer goroutine if when it is woken up with the write buffers empty
 // Returns whether there's more room on the send buffer to write to.
-func (s *pexConnState) Share(postfn messageWriter) bool {
+func (s *pexConnState) Share(w *peerWire.State, postfn messageWriter) bool {
 	select {
 	case <-s.gate:
-		if tx := s.genmsg(); tx != nil {
+		now := time.Now()
+		if wait := w.PexSendWait(now); wait != 0 {
+			s.sched(wait)
+			return true
+		}
+		if tx := s.genmsg(); tx != nil && w.SendPex(tx, now) {
 			s.logger.Print("sending PEX message: ", tx)
 			flow := postfn(tx.Message(s.xid))
-			s.sched(pexInterval)
+			s.sched(peerWire.PexSendInterval)
 			return flow
 		} else {
 			// no PEX to send this time - try again shortly

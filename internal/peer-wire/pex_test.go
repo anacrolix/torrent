@@ -89,3 +89,42 @@ func TestPexLiveConnsBounded(t *testing.T) {
 	}
 	qt.Check(t, qt.Equals(s.NumPeerPexLiveConns(), MaxPexRemoteLiveConns))
 }
+
+func pexNodeAddr(s string) krpc.NodeAddr {
+	ap := netip.MustParseAddrPort(s)
+	return krpc.NodeAddr{IP: ap.Addr().AsSlice(), Port: int(ap.Port())}
+}
+
+func TestSendPex(t *testing.T) {
+	var s State
+	now := time.Unix(1e9, 0)
+	qt.Check(t, qt.Equals(s.PexSendWait(now), time.Duration(0)))
+	a, b, c := pexNodeAddr("1.0.0.1:1"), pexNodeAddr("1.0.0.2:1"), pexNodeAddr("[2001:db8::1]:1")
+	msg := pp.PexMsg{
+		Added:      []krpc.NodeAddr{a, b, a},
+		AddedFlags: []pp.PexPeerFlags{1, 2, 3},
+		Added6:     []krpc.NodeAddr{c},
+		// Never added, so not dropped.
+		Dropped: []krpc.NodeAddr{pexNodeAddr("1.0.0.9:1")},
+	}
+	shared := msg.Added
+	qt.Assert(t, qt.IsTrue(s.SendPex(&msg, now)))
+	qt.Check(t, qt.DeepEquals([]krpc.NodeAddr(msg.Added), []krpc.NodeAddr{a, b}))
+	qt.Check(t, qt.DeepEquals(msg.AddedFlags, []pp.PexPeerFlags{1, 2}))
+	qt.Check(t, qt.HasLen(msg.Dropped, 0))
+	qt.Check(t, qt.DeepEquals([]krpc.NodeAddr(shared), []krpc.NodeAddr{a, b, a}), qt.Commentf("caller's slices unchanged"))
+	qt.Check(t, qt.IsTrue(s.PexAdvertised(netip.MustParseAddrPort("[2001:db8::1]:1"))))
+
+	// Too soon.
+	later := now.Add(PexSendInterval / 2)
+	qt.Check(t, qt.Equals(s.PexSendWait(later), PexSendInterval/2))
+	qt.Check(t, qt.IsFalse(s.SendPex(&pp.PexMsg{Dropped: []krpc.NodeAddr{a}}, later)))
+	qt.Check(t, qt.IsTrue(s.PexAdvertised(netip.MustParseAddrPort("1.0.0.1:1"))))
+
+	later = now.Add(PexSendInterval)
+	// Nothing new: a is already advertised.
+	qt.Check(t, qt.IsFalse(s.SendPex(&pp.PexMsg{Added: []krpc.NodeAddr{a}}, later)))
+	msg = pp.PexMsg{Dropped: []krpc.NodeAddr{a}}
+	qt.Assert(t, qt.IsTrue(s.SendPex(&msg, later)))
+	qt.Check(t, qt.IsFalse(s.PexAdvertised(netip.MustParseAddrPort("1.0.0.1:1"))))
+}

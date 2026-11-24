@@ -21,11 +21,14 @@ const (
 	MaxPexRemoteLiveConns = 1000
 )
 
-// What the peer has told us over ut_pex (BEP 11).
+// What we and the peer have told each other over ut_pex (BEP 11).
 type pexState struct {
 	// Running record of live connections the peer purports to have, with their flags.
 	liveConns map[netip.AddrPort]pp.PexPeerFlags
 	lastRecv  time.Time
+	// Peers we've told the peer about in added fields, and not since dropped.
+	advertised map[netip.AddrPort]struct{}
+	lastSent   time.Time
 }
 
 // PexRecv counts what RecvPex dropped from a message.
@@ -141,4 +144,119 @@ func (s *pexState) update(rx *pp.PexMsg) {
 	}
 	add(rx.Added, rx.AddedFlags, false)
 	add(rx.Added6, rx.Added6Flags, true)
+}
+
+// Sending PEX. BEP 11: "Clients must batch updates to send no more than 1 PEX message per
+// minute", "A peer must only be included in an added field once a connection is successfully
+// established", "Once a peer has been added a client must ensure to send the corresponding dropped
+// event", "An added contact must not be dropped in the same message", and "Added or removed
+// contacts must not contain duplicates".
+
+const (
+	PexSendInterval = time.Minute
+	// Most peers we track having advertised to one peer. Past this, further peers aren't added.
+	MaxPexAdvertised = 10000
+)
+
+// PexSendWait returns how long until a PEX message may be sent to the peer at now.
+func (s *State) PexSendWait(now time.Time) time.Duration {
+	if s.pex.lastSent.IsZero() {
+		return 0
+	}
+	return max(0, PexSendInterval-now.Sub(s.pex.lastSent))
+}
+
+// SendPex prepares msg to be sent to the peer at now, replacing its fields with filtered copies: added peers we've
+// already advertised and dropped peers we haven't are removed, as are duplicates and peers both
+// added and dropped. If anything is left, it's recorded as sent and send is true. It returns
+// false without changing anything if PexSendWait isn't zero.
+func (s *State) SendPex(msg *pp.PexMsg, now time.Time) (send bool) {
+	if s.PexSendWait(now) != 0 {
+		return false
+	}
+	var f pexSendFilter
+	filterPexDropped(&f, &msg.Dropped, false, s)
+	filterPexDropped(&f, &msg.Dropped6, true, s)
+	filterPexSendAdded(&f, &msg.Added, &msg.AddedFlags, false, s)
+	filterPexSendAdded(&f, &msg.Added6, &msg.Added6Flags, true, s)
+	if msg.Len() == 0 {
+		return false
+	}
+	for ap := range f.drop {
+		delete(s.pex.advertised, ap)
+	}
+	for ap := range f.add {
+		if s.pex.advertised == nil {
+			s.pex.advertised = make(map[netip.AddrPort]struct{})
+		}
+		s.pex.advertised[ap] = struct{}{}
+	}
+	s.pex.lastSent = now
+	return true
+}
+
+// PexAdvertised returns whether we've told the peer about addrPort and not dropped it since.
+func (s *State) PexAdvertised(addrPort netip.AddrPort) bool {
+	_, ok := s.pex.advertised[addrPort]
+	return ok
+}
+
+type pexSendFilter struct {
+	add, drop map[netip.AddrPort]struct{}
+}
+
+func filterPexDropped[T ~[]krpc.NodeAddr](f *pexSendFilter, nas *T, v6 bool, s *State) {
+	// Don't filter in place: the slices may be shared with the caller's other messages.
+	var kept T
+	for _, na := range *nas {
+		ap, ok := pexAddrPort(na, v6)
+		if !ok || !s.PexAdvertised(ap) {
+			continue
+		}
+		if _, dup := f.drop[ap]; dup {
+			continue
+		}
+		if f.drop == nil {
+			f.drop = make(map[netip.AddrPort]struct{})
+		}
+		f.drop[ap] = struct{}{}
+		kept = append(kept, na)
+	}
+	*nas = kept
+}
+
+func filterPexSendAdded[T ~[]krpc.NodeAddr](
+	f *pexSendFilter,
+	nas *T,
+	fs *[]pp.PexPeerFlags,
+	v6 bool,
+	s *State,
+) {
+	var keptNas T
+	var keptFs []pp.PexPeerFlags
+	for i, na := range *nas {
+		ap, ok := pexAddrPort(na, v6)
+		if !ok || s.PexAdvertised(ap) {
+			continue
+		}
+		if _, dup := f.add[ap]; dup {
+			continue
+		}
+		if _, dropped := f.drop[ap]; dropped {
+			continue
+		}
+		if len(s.pex.advertised)+len(f.add) >= MaxPexAdvertised {
+			break
+		}
+		if f.add == nil {
+			f.add = make(map[netip.AddrPort]struct{})
+		}
+		f.add[ap] = struct{}{}
+		keptNas = append(keptNas, na)
+		if i < len(*fs) {
+			keptFs = append(keptFs, (*fs)[i])
+		}
+	}
+	*nas = keptNas
+	*fs = keptFs
 }

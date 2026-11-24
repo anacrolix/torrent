@@ -7,6 +7,7 @@ package peerWire
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 
 	"github.com/RoaringBitmap/roaring/v2"
 	g "github.com/anacrolix/generics"
@@ -64,6 +65,13 @@ type State struct {
 	peerRequests map[Request]struct{}
 
 	pex pexState
+
+	// BEP 52 hash requests we've sent, and the hashes received for each file so far.
+	sentHashRequests map[HashRequest]sentHashRequestState
+	receivedHashes   map[[32]byte]*receivedFileHashes
+
+	// BEP 55 rendezvous we've sent through this peer, awaiting Connect or Error.
+	sentRendezvous map[netip.AddrPort]struct{}
 }
 
 // NewState returns the state of a BitTorrent connection before any messages: both sides are
@@ -130,9 +138,22 @@ func (s *State) PeerAllowedFast() *typedRoaring.Bitmap[int] {
 	return &s.peerAllowedFast
 }
 
-// RecvAllowedFast handles an AllowedFast message (BEP 6).
-func (s *State) RecvAllowedFast(piece int) {
-	s.peerAllowedFast.Add(piece)
+// Most pieces a peer may allow us while choked. BEP 6 doesn't bound the Allowed Fast set, but it's
+// generated as a small set (libtorrent and others use around 10), and without a bound a peer
+// could grow the set without limit before we know the piece count.
+const MaxPeerAllowedFast = 256
+
+// RecvAllowedFast handles an AllowedFast message (BEP 6), which "MAY list pieces that the message
+// sender does not have". Pieces outside the torrent, or past MaxPeerAllowedFast, are ignored and
+// added is false.
+func (s *State) RecvAllowedFast(piece int, numPieces g.Option[int]) (added bool) {
+	if piece < 0 || numPieces.Ok && piece >= numPieces.Value {
+		return false
+	}
+	if s.peerAllowedFast.GetCardinality() >= MaxPeerAllowedFast {
+		return false
+	}
+	return s.peerAllowedFast.CheckedAdd(piece)
 }
 
 // SentHave returns whether we've told the peer we have the piece.
@@ -234,10 +255,11 @@ func (s *State) BestPeerNumPieces(numPieces g.Option[int]) int {
 	return s.peerMinPieces
 }
 
-// SetNumPieces drops pieces claimed by the peer beyond the end of the torrent, once the info is
-// known. Pieces dropped here were never counted towards availability, since that needs the info.
+// SetNumPieces drops pieces claimed or allowed fast by the peer beyond the end of the torrent, once
+// the info is known. Pieces dropped here were never counted towards availability, since that needs the info.
 func (s *State) SetNumPieces(numPieces int) {
 	s.peerPieces.RemoveRange(uint64(numPieces), roaring.MaxRange)
+	s.peerAllowedFast.RemoveRange(uint64(numPieces), roaring.MaxRange)
 }
 
 // PiecesChange describes how the pieces a peer claims changed after a Bitfield, HaveAll or

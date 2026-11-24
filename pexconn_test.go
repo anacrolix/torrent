@@ -48,7 +48,7 @@ func TestPexConnState(t *testing.T) {
 		return true
 	}
 	<-connWriteCond
-	c.pex.Share(testWriter)
+	c.pex.Share(&c.wireState, testWriter)
 	qt.Assert(t, qt.IsTrue(writerCalled))
 	qt.Assert(t, qt.Equals(out.Type, pp.Extended))
 	qt.Assert(t, qt.Not(qt.Equals(0, out.ExtendedID)))

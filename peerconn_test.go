@@ -20,6 +20,7 @@ import (
 	"github.com/go-quicktest/qt"
 	"golang.org/x/time/rate"
 
+	peerWire "github.com/anacrolix/torrent/internal/peer-wire"
 	"github.com/anacrolix/torrent/merkle"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -289,14 +290,13 @@ func TestPeerConnAcceptsSolicitedHashes(t *testing.T) {
 			cl: cl,
 			t:  tor,
 		},
-		sentHashRequests: map[hashRequest]struct{}{
-			hashRequestFromMessage(msg): {},
-		},
 	}
+	cn.wireState.SentHashRequest(peerWire.HashRequestFromMessage(&msg))
 
 	qt.Assert(t, qt.IsNil(cn.onReadHashes(&msg)))
-	_, sentHashRequestPresent := cn.sentHashRequests[hashRequestFromMessage(msg)]
-	qt.Assert(t, qt.IsFalse(sentHashRequestPresent))
+	qt.Assert(t, qt.IsTrue(slices.Collect(cn.wireState.OutstandingHashRequests()) == nil))
+	// An answered request isn't made again.
+	qt.Assert(t, qt.IsFalse(cn.wireState.SentHashRequest(peerWire.HashRequestFromMessage(&msg))))
 	// Matching the requested root should promote the received file layer hashes into piece v2 hashes.
 	qt.Assert(t, qt.DeepEquals(tor.pieces[0].hashV2, &pieceHashes[0]))
 	qt.Assert(t, qt.DeepEquals(tor.pieces[1].hashV2, &pieceHashes[1]))
@@ -326,10 +326,8 @@ func TestPeerConnRejectsHashesForMissingRoot(t *testing.T) {
 			cl: cl,
 			t:  tor,
 		},
-		sentHashRequests: map[hashRequest]struct{}{
-			hashRequestFromMessage(msg): {},
-		},
 	}
+	cn.wireState.SentHashRequest(peerWire.HashRequestFromMessage(&msg))
 
 	err := cn.onReadHashes(&msg)
 	qt.Assert(t, qt.IsNotNil(err))
@@ -378,9 +376,9 @@ func TestRequestMissingHashesTrailingSingleHash(t *testing.T) {
 	c.requestMissingHashes()
 	// The trailing block must be requested with the BEP 52 minimum length of 2.
 	trailing := false
-	for hr := range c.sentHashRequests {
-		if hr.index == 512 {
-			qt.Assert(t, qt.Equals(hr.length, pp.Integer(2)))
+	for hr := range c.wireState.OutstandingHashRequests() {
+		if hr.Index == 512 {
+			qt.Assert(t, qt.Equals(hr.Length, pp.Integer(2)))
 			trailing = true
 		}
 	}
@@ -428,14 +426,15 @@ func TestRequestMissingHashesAfterSinglePieceFile(t *testing.T) {
 	c.wireState.RecvHaveAll()
 	c.initMessageWriter()
 	c.requestMissingHashes()
-	qt.Assert(t, qt.HasLen(c.sentHashRequests, 1))
+	sent := slices.Collect(c.wireState.OutstandingHashRequests())
+	qt.Assert(t, qt.HasLen(sent, 1))
 	// The reply arrives: the request is done, and b's piece hashes are set.
-	clear(c.sentHashRequests)
+	qt.Assert(t, qt.IsNil(c.wireState.RecvHashReject(sent[0])))
 	for i := 1; i < 5; i++ {
 		tor.pieces[i].hashV2 = &[32]byte{byte(i)}
 	}
 	c.requestMissingHashes()
-	qt.Check(t, qt.HasLen(c.sentHashRequests, 0))
+	qt.Check(t, qt.HasLen(slices.Collect(c.wireState.OutstandingHashRequests()), 0))
 }
 
 func TestConnPexPeerFlags(t *testing.T) {
@@ -847,11 +846,10 @@ func newV2HashesTestConn(pieceHashes [][32]byte, reqs ...pp.Message) *PeerConn {
 			cl: cl,
 			t:  tor,
 		},
-		sentHashRequests: map[hashRequest]struct{}{},
 	}
 	for _, r := range reqs {
 		r.PiecesRoot = piecesRoot
-		cn.sentHashRequests[hashRequestFromMessage(r)] = struct{}{}
+		cn.wireState.SentHashRequest(peerWire.HashRequestFromMessage(&r))
 	}
 	return cn
 }
@@ -877,7 +875,7 @@ func TestPeerConnRejectsWrongHashes(t *testing.T) {
 		qt.Assert(t, qt.IsNil(cn.onReadHashes(&parts[0])))
 		qt.Check(t, qt.IsNil(cn.t.pieces[0].hashV2), qt.Commentf("set before all hashes arrived"))
 		err := cn.onReadHashes(&parts[1])
-		qt.Check(t, qt.HasLen(cn.receivedHashPieces, 0))
+		qt.Check(t, qt.Equals(cn.wireState.NumFilesReceivingHashes(), 0))
 		if correct {
 			qt.Assert(t, qt.IsNil(err))
 			for i := range pieceHashes {

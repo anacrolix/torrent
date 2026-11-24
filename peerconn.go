@@ -79,16 +79,6 @@ type PeerConn struct {
 	uploadTimer *time.Timer
 	pex         pexConnState
 
-	outstandingHolepunchingRendezvous map[netip.AddrPort]struct{}
-
-	// Hash requests sent to the peer. If there's an issue we probably don't want to reissue these,
-	// because I haven't implemented it smart enough yet.
-	sentHashRequests map[hashRequest]struct{}
-	// Hash pieces received from the peer, mapped from pieces root to piece layer hashes. This way
-	// we can verify all the pieces for a file when they're all arrived before submitting them to
-	// the torrent.
-	receivedHashPieces map[[32]byte]*receivedFileHashes
-
 	// Outstanding peer requests (see wireState) are either waiting to be read from storage, or ready to
 	// be uploaded.
 	unreadPeerRequests map[Request]struct{}
@@ -386,7 +376,7 @@ func (cn *PeerConn) fillWriteBuffer() {
 	cn.requestMissingHashes()
 	cn.maybeUpdateActualRequestState()
 	if cn.pex.IsEnabled() {
-		if flow := cn.pex.Share(cn.write); !flow {
+		if flow := cn.pex.Share(&cn.wireState, cn.write); !flow {
 			return
 		}
 	}
@@ -1085,7 +1075,10 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).LogLevel(log.Debug, c.t.logger)
 			// Record the allowed-fast piece so requesting.go and shouldRequestWithoutBias
 			// can serve requests for it while we are choked.
-			c.wireState.RecvAllowedFast(pieceIndex(msg.Index))
+			if !c.wireState.RecvAllowedFast(pieceIndex(msg.Index), c.t.numPiecesOption()) {
+				torrent.Add("allowed fasts ignored", 1)
+				break
+			}
 			c.onNeedUpdateRequests("PeerConn.mainReadLoop allowed fast")
 		case pp.Extended:
 			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
@@ -1094,7 +1087,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.HashRequest:
 			err = c.onHashRequest(&msg)
 		case pp.HashReject:
-			c.protocolLogger.Levelf(log.Info, "received unimplemented BitTorrent v2 message: %v", msg.Type)
+			err = c.onReadHashReject(&msg)
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
 		}
@@ -1186,6 +1179,13 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		}
 		return
 	case utHolepunch.ExtensionName:
+		// BEP 55: "If the initiating peer does not indicate support for the ut_holepunch extension
+		// ... the relaying peer MUST ignore any incoming ut_holepunch messages silently." Messages
+		// are routed by the ids we advertise, so the peer can send them without advertising it.
+		if !c.supportsExtension(utHolepunch.ExtensionName) {
+			torrent.Add("holepunch messages ignored from peer not advertising it", 1)
+			return nil
+		}
 		var msg utHolepunch.Msg
 		err = msg.UnmarshalBinary(payload)
 		if err != nil {
@@ -1454,9 +1454,7 @@ func (pc *PeerConn) requestMissingHashes() {
 		return
 	}
 	info := pc.t.info
-	baseLayer := pp.Integer(merkle.Log2RoundingUp(merkle.RoundUpToPowerOfTwo(
-		uint((pc.t.usualPieceSize() + merkle.BlockSize - 1) / merkle.BlockSize)),
-	))
+	baseLayer := pc.hashesBaseLayer()
 	nextFileBeginPiece := 0
 file:
 	for _, f := range *pc.t.files {
@@ -1496,66 +1494,56 @@ file:
 			if length%2 != 0 {
 				pc.protocolLogger.Levelf(log.Warning, "requesting odd hashes length %d", length)
 			}
-			msg := pp.Message{
-				Type:        pp.HashRequest,
+			hr := peerWire.HashRequest{
 				PiecesRoot:  piecesRoot,
 				BaseLayer:   baseLayer,
 				Index:       pp.Integer(index),
 				Length:      pp.Integer(length),
 				ProofLayers: proofLayers,
 			}
-			hr := hashRequestFromMessage(msg)
-			if g.MapContains(pc.sentHashRequests, hr) {
+			if !pc.wireState.SentHashRequest(hr) {
 				continue
 			}
-			pc.write(msg)
-			g.MakeMapIfNil(&pc.sentHashRequests)
-			pc.sentHashRequests[hr] = struct{}{}
+			pc.write(hr.Message(pp.HashRequest))
 		}
 	}
 }
 
+// The merkle layer of piece hashes, which is what we request and serve (BEP 52).
+func (pc *PeerConn) hashesBaseLayer() pp.Integer {
+	return pp.Integer(merkle.Log2RoundingUp(merkle.RoundUpToPowerOfTwo(
+		uint((pc.t.usualPieceSize() + merkle.BlockSize - 1) / merkle.BlockSize)),
+	))
+}
+
+func (pc *PeerConn) onReadHashReject(msg *pp.Message) error {
+	hr := peerWire.HashRequestFromMessage(msg)
+	torrent.Add("v2 hash rejects received", 1)
+	pc.protocolLogger.WithNames(v2HashesLogName).Levelf(log.Debug, "hash request rejected: %v", hr)
+	return pc.wireState.RecvHashReject(hr)
+}
+
 func (pc *PeerConn) onReadHashes(msg *pp.Message) (err error) {
-	hr := hashRequestFromMessage(*msg)
+	hr := peerWire.HashRequestFromMessage(msg)
 	// A BEP 52 Hashes message is only meaningful as a response to a request we sent. Treat anything
 	// else as peer-controlled protocol noise so it can't allocate per-file hash state or touch unknown
 	// pieces roots.
-	if !g.MapContains(pc.sentHashRequests, hr) {
+	if !pc.wireState.HashRequestSent(hr) {
 		return fmt.Errorf("received unsolicited hashes message: %v", hr)
-	}
-	delete(pc.sentHashRequests, hr)
-	if msg.ProofLayers != 0 {
-		return errors.New("proof layers not supported")
-	}
-	if uint64(msg.Length) != uint64(len(msg.Hashes)) {
-		return fmt.Errorf("received %d hashes for length %d", len(msg.Hashes), msg.Length)
 	}
 	file := pc.t.getFileByPiecesRoot(msg.PiecesRoot)
 	if file == nil {
 		return fmt.Errorf("no file for pieces root %x", msg.PiecesRoot)
 	}
 	numPieces := file.numPieces()
-	if uint64(msg.Index) > uint64(numPieces) {
-		return fmt.Errorf("hash index %d is past file piece count %d", msg.Index, numPieces)
-	}
-	fileHashes := pc.receivedHashPieces[msg.PiecesRoot]
-	if fileHashes == nil {
-		fileHashes = &receivedFileHashes{
-			hashes:   make([][32]byte, numPieces),
-			received: make([]bool, numPieces),
-		}
-		g.MakeMapIfNil(&pc.receivedHashPieces)
-		pc.receivedHashPieces[msg.PiecesRoot] = fileHashes
-	}
-	fileHashes.add(int(msg.Index), msg.Hashes)
+	hashes, err := pc.wireState.RecvHashes(hr, msg.Hashes, numPieces)
 	// The root can only be checked once every piece hash for the file has arrived. Checking it
 	// sooner costs a full root computation per reply.
-	if fileHashes.numReceived < numPieces {
-		return nil
+	if err != nil || hashes == nil {
+		return err
 	}
-	delete(pc.receivedHashPieces, msg.PiecesRoot)
 	root := merkle.RootWithPadHash(
-		fileHashes.hashes,
+		hashes,
 		metainfo.HashForPiecePad(int64(pc.t.usualPieceSize())))
 	expectedPiecesRoot := file.piecesRoot.Unwrap()
 	if root != expectedPiecesRoot {
@@ -1569,41 +1557,16 @@ func (pc *PeerConn) onReadHashes(msg *pp.Message) (err error) {
 		log.Info,
 		"got piece hashes for file %v (num pieces %v)",
 		file, numPieces)
-	for filePieceIndex, peerHash := range fileHashes.hashes {
+	for filePieceIndex, peerHash := range hashes {
 		torrentPieceIndex := file.BeginPieceIndex() + filePieceIndex
 		pc.t.piece(torrentPieceIndex).setV2Hash(peerHash)
 	}
 	return nil
 }
 
-// Piece layer hashes received from a peer for one file.
-type receivedFileHashes struct {
-	hashes      [][32]byte
-	received    []bool
-	numReceived int
-}
-
-// Adds hashes starting at file piece index. Hashes past the end of the file are padding.
-func (me *receivedFileHashes) add(index int, hashes [][32]byte) {
-	for i, h := range hashes {
-		j := index + i
-		if j >= len(me.hashes) {
-			break
-		}
-		me.hashes[j] = h
-		if !me.received[j] {
-			me.received[j] = true
-			me.numReceived++
-		}
-	}
-}
-
 func (pc *PeerConn) getHashes(msg *pp.Message) ([][32]byte, error) {
-	if msg.ProofLayers != 0 {
-		return nil, errors.New("proof layers not supported")
-	}
-	if msg.Length > 8192 {
-		return nil, fmt.Errorf("requested too many hashes: %d", msg.Length)
+	if err := peerWire.CheckHashRequest(peerWire.HashRequestFromMessage(msg), pc.hashesBaseLayer()); err != nil {
+		return nil, err
 	}
 	file := pc.t.getFileByPiecesRoot(msg.PiecesRoot)
 	if file == nil {
@@ -1661,21 +1624,6 @@ func (pc *PeerConn) onHashRequest(msg *pp.Message) error {
 	resp.Hashes = hashes
 	pc.write(resp)
 	return nil
-}
-
-type hashRequest struct {
-	piecesRoot                            [32]byte
-	baseLayer, index, length, proofLayers pp.Integer
-}
-
-func hashRequestFromMessage(m pp.Message) hashRequest {
-	return hashRequest{
-		piecesRoot:  m.PiecesRoot,
-		baseLayer:   m.BaseLayer,
-		index:       m.Index,
-		length:      m.Length,
-		proofLayers: m.ProofLayers,
-	}
 }
 
 func (me *PeerConn) peerPtr() *Peer {

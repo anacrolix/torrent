@@ -33,7 +33,7 @@ func (me *boltPieceCompletion) Persistent() bool {
 }
 
 var (
-	_ PieceCompletion                = (*boltPieceCompletion)(nil)
+	_ PieceCompletion               = (*boltPieceCompletion)(nil)
 	_ PieceCompletionTorrentDeleter = (*boltPieceCompletion)(nil)
 )
 

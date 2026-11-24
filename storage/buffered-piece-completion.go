@@ -136,7 +136,9 @@ func (me *bufferedPieceCompletion) Close() error {
 }
 
 // Drops pending state for the torrent, then deletes it from the underlying store. Callers should
-// stop writing completion for the torrent first; later Set calls will recreate state.
+// stop writing completion for the torrent first; later Set calls will recreate state. The overlay is
+// cleared before the underlying delete on purpose: if the underlying delete fails, the pending state
+// is lost, which is acceptable because the caller wants it gone either way.
 func (me *bufferedPieceCompletion) DeleteTorrent(infoHash metainfo.Hash) error {
 	me.persistMu.Lock()
 	defer me.persistMu.Unlock()

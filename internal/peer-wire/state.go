@@ -315,6 +315,13 @@ func (s *State) GotInfo(numPieces int) {
 	s.peerAllowedFast.RemoveRange(uint64(numPieces), roaring.MaxRange)
 }
 
+// Bitfield, HaveAll and HaveNone are accepted at any time and any number of times, and each
+// replaces what the peer claimed before. BEP 3 and BEP 6 say one comes first after the handshake,
+// but most clients (libtorrent, Transmission, rTorrent, WebTorrent, and us) send the BEP 10
+// extended handshake first, some send it only once they have the info, and libtorrent,
+// Transmission, BiglyBT and WebTorrent all accept late and repeated ones the same way. Have is
+// accepted before any of them, as if the peer had sent HaveNone.
+
 // PiecesChange describes how the pieces a peer claims changed after a Bitfield, HaveAll or
 // HaveNone message. While the peer has all pieces they aren't tracked individually, so moving
 // in or out of that state is reported separately from Gained and Lost.

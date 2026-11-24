@@ -43,9 +43,12 @@ func (me *classicFileIo) rename(from, to string) error {
 		return err
 	}
 	err := me.closeWriterLocked(from)
-	err = errors.Join(err, me.closeWriterLocked(to))
-	err = errors.Join(err, os.Rename(from, to))
-	return err
+	if renameErr := renameNoReplace(from, to); renameErr != nil {
+		// Nothing was moved onto to, so its cached writer is still good, and pieces could be
+		// writing through it right now.
+		return errors.Join(err, renameErr)
+	}
+	return errors.Join(err, me.closeWriterLocked(to))
 }
 
 func (me *classicFileIo) flush(name string, offset, nbytes int64) error {
@@ -155,7 +158,12 @@ func (c classicFileReader) writeToN(w io.Writer, n int64) (written int64, err er
 		rem: n,
 		w:   w,
 	}
-	return c.File.WriteTo(&lw)
+	written, err = c.File.WriteTo(&lw)
+	// The limit stops the copy at n bytes; that is not a failed write.
+	if errors.Is(err, io.ErrShortWrite) && lw.rem == 0 {
+		err = nil
+	}
+	return
 }
 
 func (c classicFileReader) seekDataOrEof(offset int64) (ret int64, err error) {

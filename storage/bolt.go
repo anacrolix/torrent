@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/anacrolix/missinggo/expect"
+	"github.com/anacrolix/missinggo/v2/expect"
 	"go.etcd.io/bbolt"
 
 	"github.com/anacrolix/torrent/metainfo"

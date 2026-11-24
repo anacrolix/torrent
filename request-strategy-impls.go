@@ -66,7 +66,7 @@ func (r requestStrategyTorrent) PieceRequest(i int) bool {
 func (r requestStrategyTorrent) PieceCountUnverified(i int) bool {
 	p := r.t.piece(i)
 	s := p.state()
-	return s.hashing || s.marking || p.queuedForHash()
+	return s.check != pieceCheckIdle || p.queuedForHash()
 }
 
 func (r requestStrategyTorrent) PieceLength() int64 {

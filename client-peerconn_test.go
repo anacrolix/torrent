@@ -2,10 +2,12 @@ package torrent
 
 import (
 	"cmp"
+	"context"
 	"io"
 	"os"
 	"testing"
 	"testing/iotest"
+	"time"
 
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/missinggo/v2"
@@ -62,6 +64,50 @@ func TestPeerConnEstablished(t *testing.T) {
 	// double check that the callbacks were called
 	qt.Assert(t, qt.IsTrue(gotPeerConnectedEvt))
 	<-gotPeerDisconnectedEvt.Done()
+}
+
+func TestInitialTransferSettings(t *testing.T) {
+	dir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(dir)
+
+	cfg := TestingConfig(t)
+	cfg.DataDir = dir
+	cfg.Seed = true
+	seeder, err := NewClient(cfg)
+	qt.Assert(t, qt.IsNil(err))
+	defer seeder.Close()
+	spec := TorrentSpecFromMetaInfo(mi)
+	spec.DisallowDataUpload = true
+	seed, _, err := seeder.AddTorrentSpec(spec)
+	qt.Assert(t, qt.IsNil(err))
+	<-seed.Complete().On()
+	qt.Check(t, qt.IsFalse(seed.Seeding()))
+	seed.AllowDataUpload()
+	qt.Assert(t, qt.IsTrue(seed.Seeding()))
+
+	cfg = TestingConfig(t)
+	cfg.DataDir = t.TempDir()
+	leecher, err := NewClient(cfg)
+	qt.Assert(t, qt.IsNil(err))
+	defer leecher.Close()
+	opts := AddTorrentOpts{InfoHash: mi.HashInfoBytes(), InfoBytes: mi.InfoBytes, DisallowDataDownload: true}
+	download, fresh := leecher.AddTorrentOpt(opts)
+	qt.Assert(t, qt.IsTrue(fresh))
+	download.AddClientPeer(seeder)
+	reader := download.NewReader()
+	defer reader.Close()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	reader.SetContext(ctx)
+	var b [1]byte
+	n, err := reader.Read(b[:])
+	qt.Check(t, qt.Equals(n, 0))
+	qt.Check(t, qt.ErrorMatches(err, "torrent data downloading disabled"))
+
+	download.AllowDataDownload()
+	_, fresh = leecher.AddTorrentOpt(opts)
+	qt.Assert(t, qt.IsFalse(fresh))
+	assertReadAllGreeting(t, reader)
 }
 
 type ConfigureClient struct {

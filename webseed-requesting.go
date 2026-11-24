@@ -65,9 +65,11 @@ func (cl *Client) updateWebseedRequests() {
 	// slice, so without this a slice is requested from every webseed at once: the copies fetch the
 	// same bytes, and each one cancels itself as soon as it reads a chunk another copy has already
 	// delivered. That churn costs far more than it gains, so a slice is left to the one request
-	// that has it. Starts as the slices already in flight and grows as the plan is built.
-	slicesTaken := make(map[webseedSliceRequestKey]struct{}, len(existingRequests))
-	for key := range existingRequests {
+	// that has it. Starts as the slices already in flight and grows as the plan is built. That
+	// includes requests of a removed web seed that are still closing: one for the same slice from
+	// the URL added again would collide with them in Client.activeWebseedRequests.
+	slicesTaken := make(map[webseedSliceRequestKey]struct{}, len(cl.activeWebseedRequests))
+	for key := range cl.activeWebseedRequests {
 		slicesTaken[key.sliceRequestKey()] = struct{}{}
 	}
 
@@ -255,6 +257,11 @@ func (cl *Client) updateWebseedRequests() {
 				"webseedChunkIndex", request.sliceIndex)
 
 			begin := request.startIndex
+			// The plan can be stale by now: requests spawned earlier in this loop, or the piece
+			// being queued for hashing, can make the start chunk unwanted.
+			if !t.wantReceiveChunk(begin) {
+				continue
+			}
 			// TODO: Requests aren't limited by the pieces a peer has.
 			end := t.getWebseedRequestEnd(begin, request.sliceIndex, debugLogger)
 			panicif.LessThanOrEqual(end, begin)
@@ -509,6 +516,16 @@ func (cl *Client) iterCurrentWebseedRequestsFromClient() iter.Seq2[webseedUnique
 			// or cancel — the drop already did that — and counting them would
 			// make this view disagree with the per-torrent one.
 			if _, live := cl.torrents[key.t]; !live {
+				continue
+			}
+			// Likewise for a removed web seed: closing it cancelled its requests.
+			// The URL may have been added again since, as a new web seed that
+			// does not own them.
+			ws, live := key.t.webSeeds[key.url]
+			if !live {
+				continue
+			}
+			if _, own := ws.activeRequests[ar]; !own {
 				continue
 			}
 			if !cl.yieldKeyAndValue(yield, key, ar) {

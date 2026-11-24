@@ -41,6 +41,8 @@ func (me *lockWithDeferreds) Unlock() {
 	if i != len(me.unlockActions) {
 		panic(fmt.Sprintf("num deferred changed while running: %v -> %v", startLen, len(me.unlockActions)))
 	}
+	// Don't let the backing array keep the actions, and what they capture, alive.
+	clear(me.unlockActions)
 	me.unlockActions = me.unlockActions[:0]
 	me.uniqueActions = nil
 }

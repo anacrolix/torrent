@@ -8,7 +8,6 @@ import (
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/storage"
 )
 
 // Empty files in a v2 file tree sit at the offset of the next piece boundary. They must not count
@@ -33,7 +32,6 @@ func TestAddV2TorrentWithEmptyFiles(t *testing.T) {
 			ib, err := bencode.Marshal(&info)
 			qt.Assert(t, qt.IsNil(err))
 			cfg := TestingConfig(t)
-			cfg.DefaultStorage = storage.NewFile(cfg.DataDir)
 			cl, err := NewClient(cfg)
 			qt.Assert(t, qt.IsNil(err))
 			defer cl.Close()

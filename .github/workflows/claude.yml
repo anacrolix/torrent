@@ -36,6 +36,15 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
+          # The action skips PRs from forks by default. Outside contributions
+          # come from forks, and this workflow is how they get reviewed (see
+          # claude-code-review.yml), so opt in. Only users with write access can
+          # trigger it. On a fork PR Claude pushes to a pr-N branch in this repo
+          # that contains the contributor's commits: keep pr-* out of CI that
+          # holds secrets, and don't release from it. See
+          # https://github.com/anthropics/claude-code-action/blob/main/docs/security.md#pull-requests-from-forks
+          allow_fork_prs: "true"
+
           # This is an optional setting that allows Claude to read CI results on PRs
           additional_permissions: |
             actions: read

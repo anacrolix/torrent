@@ -132,7 +132,7 @@ func (p Piece) endFile() int {
 	}
 	for end > p.beginFile()+1 {
 		f := (*t.files)[end-1]
-		if f.length != 0 || f.offset < p.torrentEndOffset() {
+		if f.offset < p.torrentEndOffset() {
 			break
 		}
 		end--

@@ -1040,11 +1040,14 @@ func TestDroppedTorrentsNotReturned(t *testing.T) {
 
 type closeRecordingPacketConn struct {
 	net.PacketConn
-	closed *sync.WaitGroup
+	closed    *sync.WaitGroup
+	closeOnce sync.Once
 }
 
-func (me closeRecordingPacketConn) Close() error {
-	me.closed.Done()
+// Close may be called more than once (the udp tracker Socket and its reader both close the conn),
+// so only the first call is recorded.
+func (me *closeRecordingPacketConn) Close() error {
+	me.closeOnce.Do(me.closed.Done)
 	return me.PacketConn.Close()
 }
 
@@ -1069,7 +1072,7 @@ func TestClientCloseClosesTrackerClients(t *testing.T) {
 		defer mu.Unlock()
 		created++
 		open.Add(1)
-		return closeRecordingPacketConn{pc, &open}, nil
+		return &closeRecordingPacketConn{PacketConn: pc, closed: &open}, nil
 	}
 	cl, err := NewClient(cfg)
 	qt.Assert(t, qt.IsNil(err))

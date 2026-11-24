@@ -1,10 +1,14 @@
 package torrent
 
 import (
+	"maps"
+	"slices"
+
 	"github.com/RoaringBitmap/roaring/v2"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
 
+	"github.com/anacrolix/torrent/internal/actor"
 	"github.com/anacrolix/torrent/storage"
 )
 
@@ -33,6 +37,9 @@ type lockDomain struct {
 	exclusiveActionKeys map[any]struct{}
 	// Scratch space for use while the domain is held.
 	roaringIntIterator roaring.IntIterator
+	// Runs turns with the domain held, batching turns from several goroutines into one hold. Peer
+	// read loops hand their messages to it. See Torrent.callDomainTurn.
+	actor *actor.Actor
 }
 
 func (cl *Client) newLockDomain() *lockDomain {
@@ -40,7 +47,75 @@ func (cl *Client) newLockDomain() *lockDomain {
 	d.unlockHandlers.init()
 	d.mu.client = cl
 	d.mu.unlockHandlers = &d.unlockHandlers
+	d.actor = actor.New(func() { d.lock(cl) }, func() { d.unlock(cl) })
+	cl.lockDomainsMu.Lock()
+	g.MakeMapIfNil(&cl.lockDomains)
+	cl.lockDomains[d] = struct{}{}
+	cl.lockDomainsMu.Unlock()
 	return d
+}
+
+// Stops the domain's actor once its queued turns have run. Must not be called with the Client
+// lock held, since turns take it for read.
+func (cl *Client) closeLockDomain(d *lockDomain) {
+	d.actor.Close()
+	cl.lockDomainsMu.Lock()
+	delete(cl.lockDomains, d)
+	cl.lockDomainsMu.Unlock()
+}
+
+func (cl *Client) closeAllLockDomains() {
+	cl.lockDomainsMu.Lock()
+	ds := slices.Collect(maps.Keys(cl.lockDomains))
+	cl.lockDomainsMu.Unlock()
+	for _, d := range ds {
+		cl.closeLockDomain(d)
+	}
+}
+
+// Takes the domain in domain mode.
+func (d *lockDomain) lock(cl *Client) {
+	cl._mu.internal.RLock()
+	d.mu.Lock()
+}
+
+func (d *lockDomain) unlock(cl *Client) {
+	d.mu.runUnlockActions()
+	actions := d.exclusiveActions
+	d.exclusiveActions = nil
+	d.exclusiveActionKeys = nil
+	d.mu.releaseInternal()
+	cl._mu.internal.RUnlock()
+	if len(actions) == 0 {
+		return
+	}
+	cl.lock()
+	for _, f := range actions {
+		f()
+	}
+	cl.unlock()
+}
+
+// Runs f in a turn of the Torrent's domain actor, so in domain mode, and waits for it. Reports
+// false without running f if the actor is closed. Must be called without any lock held.
+func (t *Torrent) callDomainTurn(f func()) bool {
+	for {
+		t.cl._mu.internal.RLock()
+		d := t.domain
+		t.cl._mu.internal.RUnlock()
+		moved := false
+		ok := d.actor.Call(func() {
+			// The Torrent may have moved to its storage capacity's domain since d was read.
+			if t.domain != d {
+				moved = true
+				return
+			}
+			f()
+		})
+		if !ok || !moved {
+			return ok
+		}
+	}
 }
 
 // Returns the domain for Torrents with storage capacity c, making it if needed. Domains for a
@@ -76,27 +151,11 @@ func (cl *Client) assertExclusive() {
 func (t *Torrent) lockDomain() {
 	t.cl._mu.internal.RLock()
 	// The domain only changes in exclusive mode, so it's stable until the read lock is released.
-	d := t.domain
-	d.mu.Lock()
+	t.domain.mu.Lock()
 }
 
 func (t *Torrent) unlockDomain() {
-	cl := t.cl
-	d := t.domain
-	d.mu.runUnlockActions()
-	actions := d.exclusiveActions
-	d.exclusiveActions = nil
-	d.exclusiveActionKeys = nil
-	d.mu.releaseInternal()
-	cl._mu.internal.RUnlock()
-	if len(actions) == 0 {
-		return
-	}
-	cl.lock()
-	for _, f := range actions {
-		f()
-	}
-	cl.unlock()
+	t.domain.unlock(t.cl)
 }
 
 // Reads the Torrent's state. Shared with other readers of the domain.
@@ -217,4 +276,9 @@ func (me torrentLocker) Defer(action func()) {
 
 func (me torrentLocker) DeferUniqueUnaryFunc(arg any, action func()) {
 	me.t.activeLock().DeferUniqueUnaryFunc(arg, action)
+}
+
+// Whether the Torrent shares its storage capacity's domain, rather than having its own.
+func (t *Torrent) hasCapacityDomain() bool {
+	return t.storage != nil && t.storage.Capacity != nil && t.cl.capacityDomains[t.storage.Capacity] == t.domain
 }

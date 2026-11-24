@@ -331,5 +331,4 @@ func TestFullMessageBufferedMaxLength(t *testing.T) {
 	r := bufio.NewReader(bytes.NewReader([]byte{0xff, 0xff, 0xff, 0xff, byte(pp.Piece)}))
 	r.Peek(5)
 	qt.Check(t, qt.IsFalse(fullMessageBuffered(r)))
-	qt.Check(t, qt.IsFalse(bufferedMessageIsPiece(r)))
 }

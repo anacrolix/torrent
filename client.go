@@ -33,6 +33,7 @@ import (
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
+	"github.com/anacrolix/torrent/internal/actor"
 	"github.com/anacrolix/torrent/internal/amortize"
 	"github.com/anacrolix/torrent/internal/extracmp"
 	"github.com/anacrolix/torrent/tracker"
@@ -64,7 +65,9 @@ type Client struct {
 	connStats AllConnStats
 	counters  TorrentStatCounters
 
-	_mu            lockWithDeferreds
+	_mu lockWithDeferreds
+	// Runs turns one at a time with _mu held. Code moves from taking the lock to running in turns.
+	actor          *actor.Actor
 	unlockHandlers clientUnlockHandlers
 	check          amortize.Value
 	// Used in constrained situations when the lock is held exclusively. See
@@ -72,8 +75,11 @@ type Client struct {
 	roaringIntIterator roaring.IntIterator
 	// Lock domains shared by Torrents with the same storage capacity. See lockDomain.
 	capacityDomains map[storage.TorrentCapacity]*lockDomain
-	event           sync.Cond
-	closed          chansync.SetOnce
+	// Every lock domain whose actor hasn't been closed.
+	lockDomainsMu sync.Mutex
+	lockDomains   map[*lockDomain]struct{}
+	event         sync.Cond
+	closed        chansync.SetOnce
 
 	config  *ClientConfig
 	logger  log.Logger
@@ -337,6 +343,7 @@ func (cl *Client) init(cfg *ClientConfig) {
 	cl.config = cfg
 	cl._mu.client = cl
 	cl._mu.unlockHandlers = &cl.unlockHandlers
+	cl.actor = actor.New(cl.lock, cl.unlock)
 	cl.initLogger()
 	cl.regularTrackerAnnounceDispatcher.init(cl)
 	cfg.setRateLimiterBursts()
@@ -639,6 +646,9 @@ func (cl *Client) Close() (errs []error) {
 		cl.onClose[len(cl.onClose)-1-i]()
 	}
 	cl.unlock()
+	// Turns take the lock, so this has to follow the unlock.
+	cl.actor.Close()
+	cl.closeAllLockDomains()
 	cl.event.Broadcast()
 	closeGroup.Wait() // defer is LIFO. We want to Wait() after cl.unlock()
 	return
@@ -2140,6 +2150,19 @@ func (cl *Client) lock() {
 
 func (cl *Client) unlock() {
 	cl._mu.Unlock()
+}
+
+// Runs f in a turn of the Client's actor, so with the client lock, and waits for it. Reports false
+// without running f if the Client is closed. Must not be called with the client lock held.
+func (cl *Client) callTurn(f func()) bool {
+	if cl.actor == nil {
+		// Some tests build a Client by hand.
+		cl.lock()
+		defer cl.unlock()
+		f()
+		return true
+	}
+	return cl.actor.Call(f)
 }
 
 func (cl *Client) locker() *lockWithDeferreds {

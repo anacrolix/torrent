@@ -601,6 +601,7 @@ func (cl *Client) Close() (errs []error) {
 	panicif.NotZero(len(cl.torrents))
 	panicif.NotZero(len(cl.torrentsByShortHash))
 	cl.clearPortMappings()
+	errs = append(errs, cl.regularTrackerAnnounceDispatcher.close()...)
 	for i := range cl.onClose {
 		cl.onClose[len(cl.onClose)-1-i]()
 	}
@@ -2188,6 +2189,28 @@ func (cl *Client) canStartPieceHashers() bool {
 	return cl.belowMaxActivePieceHashers()
 }
 
+// Torrents with just downloaded pieces get hashers first. Then the largest, as those are preferred
+// by webseeds, and will cause less thrashing.
+func hashFirst(a, b *Torrent) bool {
+	ad, bd := !a.piecesDownloadedForHash.IsEmpty(), !b.piecesDownloadedForHash.IsEmpty()
+	if ad != bd {
+		return ad
+	}
+	return a.length() > b.length()
+}
+
+// Reports whether a torrent other than except has just downloaded pieces waiting for a hasher.
+// Called in domain mode by hashers, so it reads only each Torrent's hasDownloadedForHash, not state
+// guarded by other domains.
+func (cl *Client) downloadedPiecesWaitForHash(except *Torrent) bool {
+	for t := range cl.torrents {
+		if t != except && t.hasDownloadedForHash.Load() {
+			return true
+		}
+	}
+	return false
+}
+
 func (cl *Client) startPieceHashers() {
 	cl.assertExclusive()
 	if !cl.canStartPieceHashers() {
@@ -2206,11 +2229,7 @@ func (cl *Client) startPieceHashers() {
 	if len(ts) == 0 {
 		return
 	}
-	// Sort largest torrents first, as those are preferred by webseeds, and will cause less
-	// thrashing.
-	h := heap.InterfaceForSlice(&ts, func(a, b *Torrent) bool {
-		return a.length() > b.length()
-	})
+	h := heap.InterfaceForSlice(&ts, hashFirst)
 	heap.Init(h)
 	for h.Len() > 0 {
 		t := heap.Pop(h)

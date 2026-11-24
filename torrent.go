@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"text/tabwriter"
 	"time"
 	"unique"
@@ -185,7 +186,13 @@ type Torrent struct {
 	_completedPieces typedRoaring.Bitmap[pieceIndex]
 	// Pieces that need to be hashed.
 	piecesQueuedForHash typedRoaring.Bitmap[pieceIndex]
-	activePieceHashes   int
+	// The queued pieces that were just downloaded, as opposed to data already in storage being
+	// checked. They are hashed first.
+	piecesDownloadedForHash typedRoaring.Bitmap[pieceIndex]
+	// Whether piecesDownloadedForHash is non-empty, for hashers of Torrents in other domains. See
+	// updateHasDownloadedForHash.
+	hasDownloadedForHash atomic.Bool
+	activePieceHashes    int
 
 	connsWithAllPieces map[*Peer]struct{}
 
@@ -2934,6 +2941,7 @@ func (t *Torrent) startSinglePieceHasher() bool {
 // Sticky to a Torrent. Might as well since that keeps the storage hot.
 func (t *Torrent) pieceHasher(initial pieceIndex) {
 	t.finishHash(initial)
+	yielded := false
 	for {
 		if t.closed.IsSet() {
 			break
@@ -2943,6 +2951,11 @@ func (t *Torrent) pieceHasher(initial pieceIndex) {
 			break
 		}
 		pi := piOpt.Value
+		// Checking data already in storage gives way to pieces just downloaded elsewhere.
+		if !t.piecesDownloadedForHash.Contains(pi) && t.cl.downloadedPiecesWaitForHash(t) {
+			yielded = true
+			break
+		}
 		if !t.cl.tryAcquirePieceHasher() {
 			break
 		}
@@ -2953,8 +2966,9 @@ func (t *Torrent) pieceHasher(initial pieceIndex) {
 		t.storageLock.RLock()
 		t.finishHash(pi)
 	}
-	// Hashers for other Torrents may have been held back by the Client-wide limit.
-	if t.cl.pieceHashersWanted.Swap(false) {
+	// Hashers for other Torrents may have been held back by the Client-wide limit, or this one
+	// gave way to them.
+	if t.cl.pieceHashersWanted.Swap(false) || yielded {
 		t.deferExclusive(t.cl.startPieceHashers)
 	}
 	t.unlockDomain()
@@ -2962,6 +2976,8 @@ func (t *Torrent) pieceHasher(initial pieceIndex) {
 
 func (t *Torrent) startHash(pi pieceIndex) {
 	t.piecesQueuedForHash.Remove(pi)
+	t.piecesDownloadedForHash.Remove(pi)
+	t.updateHasDownloadedForHash()
 	t.pieces[pi].check = pieceCheckHashing
 	t.deferPublishPieceStateChange(pi)
 	t.updatePiecePriority(pi, "Torrent.startHash")
@@ -2969,6 +2985,13 @@ func (t *Torrent) startHash(pi pieceIndex) {
 }
 
 func (t *Torrent) getPieceToHash() (_ g.Option[pieceIndex]) {
+	for i := range t.piecesDownloadedForHash.Iterate {
+		p := &t.pieces[i]
+		if p.check != pieceCheckIdle {
+			continue
+		}
+		return g.Some(i)
+	}
 	for i := range t.piecesQueuedForHash.Iterate {
 		p := &t.pieces[i]
 		if p.check != pieceCheckIdle {
@@ -3086,6 +3109,19 @@ func (t *Torrent) queueInitialPieceCheck(i pieceIndex) {
 	}
 	// Should only get closed or missing hash errors here which are ok.
 	_, _ = t.queuePieceCheck(i)
+}
+
+// Queues a piece whose chunks were all just received, ahead of checks of data already in storage.
+func (t *Torrent) queueDownloadedPieceCheck(i pieceIndex) {
+	if t.piece(i).haveHash() {
+		t.piecesDownloadedForHash.Add(i)
+		t.updateHasDownloadedForHash()
+	}
+	_, _ = t.queuePieceCheck(i)
+}
+
+func (t *Torrent) updateHasDownloadedForHash() {
+	t.hasDownloadedForHash.Store(!t.piecesDownloadedForHash.IsEmpty())
 }
 
 func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) (targetVerifies pieceVerifyCount, err error) {

@@ -2,7 +2,6 @@ package indexed
 
 import (
 	g "github.com/anacrolix/generics"
-	"github.com/anacrolix/generics/option"
 	"github.com/anacrolix/missinggo/v2/panicif"
 )
 
@@ -50,7 +49,7 @@ func (me *Map[K, V]) Alter(key K, updateFunc func(V, bool) (V, bool)) {
 }
 
 func (me *Map[K, V]) Get(k K) (v V, ok bool) {
-	return option.Map(pairMapRight, GetEq(me, Pair[K, V]{Left: k})).AsTuple()
+	return GetEq(me, Pair[K, V]{Left: k}).Map(pairMapRight).AsTuple()
 }
 
 func (me *Map[K, V]) ContainsKey(k K) bool {
@@ -83,7 +82,7 @@ func (me *Map[K, V]) OnValueChange(do mapTriggerFunc[K, V]) {
 		} else {
 			key = new.Unwrap().Left
 		}
-		do(key, option.Map(pairMapRight, old), option.Map(pairMapRight, new))
+		do(key, old.Map(pairMapRight), new.Map(pairMapRight))
 	})
 }
 

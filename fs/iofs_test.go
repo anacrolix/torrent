@@ -10,6 +10,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/anacrolix/missinggo/v2/filecache"
 	qt "github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent"
@@ -18,6 +19,7 @@ import (
 	"github.com/anacrolix/torrent/fs/tfstest"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/torrent/storage"
 )
 
 // Runs the shared backend test suite against TorrentFS.IOFS, which exercises the traversal and read
@@ -99,9 +101,10 @@ func TestIOFSConformance(t *testing.T) {
 	qt.Check(t, qt.ErrorIs(err, fs.ErrClosed))
 }
 
-// Malformed metadata can list a path as both a file and a directory prefix of another file. The
-// client accepts it (the file list comes from a remote peer over ut_metadata), so the io/fs
-// traversal must not panic. The file wins and the shadowed descendants are not reachable, matching
+// Malformed metadata can list a path as both a file and a directory prefix of another file. File and
+// mmap storage reject it when opening the torrent, but piece-based storage has no file paths and
+// accepts it (the file list comes from a remote peer over ut_metadata), so the io/fs traversal must
+// not panic. The file wins and the shadowed descendants are not reachable, matching
 // how the directory listing presents them.
 func TestIOFSDirFileConflict(t *testing.T) {
 	addConflict := func(t *testing.T, paths ...[]string) fs.FS {
@@ -121,6 +124,10 @@ func TestIOFSDirFileConflict(t *testing.T) {
 		cfg := torrent.TestingConfig(t)
 		cfg.DisableTCP = true
 		cfg.DisableUTP = true
+		// File storage rejects the conflicting paths, so use storage that doesn't map files to paths.
+		fc, err := filecache.NewCache(t.TempDir())
+		qt.Assert(t, qt.IsNil(err))
+		cfg.DefaultStorage = storage.NewResourcePieces(fc.AsResourceProvider())
 		cl, err := torrent.NewClient(cfg)
 		qt.Assert(t, qt.IsNil(err))
 		t.Cleanup(func() { cl.Close() })

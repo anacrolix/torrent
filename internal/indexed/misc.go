@@ -2,7 +2,6 @@ package indexed
 
 import (
 	g "github.com/anacrolix/generics"
-	"github.com/anacrolix/generics/option"
 	"github.com/anacrolix/missinggo/v2/panicif"
 )
 
@@ -53,7 +52,7 @@ func NewFullMappedIndex[F, T comparable](
 	from.addIndex(
 		index,
 		func(old, new g.Option[F]) {
-			index.Change(option.Map(mapFunc, old), option.Map(mapFunc, new))
+			index.Change(old.Map(mapFunc), new.Map(mapFunc))
 			panicif.NotEq(from.Len(), index.Len())
 		},
 	)

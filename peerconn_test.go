@@ -602,8 +602,8 @@ func TestReceiveLargeRequest(t *testing.T) {
 	tor.info = &metainfo.Info{PieceLength: 3 << 20}
 	pc.setTorrent(tor)
 	tor._completedPieces.Add(0)
-	pc.PeerExtensionBytes.SetBit(pp.ExtensionBitFast, true)
-	pc.wireState.SetChoking(false)
+	pc.testHandshook(cl, pp.NewPeerExtensionBytes(pp.ExtensionBitFast), PeerID{})
+	pc.wireState.SentUnchoke()
 	pc.initMessageWriter()
 	req := Request{}
 	req.Length = defaultChunkSize
@@ -613,7 +613,11 @@ func TestReceiveLargeRequest(t *testing.T) {
 	req.Length = 2 << 20
 	qt.Check(t, qt.IsNil(pc.onReadRequest(req, false)))
 	qt.Check(t, qt.HasLen(pc.unreadPeerRequests, 2))
-	pc.deleteAllPeerRequests()
+	for r := range pc.wireState.PeerRequests() {
+		pc.onPeerSentCancel(r)
+	}
+	// The cancels were answered with rejects.
+	pc.messageWriter.writeBuffer.Reset()
 	pc.t.cl.config.UploadRateLimiter = rate.NewLimiter(1, defaultChunkSize)
 	req.Length = defaultChunkSize
 	qt.Check(t, qt.IsNil(pc.onReadRequest(req, false)))
@@ -663,6 +667,8 @@ func TestServePeerRequestTorrentClosedStorageReadFails(t *testing.T) {
 	pc.t.chunkSize = 1
 
 	req := Request{Index: 0, ChunkSpec: ChunkSpec{Begin: 0, Length: 1}}
+	pc.wireState.SentUnchoke()
+	pc.wireState.RecvRequest(req, 1)
 	pc.addPeerRequest(req)
 
 	// Simulate the torrent being dropped while the connection is still active.
@@ -672,8 +678,10 @@ func TestServePeerRequestTorrentClosedStorageReadFails(t *testing.T) {
 	defer cl.unlock()
 	pc.servePeerRequest(req)
 
-	qt.Check(t, qt.IsFalse(pc.havePeerRequest(req)))
 	qt.Check(t, qt.IsFalse(pc.unreadPeerRequest(req)))
+	// The request is outstanding on the wire until the conn closes.
+	pc.onWireClosed("test")
+	qt.Check(t, qt.IsFalse(pc.havePeerRequest(req)))
 }
 
 func outstandingChunkPoolBuffers() int64 {
@@ -720,29 +728,35 @@ func TestPeerConnPeerRequestDataLifecycle(t *testing.T) {
 	t.Run("cancel", func(t *testing.T) {
 		pc, r, baseline := newConn(t, &torrentStorageClient{&torrentStorage{}})
 		prd := pc.getPeerRequestData(r.Length.Int())
-		pc.wireState.AddPeerRequest(r)
+		pc.wireState.SentUnchoke()
+		pc.wireState.RecvRequest(r, 1)
 		g.MakeMapIfNil(&pc.readyPeerRequests)
 		pc.readyPeerRequests[r] = prd
-		pc.deletePeerRequest(r)
+		pc.onPeerSentCancel(r)
 		qt.Check(t, qt.Equals(outstandingChunkPoolBuffers(), baseline))
 	})
 
 	t.Run("choke cleanup", func(t *testing.T) {
 		pc, r, baseline := newConn(t, &torrentStorageClient{&torrentStorage{}})
 		prd := pc.getPeerRequestData(r.Length.Int())
+		pc.wireState.SentUnchoke()
+		pc.wireState.RecvRequest(r, 1)
 		g.MakeMapIfNil(&pc.readyPeerRequests)
 		pc.readyPeerRequests[r] = prd
-		pc.wireState.SetChoking(true)
-		pc.deleteAllPeerRequests()
+		// Choking a peer without the fast extension discards its requests.
+		pc.choke(func(pp.Message) bool { return true })
+		qt.Check(t, qt.HasLen(pc.readyPeerRequests, 0))
 		qt.Check(t, qt.Equals(outstandingChunkPoolBuffers(), baseline))
 	})
 
 	t.Run("unwanted completed read", func(t *testing.T) {
 		pc, r, baseline := newConn(t, benchmarkUploadStorage{})
+		pc.wireState.SentUnchoke()
+		pc.wireState.RecvRequest(r, 1)
 		pc.addPeerRequest(r)
 		prd, err := pc.readPeerRequestData(r)
 		qt.Assert(t, qt.IsNil(err))
-		pc.deletePeerRequest(r)
+		pc.onPeerSentCancel(r)
 		pc.releasePeerRequestData(prd)
 		qt.Check(t, qt.Equals(outstandingChunkPoolBuffers(), baseline))
 	})
@@ -796,8 +810,8 @@ func BenchmarkServePeerRequests(b *testing.B) {
 	})))
 	cn := cl.newConnection(nil, newConnectionOpts{network: "test"})
 	cn.setTorrent(t)
-	cn.PeerExtensionBytes.SetBit(pp.ExtensionBitFast, true)
-	cn.wireState.SetChoking(false)
+	cn.testHandshook(&cl, pp.NewPeerExtensionBytes(pp.ExtensionBitFast), PeerID{})
+	cn.wireState.SentUnchoke()
 	cn.initMessageWriter()
 	// Marshals the message like the real writer, then drops it so the buffer doesn't grow.
 	writeAndDiscard := func(msg pp.Message) bool {
@@ -889,4 +903,10 @@ func TestPeerConnRejectsWrongHashes(t *testing.T) {
 			}
 		}
 	}
+}
+
+// Completes the BEP 3 handshake for a conn made without one, as if the peer sent peerBits and id.
+func (pc *PeerConn) testHandshook(cl *Client, peerBits pp.PeerExtensionBits, id PeerID) {
+	peerWire.RecvHandshake(&pc.peerHandshake, pp.HandshakeResult{PeerExtensionBits: peerBits, PeerID: id})
+	pc.wireState.Handshook(cl.config.Extensions, pc.peerHandshake)
 }

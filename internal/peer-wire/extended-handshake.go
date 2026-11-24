@@ -26,7 +26,7 @@ type ExtendedHandshake struct {
 // RecvExtendedHandshake applies an extended handshake to h. The handshake can be repeated, and
 // later ones update earlier ones. Extension names are peer-controlled, so at most maxNames are
 // tracked. It returns the names seen for the first time. metadata_size isn't handled here because
-// the caller validates it before calling State.SetPeerMetadataSize.
+// the caller validates it before calling State.RecvMetadataSize.
 func RecvExtendedHandshake(
 	h *ExtendedHandshake,
 	d *pp.ExtendedHandshakeMessage,

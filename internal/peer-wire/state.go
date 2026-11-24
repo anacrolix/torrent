@@ -13,6 +13,7 @@ import (
 	g "github.com/anacrolix/generics"
 
 	requestStrategy "github.com/anacrolix/torrent/internal/request-strategy"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 )
 
@@ -23,6 +24,11 @@ import (
 // Piece counts are passed in as g.Option because a peer can send piece messages before we have
 // the torrent info.
 type State struct {
+	// Both sides set the fast extension bit in the handshake (BEP 6).
+	fast bool
+	// The peer answers our cancels with a Reject or the Piece. See ExpectsCancelReplies.
+	cancelReplies bool
+
 	// We are choking the peer.
 	choking bool
 	// The peer is choking us.
@@ -83,19 +89,60 @@ func NewState() State {
 	}
 }
 
+// Handshook records the completed BEP 3 handshake: the reserved bits we sent, and what the peer
+// sent.
+func (s *State) Handshook(ours pp.PeerExtensionBits, peer Handshake) {
+	s.fast = ours.SupportsFast() && peer.PeerExtensionBytes.SupportsFast()
+	s.cancelReplies = RejectsCancels(peer.PeerID, s.fast)
+}
+
+// Fast returns whether the fast extension (BEP 6) is enabled, which is when both sides set its
+// bit in the handshake.
+func (s *State) Fast() bool {
+	return s.fast
+}
+
+// ExpectsCancelReplies returns whether the peer answers our Cancel with a Reject or the Piece, as
+// BEP 6 requires with the fast extension. Some clients don't: see RejectsCancels.
+func (s *State) ExpectsCancelReplies() bool {
+	return s.cancelReplies
+}
+
 // Choking returns whether we are choking the peer.
 func (s *State) Choking() bool {
 	return s.choking
 }
 
-// SetChoking records that we sent Choke or Unchoke. It returns false if that's already the
-// state, in which case there is nothing to send.
-func (s *State) SetChoking(choking bool) (changed bool) {
-	if s.choking == choking {
+// SentChoke records that we're choking the peer. changed is false if we already were, in which
+// case there's nothing to send. Without the fast extension, choking discards the peer's requests
+// (BEP 3), and droppedPeerRequests is true: none are outstanding now.
+func (s *State) SentChoke() (changed, droppedPeerRequests bool) {
+	if s.choking {
+		return false, false
+	}
+	s.choking = true
+	if s.fast {
+		return true, false
+	}
+	clear(s.peerRequests)
+	return true, true
+}
+
+// SentUnchoke records that we're unchoking the peer. It returns false if we weren't choking
+// them, in which case there's nothing to send.
+func (s *State) SentUnchoke() (changed bool) {
+	if !s.choking {
 		return false
 	}
-	s.choking = choking
+	s.choking = false
 	return true
+}
+
+// Closed records that the connection is closed. Nothing more is sent or received. The peer's
+// requests are forgotten, and so are our outstanding requests, which are returned.
+func (s *State) Closed() (deletedRequests []RequestIndex) {
+	clear(s.peerRequests)
+	return s.dropRequests()
 }
 
 // PeerChoking returns whether the peer is choking us.
@@ -103,13 +150,18 @@ func (s *State) PeerChoking() bool {
 	return s.peerChoking
 }
 
-// RecvChoke handles a Choke message. It returns false if the peer was already choking us.
-func (s *State) RecvChoke() (changed bool) {
+// RecvChoke handles a Choke message. changed is false if the peer was already choking us. Without
+// the fast extension the peer discards our requests (BEP 3), so they're no longer outstanding and
+// are returned as deleted. With it, they stay outstanding until the peer rejects or serves them.
+func (s *State) RecvChoke() (changed bool, deletedRequests []RequestIndex) {
 	if s.peerChoking {
-		return false
+		return false, nil
 	}
 	s.peerChoking = true
-	return true
+	if !s.fast {
+		deletedRequests = s.dropRequests()
+	}
+	return true, deletedRequests
 }
 
 // RecvUnchoke handles an Unchoke message. It returns false if the peer wasn't choking us. Some
@@ -156,19 +208,19 @@ func (s *State) RecvAllowedFast(piece int, numPieces g.Option[int]) (added bool)
 	return s.peerAllowedFast.CheckedAdd(piece)
 }
 
-// SentHave returns whether we've told the peer we have the piece.
-func (s *State) SentHave(piece int) bool {
+// HaveAnnounced returns whether we've told the peer we have the piece.
+func (s *State) HaveAnnounced(piece int) bool {
 	return s.sentHaves.Contains(piece)
 }
 
-// SentHavesEmpty returns whether we've told the peer about any pieces.
-func (s *State) SentHavesEmpty() bool {
+// NoHavesAnnounced returns whether we haven't told the peer about any pieces.
+func (s *State) NoHavesAnnounced() bool {
 	return s.sentHaves.IsEmpty()
 }
 
-// SetSentHave records that we sent Have for a piece. It returns false if the peer already knows,
+// SentHave records that we're sending Have for a piece. It returns false if the peer already knows,
 // in which case there's nothing to send.
-func (s *State) SetSentHave(piece int) (added bool) {
+func (s *State) SentHave(piece int) (added bool) {
 	if s.sentHaves.Contains(piece) {
 		return false
 	}
@@ -176,9 +228,9 @@ func (s *State) SetSentHave(piece int) (added bool) {
 	return true
 }
 
-// SetSentBitfield records that we sent Bitfield with the given pieces. It must be the first
+// SentBitfield records that we sent Bitfield with the given pieces. It must be the first
 // have-related message.
-func (s *State) SetSentBitfield(pieces *roaring.Bitmap) error {
+func (s *State) SentBitfield(pieces *roaring.Bitmap) error {
 	if !s.sentHaves.IsEmpty() {
 		return errors.New("bitfield must be first have-related message sent")
 	}
@@ -186,14 +238,14 @@ func (s *State) SetSentBitfield(pieces *roaring.Bitmap) error {
 	return nil
 }
 
-// SetSentHaveAll records that we sent HaveAll.
-func (s *State) SetSentHaveAll(numPieces int) {
+// SentHaveAll records that we sent HaveAll.
+func (s *State) SentHaveAll(numPieces int) {
 	s.sentHaves.Clear()
 	s.sentHaves.AddRange(0, uint64(numPieces))
 }
 
-// SetSentHaveNone records that we sent HaveNone.
-func (s *State) SetSentHaveNone() {
+// SentHaveNone records that we sent HaveNone.
+func (s *State) SentHaveNone() {
 	s.sentHaves.Clear()
 }
 
@@ -255,9 +307,10 @@ func (s *State) BestPeerNumPieces(numPieces g.Option[int]) int {
 	return s.peerMinPieces
 }
 
-// SetNumPieces drops pieces claimed or allowed fast by the peer beyond the end of the torrent, once
-// the info is known. Pieces dropped here were never counted towards availability, since that needs the info.
-func (s *State) SetNumPieces(numPieces int) {
+// GotInfo records that we learned the torrent's piece count from its info. Pieces claimed or
+// allowed fast by the peer past the end are dropped. They were never counted towards
+// availability, since that needs the info.
+func (s *State) GotInfo(numPieces int) {
 	s.peerPieces.RemoveRange(uint64(numPieces), roaring.MaxRange)
 	s.peerAllowedFast.RemoveRange(uint64(numPieces), roaring.MaxRange)
 }
@@ -349,9 +402,9 @@ func (s *State) PeerMetadataSize() int {
 	return s.peerMetadataSize
 }
 
-// SetPeerMetadataSize records the metadata_size from the peer's extended handshake. The caller
+// RecvMetadataSize records the metadata_size from the peer's extended handshake. The caller
 // validates it.
-func (s *State) SetPeerMetadataSize(size int) {
+func (s *State) RecvMetadataSize(size int) {
 	s.peerMetadataSize = size
 }
 
@@ -361,9 +414,9 @@ func (s *State) MetadataPieceRequested(index int) bool {
 	return index >= 0 && index < len(s.metadataRequests) && s.metadataRequests[index]
 }
 
-// SetMetadataPieceRequested records that we sent a ut_metadata request for a piece. It returns
+// SentMetadataRequest records that we're sending a ut_metadata request for a piece. It returns
 // false if one is already pending.
-func (s *State) SetMetadataPieceRequested(index int) (added bool) {
+func (s *State) SentMetadataRequest(index int) (added bool) {
 	if s.MetadataPieceRequested(index) {
 		return false
 	}

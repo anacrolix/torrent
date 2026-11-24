@@ -1246,6 +1246,7 @@ func (cl *Client) connBtHandshake(ctx context.Context, c *PeerConn, ih *metainfo
 		hex.EncodeToString(res.PeerExtensionBits[:]))
 	ret = res.Hash
 	peerWire.RecvHandshake(&c.peerHandshake, res)
+	c.wireState.Handshook(reservedBits, c.peerHandshake)
 	c.completedHandshake = time.Now()
 	if cb := cl.config.Callbacks.CompletedHandshake; cb != nil {
 		cb(c, res.Hash)
@@ -1417,11 +1418,11 @@ func (pc *PeerConn) sendInitialMessages() {
 		if pc.fastEnabled() {
 			if t.haveAllPieces() {
 				pc.write(pp.Message{Type: pp.HaveAll})
-				pc.wireState.SetSentHaveAll(pc.t.NumPieces())
+				pc.wireState.SentHaveAll(pc.t.NumPieces())
 				return
 			} else if !t.haveAnyPieces() {
 				pc.write(pp.Message{Type: pp.HaveNone})
-				pc.wireState.SetSentHaveNone()
+				pc.wireState.SentHaveNone()
 				return
 			}
 		}

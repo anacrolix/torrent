@@ -19,8 +19,8 @@ type RequestIndex = requestStrategy.RequestIndex
 // mapping between the two is never needed on receipt.
 
 // RequestState returns our interest and outstanding requests by RequestIndex, for the request
-// strategy. Don't modify it: use SetInterested, SentRequest, DeleteRequest, SentCancel,
-// RecvReject and RecvChunk.
+// strategy. Don't modify it: use SentInterested, SentRequest, SentCancel, RecvChoke, RecvReject,
+// RecvChunk and Closed.
 func (s *State) RequestState() *requestStrategy.PeerRequestState {
 	if s.requests.Requests == nil {
 		s.requests.Requests = &orderedBitmap[RequestIndex]{}
@@ -33,9 +33,9 @@ func (s *State) Interested() bool {
 	return s.requests.Interested
 }
 
-// SetInterested records that we sent Interested or NotInterested. It returns false if that was
-// already the state, in which case there is nothing to send.
-func (s *State) SetInterested(interested bool) (changed bool) {
+// SentInterested records that we're sending Interested or NotInterested. It returns false if that
+// was already the state, in which case there is nothing to send.
+func (s *State) SentInterested(interested bool) (changed bool) {
 	if s.requests.Interested == interested {
 		return false
 	}
@@ -90,7 +90,7 @@ func (s *State) SentRequest(r RequestIndex, req Request) (added bool) {
 }
 
 // ExpectChunk records that a Piece answering req is acceptable, without making a request. Each
-// call allows one Piece. SentRequest does this itself.
+// call allows one Piece. SentRequest does this itself, so this is only for setting up tests.
 func (s *State) ExpectChunk(req Request) {
 	if s.validReceiveChunks == nil {
 		s.validReceiveChunks = make(map[Request]int)
@@ -126,21 +126,29 @@ func (s *State) removeRequest(r RequestIndex, req Request) bool {
 	return true
 }
 
-// DeleteRequest forgets an outstanding request without telling the peer, for example when a
-// peer without the fast extension chokes us. A Piece for it is still accepted, but not a Reject.
-// It returns false if the request wasn't outstanding.
-func (s *State) DeleteRequest(r RequestIndex, req Request) bool {
-	return s.removeRequest(r, req)
+// Forgets all outstanding requests without telling the peer. Pieces for them are still accepted,
+// but not Rejects. Cancels awaiting a reply are kept.
+func (s *State) dropRequests() (deleted []RequestIndex) {
+	for req, r := range s.sentRequests {
+		if !s.RequestOutstanding(r) {
+			continue
+		}
+		panicif.False(s.requests.Requests.CheckedRemove(r))
+		delete(s.sentRequests, req)
+		deleted = append(deleted, r)
+	}
+	panicif.NotZero(s.NumRequests())
+	return
 }
 
-// SentCancel records that we sent a Cancel for an outstanding request. If expectReject, the
-// peer acknowledges cancels with Reject or the Piece (BEP 6), and we wait for that before the
+// SentCancel records that we sent a Cancel for an outstanding request. If the peer acknowledges
+// cancels with Reject or the Piece (BEP 6, see ExpectsCancelReplies), we wait for that before the
 // chunk can be requested again. It returns false if the request wasn't outstanding.
-func (s *State) SentCancel(r RequestIndex, req Request, expectReject bool) bool {
+func (s *State) SentCancel(r RequestIndex, req Request) bool {
 	if !s.removeRequest(r, req) {
 		return false
 	}
-	if expectReject {
+	if s.ExpectsCancelReplies() {
 		panicif.False(s.requests.Cancelled.CheckedAdd(r))
 		s.sentRequests[req] = r
 	}
@@ -197,44 +205,61 @@ func (s *State) RecvChunk(req Request) (r RequestIndex, requested, intended bool
 // Request is a request for a chunk, as sent over the wire.
 type Request = types.Request
 
-// PeerRequestCheck is the outcome of checking a Request from the peer against the protocol
-// rules that don't depend on the torrent.
+// PeerRequestCheck is the protocol rule a Request from the peer met. See RecvRequest.
 type PeerRequestCheck int
 
 const (
-	// The request can be served, subject to the caller's own checks.
+	// The request is accepted, subject to the caller's own checks.
 	PeerRequestOk PeerRequestCheck = iota
 	// The request is already outstanding. With the fast extension that's a protocol error,
 	// otherwise it's ignored.
 	PeerRequestDuplicate
-	// We're choking the peer. Reject it with the fast extension, otherwise ignore it.
+	// We're choking the peer. It's rejected with the fast extension, otherwise ignored.
 	PeerRequestWhileChoking
-	// Too many requests are outstanding. Reject it with the fast extension, otherwise ignore
-	// it. BEP 6 allows closing the connection.
+	// Too many requests are outstanding. It's rejected with the fast extension, otherwise
+	// ignored. BEP 6 allows closing the connection.
 	PeerRequestQueueFull
 )
 
-// CheckPeerRequest applies the protocol rules for a Request from the peer, in order. It doesn't
-// change the state: call AddPeerRequest if the request is accepted.
-func (s *State) CheckPeerRequest(r Request, maxOutstanding int) PeerRequestCheck {
-	if s.HavePeerRequest(r) {
-		return PeerRequestDuplicate
-	}
-	if s.choking {
-		return PeerRequestWhileChoking
-	}
-	if s.NumPeerRequests() >= maxOutstanding {
-		return PeerRequestQueueFull
-	}
-	return PeerRequestOk
-}
+// PeerRequestAction is what to do about a Request from the peer.
+type PeerRequestAction int
 
-// AddPeerRequest records an accepted Request from the peer.
-func (s *State) AddPeerRequest(r Request) {
+const (
+	// The request is outstanding. Serve it, or send a Reject and call SentReject.
+	PeerRequestServe PeerRequestAction = iota
+	// Do nothing.
+	PeerRequestIgnore
+	// Send a Reject. The request was never outstanding.
+	PeerRequestReject
+	// Close the connection.
+	PeerRequestError
+)
+
+var ErrDuplicateRequest = errors.New("received duplicate request with fast enabled")
+
+// RecvRequest handles a Request from the peer, applying the protocol rules in order: duplicates,
+// then choking, then at most maxOutstanding outstanding. If the request is accepted it's
+// outstanding until SentPiece, SentReject, RecvCancel, SentChoke or Closed.
+func (s *State) RecvRequest(r Request, maxOutstanding int) (check PeerRequestCheck, action PeerRequestAction) {
+	refuse := func(c PeerRequestCheck, fastAction PeerRequestAction) (PeerRequestCheck, PeerRequestAction) {
+		if s.fast {
+			return c, fastAction
+		}
+		return c, PeerRequestIgnore
+	}
+	switch {
+	case s.HavePeerRequest(r):
+		return refuse(PeerRequestDuplicate, PeerRequestError)
+	case s.choking:
+		return refuse(PeerRequestWhileChoking, PeerRequestReject)
+	case s.NumPeerRequests() >= maxOutstanding:
+		return refuse(PeerRequestQueueFull, PeerRequestReject)
+	}
 	if s.peerRequests == nil {
 		s.peerRequests = make(map[Request]struct{})
 	}
 	s.peerRequests[r] = struct{}{}
+	return PeerRequestOk, PeerRequestServe
 }
 
 // HavePeerRequest returns whether the peer's request is outstanding.
@@ -254,18 +279,33 @@ func (s *State) PeerRequests() iter.Seq[Request] {
 	return maps.Keys(s.peerRequests)
 }
 
-// DeletePeerRequest records that the peer's request was served, rejected or cancelled. It
-// returns false if it wasn't outstanding.
-func (s *State) DeletePeerRequest(r Request) bool {
+// SentPiece records that we sent the Piece for one of the peer's requests. It returns false if the
+// request wasn't outstanding, for example because it was cancelled while we read the data.
+func (s *State) SentPiece(r Request) (wasOutstanding bool) {
+	return s.deletePeerRequest(r)
+}
+
+// SentReject records that we sent a Reject (BEP 6), which needs the fast extension. It returns
+// whether the request was outstanding: a request can be rejected before it's accepted.
+func (s *State) SentReject(r Request) (wasOutstanding bool) {
+	panicif.False(s.fast)
+	return s.deletePeerRequest(r)
+}
+
+// RecvCancel handles a Cancel from the peer. known is false if the request wasn't outstanding. It
+// isn't outstanding after this either way. With the fast extension every request gets exactly one
+// reply (BEP 6), so sendReject says to answer the cancel with a Reject.
+func (s *State) RecvCancel(r Request) (known, sendReject bool) {
+	if !s.deletePeerRequest(r) {
+		return false, false
+	}
+	return true, s.fast
+}
+
+func (s *State) deletePeerRequest(r Request) bool {
 	if !s.HavePeerRequest(r) {
 		return false
 	}
 	delete(s.peerRequests, r)
 	return true
-}
-
-// ClearPeerRequests forgets all the peer's requests, as happens when choking a peer without the
-// fast extension.
-func (s *State) ClearPeerRequests() {
-	clear(s.peerRequests)
 }

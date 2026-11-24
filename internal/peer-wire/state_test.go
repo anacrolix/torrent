@@ -49,18 +49,18 @@ func TestChokeAndInterest(t *testing.T) {
 	qt.Check(t, qt.IsTrue(s.Choking()))
 	qt.Check(t, qt.IsTrue(s.PeerChoking()))
 
-	qt.Check(t, qt.IsFalse(s.RecvChoke()))
+	changed, _ := s.RecvChoke()
+	qt.Check(t, qt.IsFalse(changed))
 	qt.Check(t, qt.IsTrue(s.RecvUnchoke()))
 	qt.Check(t, qt.IsFalse(s.PeerChoking()))
 	// Redundant unchokes are tolerated, but reported as no change.
 	qt.Check(t, qt.IsFalse(s.RecvUnchoke()))
-	qt.Check(t, qt.IsTrue(s.RecvChoke()))
+	changed, _ = s.RecvChoke()
+	qt.Check(t, qt.IsTrue(changed))
 	qt.Check(t, qt.IsTrue(s.PeerChoking()))
 
-	qt.Check(t, qt.IsFalse(s.SetChoking(true)))
-	qt.Check(t, qt.IsTrue(s.SetChoking(false)))
+	qt.Check(t, qt.IsTrue(s.SentUnchoke()))
 	qt.Check(t, qt.IsFalse(s.Choking()))
-	qt.Check(t, qt.IsFalse(s.SetChoking(false)))
 
 	qt.Check(t, qt.IsFalse(s.PeerInterested()))
 	s.RecvInterested(true)
@@ -132,7 +132,7 @@ func TestRecvBitfieldUnknownInfo(t *testing.T) {
 	qt.Check(t, qt.Equals(s.PeerMinPieces(), 13))
 
 	// Excess bits are dropped once the size is known.
-	s.SetNumPieces(10)
+	s.GotInfo(10)
 	checkBitmap(t, &s.PeerPieces().Bitmap, 3)
 }
 
@@ -228,23 +228,23 @@ func TestPiecesChangeDoesNotAliasState(t *testing.T) {
 
 func TestSentHaves(t *testing.T) {
 	s := NewState()
-	qt.Check(t, qt.IsTrue(s.SentHavesEmpty()))
+	qt.Check(t, qt.IsTrue(s.NoHavesAnnounced()))
 	pieces := bitmapOf(0, 2)
-	qt.Assert(t, qt.IsNil(s.SetSentBitfield(&pieces)))
+	qt.Assert(t, qt.IsNil(s.SentBitfield(&pieces)))
 	// The bitfield is copied.
 	pieces.Add(1)
+	qt.Check(t, qt.IsFalse(s.HaveAnnounced(1)))
+	qt.Check(t, qt.IsTrue(s.HaveAnnounced(2)))
+	qt.Check(t, qt.IsNotNil(s.SentBitfield(&pieces)))
+
+	qt.Check(t, qt.IsTrue(s.SentHave(1)))
 	qt.Check(t, qt.IsFalse(s.SentHave(1)))
-	qt.Check(t, qt.IsTrue(s.SentHave(2)))
-	qt.Check(t, qt.IsNotNil(s.SetSentBitfield(&pieces)))
 
-	qt.Check(t, qt.IsTrue(s.SetSentHave(1)))
-	qt.Check(t, qt.IsFalse(s.SetSentHave(1)))
-
-	s.SetSentHaveNone()
-	qt.Check(t, qt.IsTrue(s.SentHavesEmpty()))
-	s.SetSentHaveAll(3)
-	qt.Check(t, qt.IsFalse(s.SetSentHave(2)))
-	qt.Check(t, qt.IsTrue(s.SetSentHave(3)))
+	s.SentHaveNone()
+	qt.Check(t, qt.IsTrue(s.NoHavesAnnounced()))
+	s.SentHaveAll(3)
+	qt.Check(t, qt.IsFalse(s.SentHave(2)))
+	qt.Check(t, qt.IsTrue(s.SentHave(3)))
 }
 
 func TestAllowedFast(t *testing.T) {
@@ -256,7 +256,7 @@ func TestAllowedFast(t *testing.T) {
 	qt.Check(t, qt.IsFalse(s.RecvAllowedFast(10, g.Some(10))))
 	checkBitmap(t, &s.PeerAllowedFast().Bitmap, 3, 9)
 	// Learning the piece count drops pieces past the end.
-	s.SetNumPieces(5)
+	s.GotInfo(5)
 	checkBitmap(t, &s.PeerAllowedFast().Bitmap, 3)
 }
 
@@ -274,14 +274,14 @@ func TestMetadataRequests(t *testing.T) {
 	qt.Check(t, qt.IsFalse(s.MetadataPieceRequested(2)))
 	// A response we didn't ask for.
 	qt.Check(t, qt.IsFalse(s.RecvMetadataPiece(2)))
-	qt.Check(t, qt.IsTrue(s.SetMetadataPieceRequested(2)))
-	qt.Check(t, qt.IsFalse(s.SetMetadataPieceRequested(2)))
+	qt.Check(t, qt.IsTrue(s.SentMetadataRequest(2)))
+	qt.Check(t, qt.IsFalse(s.SentMetadataRequest(2)))
 	qt.Check(t, qt.IsTrue(s.MetadataPieceRequested(2)))
 	qt.Check(t, qt.IsFalse(s.MetadataPieceRequested(1)))
 	qt.Check(t, qt.IsTrue(s.RecvMetadataPiece(2)))
 	// Only one response per request.
 	qt.Check(t, qt.IsFalse(s.RecvMetadataPiece(2)))
-	qt.Check(t, qt.IsTrue(s.SetMetadataPieceRequested(2)))
+	qt.Check(t, qt.IsTrue(s.SentMetadataRequest(2)))
 }
 
 func TestOnlyFirstPortIsActedOn(t *testing.T) {

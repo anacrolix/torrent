@@ -183,7 +183,7 @@ func (cn *PeerConn) onGotInfo(info *metainfo.Info) {
 // Correct the PeerPieces slice length. Return false if the existing slice is invalid, such as by
 // receiving badly sized BITFIELD, or invalid HAVE messages.
 func (cn *PeerConn) setNumPieces(num pieceIndex) {
-	cn.wireState.SetNumPieces(num)
+	cn.wireState.GotInfo(num)
 	cn.peerPiecesChanged()
 }
 
@@ -222,7 +222,7 @@ func (cn *PeerConn) utp() bool {
 }
 
 func (cn *PeerConn) onClose() {
-	cn.deleteAllPeerRequests()
+	cn.onWireClosed("PeerConn.onClose")
 	if cn.pex.IsEnabled() {
 		cn.pex.Close()
 	}
@@ -254,7 +254,7 @@ func (cn *PeerConn) requestMetadataPiece(index int) {
 	if eID == pp.ExtensionDeleteNumber {
 		return
 	}
-	if !cn.wireState.SetMetadataPieceRequested(index) {
+	if !cn.wireState.SentMetadataRequest(index) {
 		return
 	}
 	cn.protocolLogger.WithDefaultLevel(log.Debug).Printf("requesting metadata piece %d", index)
@@ -266,19 +266,19 @@ func (cn *PeerConn) requestedMetadataPiece(index int) bool {
 }
 
 func (cn *PeerConn) onPeerSentCancel(r Request) {
-	if !cn.havePeerRequest(r) {
+	known, sendReject := cn.wireState.RecvCancel(r)
+	if !known {
 		torrent.Add("unexpected cancels received", 1)
 		return
 	}
-	if cn.fastEnabled() {
-		cn.reject(r)
-	} else {
-		cn.deletePeerRequest(r)
+	cn.dropLocalPeerRequest(r)
+	if sendReject {
+		cn.write(r.ToMsg(pp.Reject))
 	}
 }
 
-func (me *PeerConn) deletePeerRequest(r Request) {
-	me.wireState.DeletePeerRequest(r)
+// Drops our buffers for a peer request that's no longer outstanding in wireState.
+func (me *PeerConn) dropLocalPeerRequest(r Request) {
 	delete(me.unreadPeerRequests, r)
 	me.deleteReadyPeerRequest(r)
 }
@@ -292,28 +292,30 @@ func (me *PeerConn) unreadPeerRequest(r Request) bool {
 	return g.MapContains(me.unreadPeerRequests, r)
 }
 
-// Records an accepted peer request, to be read from storage.
+// Queues a peer request accepted by wireState to be read from storage.
 func (me *PeerConn) addPeerRequest(r Request) {
-	me.wireState.AddPeerRequest(r)
+	panicif.False(me.wireState.HavePeerRequest(r))
 	g.MakeMapIfNilWithCap(&me.unreadPeerRequests, localClientReqq)
 	me.unreadPeerRequests[r] = struct{}{}
 }
 
 func (cn *PeerConn) choke(msg messageWriter) (more bool) {
-	if !cn.wireState.SetChoking(true) {
+	changed, droppedPeerRequests := cn.wireState.SentChoke()
+	if !changed {
 		return true
 	}
 	more = msg(pp.Message{
 		Type: pp.Choke,
 	})
-	if !cn.fastEnabled() {
-		cn.deleteAllPeerRequests()
+	if droppedPeerRequests {
+		cn.dropAllLocalPeerRequests()
 	}
 	return
 }
 
-func (cn *PeerConn) deleteAllPeerRequests() {
-	cn.wireState.ClearPeerRequests()
+// Drops our buffers for the peer's requests, after wireState has forgotten them all.
+func (cn *PeerConn) dropAllLocalPeerRequests() {
+	panicif.NotZero(cn.wireState.NumPeerRequests())
 	clear(cn.unreadPeerRequests)
 	for _, prd := range cn.readyPeerRequests {
 		cn.releasePeerRequestData(prd)
@@ -322,7 +324,7 @@ func (cn *PeerConn) deleteAllPeerRequests() {
 }
 
 func (cn *PeerConn) unchoke(msg func(pp.Message) bool) bool {
-	if !cn.wireState.SetChoking(false) {
+	if !cn.wireState.SentUnchoke() {
 		return true
 	}
 	return msg(pp.Message{
@@ -358,11 +360,6 @@ func (me *PeerConn) handleCancel(r RequestIndex) {
 	me.write(makeCancelMessage(me.t.requestIndexToRequest(r)))
 }
 
-// Whether we should expect a reject message after sending a cancel.
-func (me *PeerConn) remoteRejectsCancels() bool {
-	return peerWire.RejectsCancels(me.PeerID, me.fastEnabled())
-}
-
 func (cn *PeerConn) fillWriteBuffer() {
 	if cn.messageWriter.writeBuffer.Len() > writeBufferLowWaterLen {
 		// Fully committing to our max requests requires sufficient space (see
@@ -384,7 +381,7 @@ func (cn *PeerConn) fillWriteBuffer() {
 }
 
 func (cn *PeerConn) have(piece pieceIndex) {
-	if !cn.wireState.SetSentHave(piece) {
+	if !cn.wireState.SentHave(piece) {
 		return
 	}
 	cn.write(pp.Message{
@@ -394,7 +391,7 @@ func (cn *PeerConn) have(piece pieceIndex) {
 }
 
 func (cn *PeerConn) postBitfield() {
-	if !cn.wireState.SentHavesEmpty() {
+	if !cn.wireState.NoHavesAnnounced() {
 		panic("bitfield must be first have-related message sent")
 	}
 	if !cn.t.haveAnyPieces() {
@@ -404,7 +401,7 @@ func (cn *PeerConn) postBitfield() {
 		Type:     pp.Bitfield,
 		Bitfield: cn.t.bitfield(),
 	})
-	panicif.Err(cn.wireState.SetSentBitfield(&cn.t._completedPieces.Bitmap))
+	panicif.Err(cn.wireState.SentBitfield(&cn.t._completedPieces.Bitmap))
 }
 
 // sendAllowedFastSet computes the BEP 6 Allowed Fast Set for the remote peer
@@ -544,16 +541,14 @@ func (cn *PeerConn) wroteBytes(n int64) {
 }
 
 func (c *PeerConn) fastEnabled() bool {
-	return c.PeerExtensionBytes.SupportsFast() && c.t.cl.config.Extensions.SupportsFast()
+	return c.wireState.Fast()
 }
 
 func (c *PeerConn) reject(r Request) {
-	if !c.fastEnabled() {
-		panic("fast not enabled")
-	}
 	c.write(r.ToMsg(pp.Reject))
-	// It is possible to reject a request before it is added to peer requests due to being invalid.
-	c.deletePeerRequest(r)
+	// It is possible to reject a request before it's outstanding due to being invalid.
+	c.wireState.SentReject(r)
+	c.dropLocalPeerRequest(r)
 }
 
 func (c *PeerConn) maximumPeerRequestChunkLength() (_ g.Option[int]) {
@@ -580,30 +575,33 @@ func requestedChunkLengthKey(l pp.Integer) string {
 // startFetch is for testing purposes currently.
 func (c *PeerConn) onReadRequest(r Request, startFetch bool) error {
 	requestedChunkLengths.Add(requestedChunkLengthKey(r.Length), 1)
-	switch c.wireState.CheckPeerRequest(r, localClientReqq) {
+	check, action := c.wireState.RecvRequest(r, localClientReqq)
+	switch check {
 	case peerWire.PeerRequestOk:
 	case peerWire.PeerRequestDuplicate:
 		torrent.Add("duplicate requests received", 1)
-		if c.fastEnabled() {
-			return errors.New("received duplicate request with fast enabled")
-		}
-		return nil
 	case peerWire.PeerRequestWhileChoking:
 		torrent.Add("requests received while choking", 1)
-		if c.fastEnabled() {
-			torrent.Add("requests rejected while choking", 1)
-			c.reject(r)
-		}
-		return nil
 	case peerWire.PeerRequestQueueFull:
 		torrent.Add("requests received while queue full", 1)
-		if c.fastEnabled() {
-			c.reject(r)
-		}
 		// BEP 6 says we may close here if we choose.
-		return nil
 	default:
-		panic("unhandled peer request check")
+		panic(check)
+	}
+	switch action {
+	case peerWire.PeerRequestServe:
+	case peerWire.PeerRequestIgnore:
+		return nil
+	case peerWire.PeerRequestReject:
+		if check == peerWire.PeerRequestWhileChoking {
+			torrent.Add("requests rejected while choking", 1)
+		}
+		c.reject(r)
+		return nil
+	case peerWire.PeerRequestError:
+		return peerWire.ErrDuplicateRequest
+	default:
+		panic(action)
 	}
 	if opt := c.maximumPeerRequestChunkLength(); opt.Ok && int(r.Length) > opt.Value {
 		err := fmt.Errorf("peer requested chunk too long (%v)", r.Length)
@@ -697,7 +695,6 @@ func (me *PeerConn) takeReadyPeerRequest(r Request) (prd peerRequestData, ok boo
 		return
 	}
 	delete(me.readyPeerRequests, r)
-	me.wireState.DeletePeerRequest(r)
 	if len(prd.buf) > 0 {
 		me.peerRequestDataAllocDecreased.Broadcast()
 	}
@@ -756,7 +753,8 @@ func (c *PeerConn) peerRequestDataReadFailed(err error, r Request) {
 	}
 	c.logger.Levelf(logLevel, "error reading chunk for peer Request %v: %v", r, err)
 	if c.t.closed.IsSet() {
-		c.deletePeerRequest(r)
+		// The conn is closing, and wireState will forget the request then.
+		c.dropLocalPeerRequest(r)
 		return
 	}
 	i := pieceIndex(r.Index)
@@ -977,19 +975,17 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		}
 		switch msg.Type {
 		case pp.Choke:
-			if !c.wireState.RecvChoke() {
+			changed, deleted := c.wireState.RecvChoke()
+			if !changed {
 				break
 			}
-			if !c.fastEnabled() {
-				c.deleteAllRequests("choked by non-fast PeerConn")
-			} else { //nolint:staticcheck // SA9003: intentionally empty, see comment below
-				// We don't decrement pending requests here, let's wait for the peer to either
-				// reject or satisfy the outstanding requests. Additionally, some peers may unchoke
-				// us and resume where they left off, we don't want to have piled on to those chunks
-				// in the meanwhile. I think a peer's ability to abuse this should be limited: they
-				// could let us request a lot of stuff, then choke us and never reject, but they're
-				// only a single peer, our chunk balancing should smooth over this abuse.
-			}
+			// With the fast extension, wireState keeps our requests outstanding: we wait for the
+			// peer to either reject or satisfy them. Additionally, some peers may unchoke us and
+			// resume where they left off, we don't want to have piled on to those chunks in the
+			// meanwhile. I think a peer's ability to abuse this should be limited: they could let
+			// us request a lot of stuff, then choke us and never reject, but they're only a single
+			// peer, our chunk balancing should smooth over this abuse.
+			c.onDeletedRequests(deleted, "choked by non-fast PeerConn")
 			c.updateExpectingChunks()
 		case pp.Unchoke:
 			if !c.wireState.RecvUnchoke() {
@@ -1140,7 +1136,7 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 			if err = checkMetadataSize(d.MetadataSize); err != nil {
 				return fmt.Errorf("setting metadata size to %d: %w", d.MetadataSize, err)
 			}
-			c.wireState.SetPeerMetadataSize(d.MetadataSize)
+			c.wireState.RecvMetadataSize(d.MetadataSize)
 			t.updateMetadataSize()
 		}
 		c.requestPendingMetadata()
@@ -1298,6 +1294,7 @@ func (c *PeerConn) tickleWriter() {
 func (c *PeerConn) sendChunk(r Request, msg func(pp.Message) bool) (more bool) {
 	prd, ok := c.takeReadyPeerRequest(r)
 	panicif.False(ok)
+	panicif.False(c.wireState.SentPiece(r))
 	panicif.NotEq(len(prd.buf), r.Length.Int())
 	c.lastChunkSent = time.Now()
 	more = msg(pp.Message{
@@ -1750,7 +1747,7 @@ func (cn *PeerConn) peerImplWriteStatus(w io.Writer) {
 }
 
 func (cn *PeerConn) setInterested(interested bool) bool {
-	if !cn.wireState.SetInterested(interested) {
+	if !cn.wireState.SentInterested(interested) {
 		return true
 	}
 	if interested {
@@ -1833,7 +1830,7 @@ func (cn *PeerConn) request(r RequestIndex) (more bool, err error) {
 }
 
 func (me *PeerConn) cancel(r RequestIndex) {
-	if !me.wireState.SentCancel(r, me.t.requestIndexToRequest(r), me.remoteRejectsCancels()) {
+	if !me.wireState.SentCancel(r, me.t.requestIndexToRequest(r)) {
 		panic("request not existing should have been guarded")
 	}
 	me.onDeletedRequest(r)
@@ -1871,17 +1868,7 @@ func (c *PeerConn) remoteRejectedRequest(req Request) bool {
 	return true
 }
 
-// Returns true if an outstanding request is removed. Cancelled requests should be handled
-// separately.
-func (c *PeerConn) deleteRequest(r RequestIndex) bool {
-	if !c.wireState.DeleteRequest(r, c.t.requestIndexToRequest(r)) {
-		return false
-	}
-	c.onDeletedRequest(r)
-	return true
-}
-
-// Effects of an outstanding request being removed from wire, other than by a cancel ack.
+// Effects of an outstanding request being removed from wireState, other than by a cancel ack.
 func (c *PeerConn) onDeletedRequest(r RequestIndex) {
 	for _, f := range c.callbacks.DeletedRequest {
 		f(PeerRequestEvent{c.peerPtr(), c.t.requestIndexToRequest(r)})
@@ -1894,22 +1881,28 @@ func (c *PeerConn) onDeletedRequest(r RequestIndex) {
 	delete(c.t.requestState, r)
 }
 
-func (c *PeerConn) deleteAllRequests(reason updateRequestReason) {
-	if c.wireState.NumRequests() == 0 {
+// Effects of wireState forgetting our outstanding requests without the peer replying.
+func (c *PeerConn) onDeletedRequests(deleted []RequestIndex, reason updateRequestReason) {
+	if len(deleted) == 0 {
 		return
 	}
-	c.wireState.RequestState().Requests.IterateSnapshot(func(x RequestIndex) bool {
-		if !c.deleteRequest(x) {
-			panic("request should exist")
-		}
-		return true
-	})
+	for _, r := range deleted {
+		c.onDeletedRequest(r)
+	}
 	c.assertNoRequests()
 	c.t.iterPeers(func(p *Peer) {
 		if p.isLowOnRequests() {
 			p.onNeedUpdateRequests(reason)
 		}
 	})
+}
+
+// The connection is closed: wireState forgets everything outstanding, and we drop our buffers and
+// apply the effects of our requests going away. It's safe to call more than once.
+func (c *PeerConn) onWireClosed(reason updateRequestReason) {
+	deleted := c.wireState.Closed()
+	c.dropAllLocalPeerRequests()
+	c.onDeletedRequests(deleted, reason)
 }
 
 func (c *PeerConn) assertNoRequests() {

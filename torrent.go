@@ -2139,7 +2139,7 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 		}
 	}
 	torrent.Add("deleted connections", 1)
-	c.deleteAllRequests("Torrent.deletePeerConn")
+	c.onWireClosed("Torrent.deletePeerConn")
 	if len(t.conns) == 0 {
 		panicif.NotZero(len(t.requestState))
 	}

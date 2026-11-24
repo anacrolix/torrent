@@ -57,9 +57,8 @@ type PeerConn struct {
 	// be wrapping WebRTC, uTP, or TCP etc. Used in writing the conn status for peers.
 	connString string
 
-	// See BEP 3 etc.
-	PeerID             PeerID
-	PeerExtensionBytes pp.PeerExtensionBits
+	// What the peer sent in its BEP 3 handshake: PeerID and PeerExtensionBytes.
+	peerHandshake
 
 	// The local extended protocols to advertise in the extended handshake, and to support receiving
 	// from the peer. This will point to the Client default when the PeerConnAdded callback is
@@ -126,7 +125,7 @@ func (cn *PeerConn) pexStatus() string {
 	}
 	return fmt.Sprintf(
 		"%v conns, %v unsent events",
-		len(cn.pex.remoteLiveConns),
+		cn.wire.NumPeerPexLiveConns(),
 		cn.pex.numPending(),
 	)
 }
@@ -371,18 +370,7 @@ func (me *PeerConn) handleCancel(r RequestIndex) {
 
 // Whether we should expect a reject message after sending a cancel.
 func (me *PeerConn) remoteRejectsCancels() bool {
-	if !me.fastEnabled() {
-		return false
-	}
-	if me.remoteIsTransmission() {
-		// Transmission did not send rejects for received cancels. See
-		// https://github.com/transmission/transmission/pull/2275. Fixed in 4.0.0-beta.1 onward in
-		// https://github.com/transmission/transmission/commit/76719bf34c255da4fca991c2ad3fa4b65d2154b1.
-		// Peer ID prefix scheme described
-		// https://github.com/transmission/transmission/blob/7ec7607bbcf0fa99bd4b157b9b0f0c411d59f45d/CMakeLists.txt#L128-L149.
-		return me.PeerID[3] >= '4'
-	}
-	return true
+	return peerWire.RejectsCancels(me.PeerID, me.fastEnabled())
 }
 
 func (cn *PeerConn) fillWriteBuffer() {
@@ -1122,7 +1110,7 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		if err != nil {
 			// These clients use their own extension IDs for outgoing message
 			// types, which is incorrect.
-			if bytes.HasPrefix(c.PeerID[:], []byte("-SD0100-")) || strings.HasPrefix(string(c.PeerID[:]), "-XL0012-") {
+			if peerWire.UsesOwnExtensionIDs(c.PeerID) {
 				err = nil
 			}
 		}
@@ -1192,7 +1180,7 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		if !c.pex.IsEnabled() {
 			return nil // or hang-up maybe?
 		}
-		err = c.pex.Recv(payload)
+		err = c.pex.Recv(&c.wire, payload)
 		if err != nil {
 			err = fmt.Errorf("receiving pex message: %w", err)
 		}
@@ -1393,10 +1381,6 @@ func (pc *PeerConn) PeerPieces() *roaring.Bitmap {
 	pc.locker().RLock()
 	defer pc.locker().RUnlock()
 	return pc.newPeerPieces()
-}
-
-func (pc *PeerConn) remoteIsTransmission() bool {
-	return bytes.HasPrefix(pc.PeerID[:], []byte("-TR")) && pc.PeerID[7] == '-'
 }
 
 func (pc *PeerConn) remoteDialAddrPort() (netip.AddrPort, error) {

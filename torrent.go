@@ -3730,11 +3730,12 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 				setAdd(&t.cl.probablyOnlyConnectedDueToHolepunch, holepunchAddr)
 			}
 		}
+		pexFlags, _ := sender.wire.PeerPexLiveConn(msg.AddrPort)
 		opts := outgoingConnOpts{
 			peerInfo: PeerInfo{
 				Addr:         msg.AddrPort,
 				Source:       PeerSourceUtHolepunch,
-				PexPeerFlags: sender.pex.remoteLiveConns[msg.AddrPort].UnwrapOrZeroValue(),
+				PexPeerFlags: pexFlags,
 			},
 			t: t,
 			// Don't attempt to start our own rendezvous if we fail to connect.
@@ -3774,7 +3775,7 @@ func (t *Torrent) trySendHolepunchRendezvous(addrPort netip.AddrPort) error {
 			continue
 		}
 		if pc.supportsExtension(pp.ExtensionNamePex) {
-			if !g.MapContains(pc.pex.remoteLiveConns, addrPort) {
+			if _, ok := pc.wire.PeerPexLiveConn(addrPort); !ok {
 				continue
 			}
 		}

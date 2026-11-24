@@ -62,6 +62,8 @@ type State struct {
 
 	// Requests from the peer that are outstanding.
 	peerRequests map[Request]struct{}
+
+	pex pexState
 }
 
 // NewState returns the state of a BitTorrent connection before any messages: both sides are

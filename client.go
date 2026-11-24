@@ -1245,8 +1245,7 @@ func (cl *Client) connBtHandshake(ctx context.Context, c *PeerConn, ih *metainfo
 	successfulPeerWireProtocolHandshakePeerReservedBytes.addSafeKey(
 		hex.EncodeToString(res.PeerExtensionBits[:]))
 	ret = res.Hash
-	c.PeerExtensionBytes = res.PeerExtensionBits
-	c.PeerID = res.PeerID
+	peerWire.RecvHandshake(&c.peerHandshake, res)
 	c.completedHandshake = time.Now()
 	if cb := cl.config.Callbacks.CompletedHandshake; cb != nil {
 		cb(c, res.Hash)
@@ -1298,10 +1297,8 @@ func (cl *Client) runReceivedConn(c *PeerConn, releaseHandshake func()) {
 func (t *Torrent) runHandshookConn(pc *PeerConn) error {
 	pc.setTorrent(t)
 	cl := t.cl
-	for i, b := range cl.config.MinPeerExtensions {
-		if pc.PeerExtensionBytes[i]&b != b {
-			return fmt.Errorf("peer did not meet minimum peer extensions: %x", pc.PeerExtensionBytes[:])
-		}
+	if !peerWire.MeetsMinExtensions(pc.PeerExtensionBytes, cl.config.MinPeerExtensions) {
+		return fmt.Errorf("peer did not meet minimum peer extensions: %x", pc.PeerExtensionBytes[:])
 	}
 	if pc.PeerID == cl.peerID {
 		if pc.outgoing {

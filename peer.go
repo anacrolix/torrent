@@ -93,6 +93,7 @@ type (
 	}
 
 	peerExtendedHandshake = peerWire.ExtendedHandshake
+	peerHandshake         = peerWire.Handshake
 
 	updateRequestReason string
 )

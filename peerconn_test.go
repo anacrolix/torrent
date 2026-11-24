@@ -187,7 +187,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			// writeSem is unlocked.
 			t.pendAllChunkSpecs(0)
 			eachRequestIndex(func(ri RequestIndex) {
-				cn.wire.ExpectChunk(cn.t.requestIndexToRequest(ri))
+				cn.wireState.ExpectChunk(cn.t.requestIndexToRequest(ri))
 			})
 			cl.unlock()
 			ts.allChunksWritten.Add(int(numRequests))
@@ -373,7 +373,7 @@ func TestRequestMissingHashesTrailingSingleHash(t *testing.T) {
 	c.legacyPeerImpl = c
 	c.peerImpl = c
 	c.v2 = true
-	c.wire.RecvHaveAll()
+	c.wireState.RecvHaveAll()
 	c.initMessageWriter()
 	c.requestMissingHashes()
 	// The trailing block must be requested with the BEP 52 minimum length of 2.
@@ -425,7 +425,7 @@ func TestRequestMissingHashesAfterSinglePieceFile(t *testing.T) {
 	c.legacyPeerImpl = c
 	c.peerImpl = c
 	c.v2 = true
-	c.wire.RecvHaveAll()
+	c.wireState.RecvHaveAll()
 	c.initMessageWriter()
 	c.requestMissingHashes()
 	qt.Assert(t, qt.HasLen(c.sentHashRequests, 1))
@@ -523,7 +523,7 @@ func TestHaveAllThenBitfield(t *testing.T) {
 	qt.Assert(t, qt.IsNil(pc.onPeerSentHaveAll()))
 	qt.Check(t, qt.DeepEquals(pc.t.connsWithAllPieces, map[*Peer]struct{}{&pc.Peer: {}}))
 	pc.peerSentBitfield([]bool{false, false, true, false, true, true, false, false})
-	qt.Check(t, qt.Equals(pc.wire.PeerMinPieces(), 6))
+	qt.Check(t, qt.Equals(pc.wireState.PeerMinPieces(), 6))
 	qt.Check(t, qt.HasLen(pc.t.connsWithAllPieces, 0))
 	qt.Assert(t, qt.IsNil(pc.t.setInfoUnlocked(&metainfo.Info{
 		Name:        "herp",
@@ -604,7 +604,7 @@ func TestReceiveLargeRequest(t *testing.T) {
 	pc.setTorrent(tor)
 	tor._completedPieces.Add(0)
 	pc.PeerExtensionBytes.SetBit(pp.ExtensionBitFast, true)
-	pc.wire.SetChoking(false)
+	pc.wireState.SetChoking(false)
 	pc.initMessageWriter()
 	req := Request{}
 	req.Length = defaultChunkSize
@@ -721,7 +721,7 @@ func TestPeerConnPeerRequestDataLifecycle(t *testing.T) {
 	t.Run("cancel", func(t *testing.T) {
 		pc, r, baseline := newConn(t, &torrentStorageClient{&torrentStorage{}})
 		prd := pc.getPeerRequestData(r.Length.Int())
-		pc.wire.AddPeerRequest(r)
+		pc.wireState.AddPeerRequest(r)
 		g.MakeMapIfNil(&pc.readyPeerRequests)
 		pc.readyPeerRequests[r] = prd
 		pc.deletePeerRequest(r)
@@ -733,7 +733,7 @@ func TestPeerConnPeerRequestDataLifecycle(t *testing.T) {
 		prd := pc.getPeerRequestData(r.Length.Int())
 		g.MakeMapIfNil(&pc.readyPeerRequests)
 		pc.readyPeerRequests[r] = prd
-		pc.wire.SetChoking(true)
+		pc.wireState.SetChoking(true)
 		pc.deleteAllPeerRequests()
 		qt.Check(t, qt.Equals(outstandingChunkPoolBuffers(), baseline))
 	})
@@ -798,7 +798,7 @@ func BenchmarkServePeerRequests(b *testing.B) {
 	cn := cl.newConnection(nil, newConnectionOpts{network: "test"})
 	cn.setTorrent(t)
 	cn.PeerExtensionBytes.SetBit(pp.ExtensionBitFast, true)
-	cn.wire.SetChoking(false)
+	cn.wireState.SetChoking(false)
 	cn.initMessageWriter()
 	// Marshals the message like the real writer, then drops it so the buffer doesn't grow.
 	writeAndDiscard := func(msg pp.Message) bool {

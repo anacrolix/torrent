@@ -1417,11 +1417,11 @@ func (pc *PeerConn) sendInitialMessages() {
 		if pc.fastEnabled() {
 			if t.haveAllPieces() {
 				pc.write(pp.Message{Type: pp.HaveAll})
-				pc.wire.SetSentHaveAll(pc.t.NumPieces())
+				pc.wireState.SetSentHaveAll(pc.t.NumPieces())
 				return
 			} else if !t.haveAnyPieces() {
 				pc.write(pp.Message{Type: pp.HaveNone})
-				pc.wire.SetSentHaveNone()
+				pc.wireState.SetSentHaveNone()
 				return
 			}
 		}
@@ -1467,7 +1467,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 	switch d.Type {
 	case pp.DataMetadataExtensionMsgType:
 		c.modifyRelevantConnStats(add(1, func(cs *ConnStats) *Count { return &cs.MetadataChunksRead }))
-		if !c.wire.RecvMetadataPiece(piece) {
+		if !c.wireState.RecvMetadataPiece(piece) {
 			return fmt.Errorf("got unexpected piece %d", piece)
 		}
 		if d.TotalSize != len(t.metadataBytes) {
@@ -1922,9 +1922,9 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 	}
 	c = &PeerConn{
 		Peer: Peer{
-			cl:       cl,
-			outgoing: opts.outgoing,
-			wire:     peerWire.NewState(),
+			cl:        cl,
+			outgoing:  opts.outgoing,
+			wireState: peerWire.NewState(),
 			peerExtendedHandshake: peerWire.ExtendedHandshake{
 				PeerMaxRequests: 250,
 			},

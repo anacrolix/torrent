@@ -796,7 +796,7 @@ func (t *Torrent) updateMetadataSize() {
 	}
 	counts := make(map[int]int)
 	for c := range t.conns {
-		if size := c.wire.PeerMetadataSize(); size != 0 {
+		if size := c.wireState.PeerMetadataSize(); size != 0 {
 			counts[size]++
 		}
 	}
@@ -1685,7 +1685,7 @@ func (t *Torrent) updatePeerRequestsForPiece(piece pieceIndex, reason updateRequ
 			if !c.peerHasPiece(piece) {
 				return
 			}
-			if c.wire.Interested() && c.wire.PeerChoking() && !c.wire.PeerAllowedFast().Contains(piece) {
+			if c.wireState.Interested() && c.wireState.PeerChoking() && !c.wireState.PeerAllowedFast().Contains(piece) {
 				return
 			}
 			c.onNeedUpdateRequests(reason)
@@ -2127,7 +2127,7 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 	}
 	_, ret = t.conns[c]
 	delete(t.conns, c)
-	if ret && c.wire.PeerMetadataSize() != 0 {
+	if ret && c.wireState.PeerMetadataSize() != 0 {
 		// The conn no longer counts towards the metadata size.
 		t.updateMetadataSize()
 	}
@@ -3730,7 +3730,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 				setAdd(&t.cl.probablyOnlyConnectedDueToHolepunch, holepunchAddr)
 			}
 		}
-		pexFlags, _ := sender.wire.PeerPexLiveConn(msg.AddrPort)
+		pexFlags, _ := sender.wireState.PeerPexLiveConn(msg.AddrPort)
 		opts := outgoingConnOpts{
 			peerInfo: PeerInfo{
 				Addr:         msg.AddrPort,
@@ -3775,7 +3775,7 @@ func (t *Torrent) trySendHolepunchRendezvous(addrPort netip.AddrPort) error {
 			continue
 		}
 		if pc.supportsExtension(pp.ExtensionNamePex) {
-			if _, ok := pc.wire.PeerPexLiveConn(addrPort); !ok {
+			if _, ok := pc.wireState.PeerPexLiveConn(addrPort); !ok {
 				continue
 			}
 		}

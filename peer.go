@@ -83,7 +83,7 @@ type (
 		// What we know about the peer from the BitTorrent messages exchanged with it: choke and
 		// interest, claimed pieces, allowed fast etc. This belongs in PeerConn, but the request
 		// code is shared with webseeds, which leave it zero (never choked, no allowed fast).
-		wire peerWire.State
+		wireState peerWire.State
 	}
 
 	PeerSource string
@@ -158,7 +158,7 @@ func (cn *Peer) bestPeerNumPieces() pieceIndex {
 	if cn.t.haveInfo() {
 		return cn.t.numPieces()
 	}
-	return cn.wire.PeerMinPieces()
+	return cn.wireState.PeerMinPieces()
 }
 
 // How many pieces we think the peer has.
@@ -402,7 +402,7 @@ func (c *Peer) receiveChunkPrologue(msg *pp.Message) (_ *pendingChunkWrite, err 
 		c.recordBlockForSmartBan(req, data)
 	})
 
-	if c.wire.PeerChoking() {
+	if c.wireState.PeerChoking() {
 		ChunksReceived.Add("while choked", 1)
 	}
 

@@ -37,6 +37,13 @@ type ClientStats struct {
 	NumPeersDialableOnlyAfterHolepunch              int
 	NumPeersDialedSuccessfullyAfterHolepunchConnect int
 	NumPeersProbablyOnlyConnectedDueToHolepunch     int
+
+	// Turns waiting in lock domain actors now, summed over domains.
+	LockDomainTurnsQueued int
+	// The most turns that have waited at once in any one lock domain's actor.
+	LockDomainTurnsQueuedMax int
+	// The most actions any one lock domain has deferred to exclusive mode in a single hold.
+	LockDomainExclusiveActionsMax int
 }
 
 func (cl *Client) statsLocked() (stats ClientStats) {
@@ -45,6 +52,7 @@ func (cl *Client) statsLocked() (stats ClientStats) {
 	for t := range cl.torrents {
 		stats.TorrentGauges.Add(t.gaugesForClientStats())
 	}
+	cl.addLockDomainStats(&stats)
 
 	stats.ActiveHalfOpenAttempts = cl.numHalfOpen
 

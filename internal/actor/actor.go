@@ -28,6 +28,8 @@ type Actor struct {
 	// The goroutine is started by the first turn that can't run inline.
 	started bool
 	closed  bool
+	// The most turns that have been waiting at once.
+	maxQueued int
 	// Holds a token when the Actor's goroutine should check the queue again.
 	wake chan struct{}
 	done chan struct{}
@@ -69,6 +71,7 @@ func (a *Actor) Post(f func()) {
 		return
 	}
 	a.queue = append(a.queue, f)
+	a.maxQueued = max(a.maxQueued, len(a.queue))
 	a.startLocked()
 	// The first turn queued while idle is the only one that needs to wake the goroutine. If the
 	// Actor is busy, whoever is running turns checks the queue when it finishes.
@@ -105,6 +108,7 @@ func (a *Actor) Call(f func()) bool {
 		ran = true
 		close(done)
 	})
+	a.maxQueued = max(a.maxQueued, len(a.queue))
 	a.startLocked()
 	a.mu.Unlock()
 	select {
@@ -182,4 +186,18 @@ func (a *Actor) run() {
 		a.busy = false
 		a.mu.Unlock()
 	}
+}
+
+// Stats describes an Actor's queue.
+type Stats struct {
+	// Turns waiting to run now, not counting a batch that is running.
+	Queued int
+	// The most turns that have been waiting at once.
+	MaxQueued int
+}
+
+func (a *Actor) Stats() Stats {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return Stats{Queued: len(a.queue), MaxQueued: a.maxQueued}
 }

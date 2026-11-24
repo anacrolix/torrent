@@ -35,6 +35,8 @@ type lockDomain struct {
 	exclusiveActions []func()
 	// Keys of exclusiveActions added with deferExclusiveOnce.
 	exclusiveActionKeys map[any]struct{}
+	// The most exclusiveActions queued in one hold of the domain.
+	maxExclusiveActions int
 	// Scratch space for use while the domain is held.
 	roaringIntIterator roaring.IntIterator
 	// Runs turns with the domain held, batching turns from several goroutines into one hold. Peer
@@ -201,7 +203,9 @@ func (t *Torrent) roaringIntIterator() *roaring.IntIterator {
 // must recheck any state it depends on, since the domain may have changed in between.
 func (t *Torrent) deferExclusive(f func()) {
 	if t.inDomainMode() {
-		t.domain.exclusiveActions = append(t.domain.exclusiveActions, f)
+		d := t.domain
+		d.exclusiveActions = append(d.exclusiveActions, f)
+		d.maxExclusiveActions = max(d.maxExclusiveActions, len(d.exclusiveActions))
 		return
 	}
 	t.cl.assertExclusive()
@@ -281,4 +285,19 @@ func (me torrentLocker) DeferUniqueUnaryFunc(arg any, action func()) {
 // Whether the Torrent shares its storage capacity's domain, rather than having its own.
 func (t *Torrent) hasCapacityDomain() bool {
 	return t.storage != nil && t.storage.Capacity != nil && t.cl.capacityDomains[t.storage.Capacity] == t.domain
+}
+
+// Adds queue depths for the lock domains to stats. Called with the Client lock held in any mode.
+func (cl *Client) addLockDomainStats(stats *ClientStats) {
+	cl.lockDomainsMu.Lock()
+	ds := slices.Collect(maps.Keys(cl.lockDomains))
+	cl.lockDomainsMu.Unlock()
+	for _, d := range ds {
+		as := d.actor.Stats()
+		stats.LockDomainTurnsQueued += as.Queued
+		stats.LockDomainTurnsQueuedMax = max(stats.LockDomainTurnsQueuedMax, as.MaxQueued)
+		d.mu.internal.RLock()
+		stats.LockDomainExclusiveActionsMax = max(stats.LockDomainExclusiveActionsMax, d.maxExclusiveActions)
+		d.mu.internal.RUnlock()
+	}
 }

@@ -615,6 +615,14 @@ func (me *regularTrackerAnnounceDispatcher) updateTorrentInput(t *Torrent) {
 	for key := range t.regularTrackerAnnounceState {
 		panicif.Zero(key.url)
 		panicif.Zero(key.ShortInfohash)
+		if cur := me.torrentFromShortInfohash(key.ShortInfohash); cur != nil && cur != t {
+			// t was dropped and re-added as another Torrent, which owns the key's input now.
+			continue
+		}
+		if !me.announceData.ContainsKey(key) {
+			// t was dropped and the key was removed as dormant (nothing left to announce).
+			continue
+		}
 		// Avoid clobbering derived and unrelated values (overdue and active).
 		res := me.announceData.Update(
 			key,

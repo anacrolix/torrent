@@ -11,6 +11,7 @@ import (
 	"github.com/RoaringBitmap/roaring/v2"
 	g "github.com/anacrolix/generics"
 
+	requestStrategy "github.com/anacrolix/torrent/internal/request-strategy"
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 )
 
@@ -49,6 +50,16 @@ type State struct {
 
 	// Whether the peer has sent a Port message.
 	portReceived bool
+
+	// Our interest, outstanding requests, and cancels awaiting a response. See RequestState.
+	requests requestStrategy.PeerRequestState
+	// The number of Piece messages we'll accept per chunk. Due to latency, buffering, and
+	// implementation differences, we may receive chunks that are no longer requested. This could
+	// use a roaring.BSI if the memory use becomes noticeable.
+	validReceiveChunks map[RequestIndex]int
+
+	// Requests from the peer that are outstanding.
+	peerRequests map[Request]struct{}
 }
 
 // NewState returns the state of a BitTorrent connection before any messages: both sides are

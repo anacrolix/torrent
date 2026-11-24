@@ -80,7 +80,7 @@ func TestDeferStorageOpenFromMagnet(t *testing.T) {
 		qt.Check(t, qt.Equals(tor.numPiecesCompleted(), 0))
 		// Nothing is requested without storage.
 		for pc := range tor.conns {
-			qt.Check(t, qt.IsTrue(pc.requestState.Requests.IsEmpty()))
+			qt.Check(t, qt.IsTrue(pc.wire.NumRequests() == 0))
 		}
 	}()
 	qt.Check(t, qt.Equals(cs.opens.Load(), 0))

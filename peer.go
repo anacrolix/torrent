@@ -76,8 +76,9 @@ type (
 		lastBecameInterested time.Time
 		priorInterest        time.Duration
 
-		// Stuff controlled by the remote peer.
-		PeerPrefersEncryption bool // as indicated by 'e' field in extension handshake
+		// What the peer told us in its extended handshake. Embedded so its fields, like
+		// PeerExtensionIDs and PeerPrefersEncryption, keep their selectors on Peer and PeerConn.
+		peerExtendedHandshake
 
 		// What we know about the peer from the BitTorrent messages exchanged with it: choke and
 		// interest, claimed pieces, allowed fast etc. This belongs in PeerConn, but the request
@@ -91,7 +92,7 @@ type (
 		String() string
 	}
 
-	peerRequests = orderedBitmap[RequestIndex]
+	peerExtendedHandshake = peerWire.ExtendedHandshake
 
 	updateRequestReason string
 )

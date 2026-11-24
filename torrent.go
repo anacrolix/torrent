@@ -1685,7 +1685,7 @@ func (t *Torrent) updatePeerRequestsForPiece(piece pieceIndex, reason updateRequ
 			if !c.peerHasPiece(piece) {
 				return
 			}
-			if c.requestState.Interested && c.wire.PeerChoking() && !c.wire.PeerAllowedFast().Contains(piece) {
+			if c.wire.Interested() && c.wire.PeerChoking() && !c.wire.PeerAllowedFast().Contains(piece) {
 				return
 			}
 			c.onNeedUpdateRequests(reason)

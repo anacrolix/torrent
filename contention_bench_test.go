@@ -11,7 +11,6 @@ import (
 	"sync"
 	"testing"
 
-	g "github.com/anacrolix/generics"
 	"github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -126,9 +125,8 @@ func benchContention(b *testing.B, kind string, k int) {
 			cl.lock()
 			for i, c := range conns {
 				t.pendAllChunkSpecs(i)
-				g.MakeMapIfNil(&c.cn.validReceiveChunks)
 				for ri := t.pieceRequestIndexBegin(i); ri < t.pieceRequestIndexBegin(i+1); ri++ {
-					c.cn.validReceiveChunks[ri] = 1
+					c.cn.wire.ExpectChunk(ri)
 				}
 			}
 			cl.unlock()

@@ -231,7 +231,6 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	pc := PeerConn{}
 	pc.t = tt
 	pc.legacyPeerImpl = &pc
-	pc.initRequestState()
 	g.InitNew(&pc.callbacks)
 	tt.cl.lock()
 	tt.conns[&pc] = struct{}{}
@@ -260,7 +259,6 @@ func TestRelativeAvailabilityHaveAllHaveNoneHave(t *testing.T) {
 	pc := PeerConn{}
 	pc.t = tt
 	pc.legacyPeerImpl = &pc
-	pc.initRequestState()
 	g.InitNew(&pc.callbacks)
 	tt.cl.lock()
 	tt.conns[&pc] = struct{}{}

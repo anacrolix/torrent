@@ -78,7 +78,7 @@ func TestReceiveChunkMustMatchRequest(t *testing.T) {
 			tt, c := newNetworkBoundsTestConn(t, TestingConfig(t), true)
 			qt.Assert(t, qt.Equals(tt.pieceLength(0), pp.Integer(5)))
 			ri := tt.requestIndexFromRequest(Request{Index: 0})
-			c.validReceiveChunks = map[RequestIndex]int{ri: 1}
+			c.wire.ExpectChunk(ri)
 			err := c.receiveChunk(&pp.Message{
 				Type:  pp.Piece,
 				Index: 0,

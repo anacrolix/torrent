@@ -1928,17 +1928,18 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 			cl:       cl,
 			outgoing: opts.outgoing,
 			wire:     peerWire.NewState(),
+			peerExtendedHandshake: peerWire.ExtendedHandshake{
+				PeerMaxRequests: 250,
+			},
 
 			RemoteAddr:      opts.remoteAddr,
 			localPublicAddr: opts.localPublicAddr,
 			Network:         opts.network,
 			callbacks:       &cl.config.Callbacks,
 		},
-		PeerMaxRequests: 250,
-		connString:      opts.connString,
-		conn:            nc,
+		connString: opts.connString,
+		conn:       nc,
 	}
-	c.initRequestState()
 	// TODO: Need to be much more explicit about this, including allowing non-IP bannable addresses.
 	if opts.remoteAddr != nil {
 		netipAddrPort, err := netip.ParseAddrPort(opts.remoteAddr.String())

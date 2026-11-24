@@ -186,9 +186,8 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			// The chunk must be written to storage everytime, to ensure the
 			// writeSem is unlocked.
 			t.pendAllChunkSpecs(0)
-			g.MakeMapIfNil(&cn.validReceiveChunks)
 			eachRequestIndex(func(ri RequestIndex) {
-				cn.validReceiveChunks[ri] = 1
+				cn.wire.ExpectChunk(ri)
 			})
 			cl.unlock()
 			ts.allChunksWritten.Add(int(numRequests))
@@ -448,10 +447,10 @@ func TestConnPexPeerFlags(t *testing.T) {
 		conn *PeerConn
 		f    pp.PexPeerFlags
 	}{
-		{&PeerConn{Peer: Peer{outgoing: false, PeerPrefersEncryption: false}}, 0},
-		{&PeerConn{Peer: Peer{outgoing: false, PeerPrefersEncryption: true}}, pp.PexPrefersEncryption},
-		{&PeerConn{Peer: Peer{outgoing: true, PeerPrefersEncryption: false}}, pp.PexOutgoingConn},
-		{&PeerConn{Peer: Peer{outgoing: true, PeerPrefersEncryption: true}}, pp.PexOutgoingConn | pp.PexPrefersEncryption},
+		{&PeerConn{Peer: Peer{outgoing: false, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: false}}}, 0},
+		{&PeerConn{Peer: Peer{outgoing: false, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: true}}}, pp.PexPrefersEncryption},
+		{&PeerConn{Peer: Peer{outgoing: true, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: false}}}, pp.PexOutgoingConn},
+		{&PeerConn{Peer: Peer{outgoing: true, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: true}}}, pp.PexOutgoingConn | pp.PexPrefersEncryption},
 		{&PeerConn{Peer: Peer{RemoteAddr: udpAddr, Network: udpAddr.Network()}}, pp.PexSupportsUtp},
 		{&PeerConn{Peer: Peer{RemoteAddr: udpAddr, Network: udpAddr.Network(), outgoing: true}}, pp.PexOutgoingConn | pp.PexSupportsUtp},
 		{&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), outgoing: true}}, pp.PexOutgoingConn},
@@ -483,24 +482,21 @@ func TestConnPexEvent(t *testing.T) {
 		{
 			pexDrop,
 			&PeerConn{
-				Peer:           Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), outgoing: true},
-				PeerListenPort: dialTcpAddr.Port,
+				Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), outgoing: true, peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialTcpAddr.Port}},
 			},
 			pexEvent{pexDrop, tcpAddr.AddrPort(), pp.PexOutgoingConn, nil},
 		},
 		{
 			pexAdd,
 			&PeerConn{
-				Peer:           Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network()},
-				PeerListenPort: dialTcpAddr.Port,
+				Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialTcpAddr.Port}},
 			},
 			pexEvent{pexAdd, dialTcpAddr.AddrPort(), 0, nil},
 		},
 		{
 			pexDrop,
 			&PeerConn{
-				Peer:           Peer{RemoteAddr: udpAddr, Network: udpAddr.Network()},
-				PeerListenPort: dialUdpAddr.Port,
+				Peer: Peer{RemoteAddr: udpAddr, Network: udpAddr.Network(), peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialUdpAddr.Port}},
 			},
 			pexEvent{pexDrop, dialUdpAddr.AddrPort(), pp.PexSupportsUtp, nil},
 		},
@@ -521,7 +517,6 @@ func TestHaveAllThenBitfield(t *testing.T) {
 	pc := PeerConn{
 		Peer: Peer{t: tt},
 	}
-	pc.initRequestState()
 	pc.legacyPeerImpl = &pc
 	tt.conns[&pc] = struct{}{}
 	g.InitNew(&pc.callbacks)
@@ -619,7 +614,7 @@ func TestReceiveLargeRequest(t *testing.T) {
 	req.Length = 2 << 20
 	qt.Check(t, qt.IsNil(pc.onReadRequest(req, false)))
 	qt.Check(t, qt.HasLen(pc.unreadPeerRequests, 2))
-	pc.unreadPeerRequests = nil
+	pc.deleteAllPeerRequests()
 	pc.t.cl.config.UploadRateLimiter = rate.NewLimiter(1, defaultChunkSize)
 	req.Length = defaultChunkSize
 	qt.Check(t, qt.IsNil(pc.onReadRequest(req, false)))
@@ -642,7 +637,7 @@ func TestChunkOverflowsPiece(t *testing.T) {
 
 // TestServePeerRequestTorrentClosedStorageReadFails verifies that servePeerRequest does not panic
 // when a storage read fails after the torrent has been closed. Previously, peerRequestDataReadFailed
-// returned early on a closed torrent without removing the request from unreadPeerRequests,
+// returned early on a closed torrent without removing the outstanding peer request,
 // violating the invariant checked by the deferred assertion in servePeerRequest.
 func TestServePeerRequestTorrentClosedStorageReadFails(t *testing.T) {
 	var cl Client
@@ -669,8 +664,7 @@ func TestServePeerRequestTorrentClosedStorageReadFails(t *testing.T) {
 	pc.t.chunkSize = 1
 
 	req := Request{Index: 0, ChunkSpec: ChunkSpec{Begin: 0, Length: 1}}
-	g.MakeMapIfNil(&pc.unreadPeerRequests)
-	pc.unreadPeerRequests[req] = struct{}{}
+	pc.addPeerRequest(req)
 
 	// Simulate the torrent being dropped while the connection is still active.
 	tor.Drop()
@@ -679,7 +673,8 @@ func TestServePeerRequestTorrentClosedStorageReadFails(t *testing.T) {
 	defer cl.unlock()
 	pc.servePeerRequest(req)
 
-	qt.Check(t, qt.IsFalse(g.MapContains(pc.unreadPeerRequests, req)))
+	qt.Check(t, qt.IsFalse(pc.havePeerRequest(req)))
+	qt.Check(t, qt.IsFalse(pc.unreadPeerRequest(req)))
 }
 
 func outstandingChunkPoolBuffers() int64 {
@@ -726,9 +721,8 @@ func TestPeerConnPeerRequestDataLifecycle(t *testing.T) {
 	t.Run("cancel", func(t *testing.T) {
 		pc, r, baseline := newConn(t, &torrentStorageClient{&torrentStorage{}})
 		prd := pc.getPeerRequestData(r.Length.Int())
-		g.MakeMapIfNil(&pc.unreadPeerRequests)
+		pc.wire.AddPeerRequest(r)
 		g.MakeMapIfNil(&pc.readyPeerRequests)
-		pc.unreadPeerRequests[r] = struct{}{}
 		pc.readyPeerRequests[r] = prd
 		pc.deletePeerRequest(r)
 		qt.Check(t, qt.Equals(outstandingChunkPoolBuffers(), baseline))
@@ -746,11 +740,10 @@ func TestPeerConnPeerRequestDataLifecycle(t *testing.T) {
 
 	t.Run("unwanted completed read", func(t *testing.T) {
 		pc, r, baseline := newConn(t, benchmarkUploadStorage{})
-		g.MakeMapIfNil(&pc.unreadPeerRequests)
-		pc.unreadPeerRequests[r] = struct{}{}
+		pc.addPeerRequest(r)
 		prd, err := pc.readPeerRequestData(r)
 		qt.Assert(t, qt.IsNil(err))
-		delete(pc.unreadPeerRequests, r)
+		pc.deletePeerRequest(r)
 		pc.releasePeerRequestData(prd)
 		qt.Check(t, qt.Equals(outstandingChunkPoolBuffers(), baseline))
 	})

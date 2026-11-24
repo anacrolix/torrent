@@ -5,6 +5,7 @@ package storage
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,7 +32,10 @@ func (me *boltPieceCompletion) Persistent() bool {
 	return true
 }
 
-var _ PieceCompletion = (*boltPieceCompletion)(nil)
+var (
+	_ PieceCompletion               = (*boltPieceCompletion)(nil)
+	_ PieceCompletionTorrentDeleter = (*boltPieceCompletion)(nil)
+)
 
 func NewBoltPieceCompletion(dir string) (ret PieceCompletion, err error) {
 	os.MkdirAll(dir, 0o750)
@@ -142,4 +146,23 @@ func (me *boltPieceCompletion) delete(pk metainfo.PieceKey) error {
 
 func (me *boltPieceCompletion) Close() error {
 	return me.db.Close()
+}
+
+// Removes all stored completion state for the torrent. Deleting a torrent with no stored state is
+// not an error.
+func (me *boltPieceCompletion) DeleteTorrent(infoHash metainfo.Hash) error {
+	err := me.db.Update(func(tx *bbolt.Tx) error {
+		cb := tx.Bucket(completionBucketKey)
+		if cb == nil {
+			return nil
+		}
+		if err := cb.DeleteBucket(infoHash[:]); err != nil && !errors.Is(err, bbolt.ErrBucketNotFound) {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("deleting torrent completion for %v: %w", infoHash, err)
+	}
+	return nil
 }

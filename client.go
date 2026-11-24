@@ -34,12 +34,9 @@ import (
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/torrent/internal/amortize"
 	"github.com/anacrolix/torrent/internal/extracmp"
-	"github.com/anacrolix/torrent/tracker"
-	"github.com/anacrolix/torrent/webtorrent"
 	"github.com/cespare/xxhash/v2"
 	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
-	"github.com/pion/webrtc/v4"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/check"
@@ -104,7 +101,8 @@ type Client struct {
 	// Accepted connections that are still in the handshake phase.
 	pendingIncomingHandshakes pendingIncomingHandshakes
 
-	websocketTrackers                websocketTrackers
+	// Webtorrent state, empty with the nowebtorrent build tag.
+	clientWebtorrent
 	regularTrackerAnnounceDispatcher regularTrackerAnnounceDispatcher
 
 	numWebSeedRequests map[webseedHostKeyHandle]int
@@ -383,42 +381,7 @@ func (cl *Client) init(cfg *ClientConfig) {
 		}
 	}
 
-	cl.websocketTrackers = websocketTrackers{
-		PeerId: cl.peerID,
-		Slogger: cl.slogger.With("name", "websocketTrackers"),
-		GetAnnounceRequest: func(
-			event tracker.AnnounceEvent, infoHash [20]byte,
-		) (
-			tracker.AnnounceRequest, error,
-		) {
-			cl.lock()
-			defer cl.unlock()
-			t, ok := cl.torrentsByShortHash[infoHash]
-			if !ok {
-				return tracker.AnnounceRequest{}, errors.New("torrent not tracked by client")
-			}
-			return t.announceRequest(event, infoHash), nil
-		},
-		Proxy:                      cl.config.HTTPProxy,
-		WebsocketTrackerHttpHeader: cl.config.WebsocketTrackerHttpHeader,
-		ICEServers:                 cl.ICEServers(),
-		DialContext:                cl.config.TrackerDialContext,
-		callbacks:                  &cl.config.Callbacks,
-		OnConn: func(dc webtorrent.DataChannelConn, dcc webtorrent.DataChannelContext) {
-			cl.lock()
-			defer cl.unlock()
-			t, ok := cl.torrentsByShortHash[dcc.InfoHash]
-			if !ok {
-				cl.logger.WithDefaultLevel(log.Warning).Printf(
-					"got webrtc conn for unloaded torrent with infohash %x",
-					dcc.InfoHash,
-				)
-				dc.Close()
-				return
-			}
-			go t.onWebRtcConn(dc, dcc)
-		},
-	}
+	cl.clientWebtorrent = cl.newClientWebtorrent()
 
 	cl.webseedRequestTimer = time.AfterFunc(webseedRequestUpdateTimerInterval, cl.updateWebseedRequestsTimerFunc)
 }
@@ -623,6 +586,7 @@ func (cl *Client) Close() (errs []error) {
 	panicif.NotZero(len(cl.torrents))
 	panicif.NotZero(len(cl.torrentsByShortHash))
 	cl.clearPortMappings()
+	errs = append(errs, cl.regularTrackerAnnounceDispatcher.close()...)
 	for i := range cl.onClose {
 		cl.onClose[len(cl.onClose)-1-i]()
 	}
@@ -2124,16 +2088,6 @@ func (cl *Client) locker() *lockWithDeferreds {
 
 func (cl *Client) String() string {
 	return fmt.Sprintf("<%[1]T %[1]p>", cl)
-}
-
-func (cl *Client) ICEServers() []webrtc.ICEServer {
-	var ICEServers []webrtc.ICEServer
-	if cl.config.ICEServerList != nil {
-		ICEServers = cl.config.ICEServerList
-	} else if cl.config.ICEServers != nil {
-		ICEServers = []webrtc.ICEServer{{URLs: cl.config.ICEServers}}
-	}
-	return ICEServers
 }
 
 // Returns connection-level aggregate connStats at the Client level. See the comment on

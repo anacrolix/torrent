@@ -1,3 +1,5 @@
+//go:build !nowebtorrent
+
 package torrent
 
 import (
@@ -14,7 +16,10 @@ import (
 	"github.com/anacrolix/torrent/webtorrent"
 )
 
-const webrtcNetwork = "webrtc"
+const (
+	webrtcNetwork = "webrtc"
+	tracerName    = "anacrolix.torrent"
+)
 
 type webrtcNetConn struct {
 	io.ReadWriteCloser

@@ -6,7 +6,6 @@ import (
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/torrent/internal/amortize"
-	"github.com/google/go-cmp/cmp"
 )
 
 // Iters from a point, assuming that where can only be true consecutively from that point and
@@ -50,7 +49,6 @@ func checkWhereGotFirst[R any](me relation[R], first g.Option[R], where func(r R
 	if first.Ok != slowRet.Ok || first.Ok && me.GetCmp()(first.Value, slowRet.Value) != 0 {
 		fmt.Printf("%#v\n", first.Value)
 		fmt.Printf("%#v\n", slowRet.Value)
-		fmt.Printf("diff: %s\n", cmp.Diff(first.Value, slowRet.Value))
 		panic("iterating where got different first value than caller")
 	}
 }

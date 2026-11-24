@@ -108,7 +108,8 @@ func (msg *Message) writePayloadTo(buf MessageWriter) (err error) {
 					return
 				}
 			}
-			n, err := buf.Write(msg.Piece)
+			var n int
+			n, err = buf.Write(msg.Piece)
 			if err != nil {
 				break
 			}

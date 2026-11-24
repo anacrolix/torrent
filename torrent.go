@@ -859,9 +859,9 @@ func (t *Torrent) pieceState(index pieceIndex) (ret PieceState) {
 	ret.Priority = p.effectivePriority()
 	ret.Completion = p.completion()
 	ret.QueuedForHash = p.queuedForHash()
-	ret.Hashing = s.hashing
+	ret.Hashing = s.check == pieceCheckHashing
 	ret.Checking = ret.QueuedForHash || ret.Hashing
-	ret.Marking = s.marking
+	ret.Marking = s.check == pieceCheckMarking
 	if ret.Ok && !ret.Complete && t.piecePartiallyDownloaded(index) {
 		ret.Partial = true
 	}
@@ -1057,8 +1057,8 @@ func (t *Torrent) writeStatus(w io.Writer) {
 				luns.Scheme = ""
 				runs.Scheme = ""
 				var ml multiless.Computation
-				ml = multiless.EagerOrdered(ml, luns.String(), runs.String())
-				ml = multiless.EagerOrdered(ml, lu.String(), ru.String())
+				ml = ml.EagerOrdered(luns.String(), runs.String())
+				ml = ml.EagerOrdered(lu.String(), ru.String())
 				return ml.OrderingInt()
 			},
 		)
@@ -2774,15 +2774,22 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	p := t.piece(piece)
 	s := p.state()
-	s.numVerifies++
-	s.numVerifiesCond.Broadcast()
-	t.cl.event.Broadcast()
+	firstHash := s.numVerifies == 0
+	// The verify is only counted once marking has finished, so anything waiting on numVerifies
+	// (such as VerifyData) observes the completion recorded in storage. While marking is set,
+	// nextNovelHashCount accounts for the in-flight verify. The client lock is held whenever this
+	// runs, including on every return path.
+	defer func() {
+		s.numVerifies++
+		s.numVerifiesCond.Broadcast()
+		t.cl.event.Broadcast()
+	}()
 	if t.closed.IsSet() {
 		return
 	}
 
 	// Don't score the first time a piece is hashed, it could be an initial check.
-	if t.initialPieceCheckDisabled || s.numVerifies != 1 {
+	if t.initialPieceCheckDisabled || !firstHash {
 		if passed {
 			pieceHashedCorrect.Add(1)
 		} else {
@@ -2793,12 +2800,11 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		}
 	}
 
-	s.marking = true
+	s.check = pieceCheckMarking
 	t.deferPublishPieceStateChange(piece)
 	defer func() {
-		s.marking = false
+		s.check = pieceCheckIdle
 		t.deferPublishPieceStateChange(piece)
-		s.numVerifiesCond.Broadcast()
 	}()
 
 	if passed {
@@ -2978,7 +2984,7 @@ func (t *Torrent) pieceHasher(initial pieceIndex) {
 
 func (t *Torrent) startHash(pi pieceIndex) {
 	t.piecesQueuedForHash.Remove(pi)
-	t.pieces[pi].hashing = true
+	t.pieces[pi].check = pieceCheckHashing
 	t.deferPublishPieceStateChange(pi)
 	t.updatePiecePriority(pi, "Torrent.startHash")
 	t.storageLock.RLock()
@@ -2989,7 +2995,7 @@ func (t *Torrent) startHash(pi pieceIndex) {
 func (t *Torrent) getPieceToHash() (_ g.Option[pieceIndex]) {
 	for i := range t.piecesQueuedForHash.Iterate {
 		p := &t.pieces[i]
-		if p.hashing || p.marking {
+		if p.check != pieceCheckIdle {
 			continue
 		}
 		return g.Some(i)
@@ -3050,7 +3056,7 @@ func (t *Torrent) finishHash(index pieceIndex) {
 		}
 		t.smartBanCache.ForgetBlockSeq(iterRange(t.pieceRequestIndexBegin(index), t.pieceRequestIndexBegin(index+1)))
 	}
-	p.state().hashing = false
+	p.state().check = pieceCheckIdle
 	t.pieceHashed(index, correct, copyErr)
 	t.updatePiecePriority(index, "Torrent.finishHash")
 	t.activePieceHashes--
@@ -3082,8 +3088,9 @@ func (t *Torrent) queueInitialPieceCheck(i pieceIndex) {
 	if p.numVerifies != 0 {
 		return
 	}
-	// If a hash is already occurring we've satisfied the initial piece check condition.
-	if p.hashing {
+	// If a hash is already occurring (or its result is being recorded) we've satisfied the initial
+	// piece check condition.
+	if p.check != pieceCheckIdle {
 		return
 	}
 	if p.storageCompletionOk {
@@ -3209,7 +3216,7 @@ func (t *Torrent) AddClientPeer(cl *Client) int {
 }
 
 func (t *Torrent) hashingPiece(i pieceIndex) bool {
-	return t.pieces[i].hashing
+	return t.pieces[i].check == pieceCheckHashing
 }
 
 func (t *Torrent) pieceQueuedForHash(i pieceIndex) bool {
@@ -3628,6 +3635,11 @@ func sendUtHolepunchMsg(
 	addrPort netip.AddrPort,
 	errCode utHolepunch.ErrCode,
 ) {
+	// Incoming extended messages are routed by the ids we advertise, so a peer can send us
+	// ut_holepunch messages without advertising the extension itself. We have no id to reply with.
+	if !pc.supportsExtension(utHolepunch.ExtensionName) {
+		return
+	}
 	holepunchMsg := utHolepunch.Msg{
 		MsgType:  msgType,
 		AddrPort: addrPort,
@@ -3674,6 +3686,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 			// There's no better error code. The sender's address itself is invalid. I don't see
 			// this error message being appropriate anywhere else anyway.
 			sendMsg(sender, utHolepunch.Error, msg.AddrPort, utHolepunch.NoSuchPeer)
+			return nil
 		}
 		targets := t.peerConnsWithDialAddrPort(msg.AddrPort)
 		if len(targets) == 0 {
@@ -3697,6 +3710,10 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 		if len(t.halfOpen) >= t.cl.config.HalfOpenConnsPerTorrent ||
 			t.cl.numHalfOpen >= t.cl.config.TotalHalfOpenConns {
 			torrent.Add("holepunch connects dropped at half-open limit", 1)
+			return nil
+		}
+		if !peerMayDirectDialTo(sender.bannableAddr, holepunchAddr.Addr()) {
+			torrent.Add("holepunch connects dropped for address scope", 1)
 			return nil
 		}
 		if g.MapContains(t.cl.undialableWithoutHolepunch, holepunchAddr) {

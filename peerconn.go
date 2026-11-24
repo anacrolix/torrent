@@ -100,6 +100,10 @@ type PeerConn struct {
 	// The peer has everything. This can occur due to a special message, when
 	// we may not even know the number of pieces in the torrent yet.
 	peerSentHaveAll bool
+	// Whether we've pinged the peer's DHT node in response to a Port message.
+	sentDhtPing bool
+	// The metadata_size from the peer's extended handshake, or 0.
+	peerMetadataSize int
 
 	requestState requestStrategy.PeerRequestState
 
@@ -111,7 +115,7 @@ type PeerConn struct {
 	// Hash pieces received from the peer, mapped from pieces root to piece layer hashes. This way
 	// we can verify all the pieces for a file when they're all arrived before submitting them to
 	// the torrent.
-	receivedHashPieces map[[32]byte][][32]byte
+	receivedHashPieces map[[32]byte]*receivedFileHashes
 
 	// Requests from the peer that haven't yet been read from storage for upload.
 	unreadPeerRequests map[Request]struct{}
@@ -214,6 +218,10 @@ func (cn *PeerConn) peerHasAllPieces() (all, known bool) {
 
 func (cn *PeerConn) onGotInfo(info *metainfo.Info) {
 	cn.setNumPieces(info.NumPieces())
+	// PEX may have been enabled before we knew the torrent was private (BEP 27).
+	if cn.t.isPrivate() && cn.pex.IsEnabled() {
+		cn.pex.disable()
+	}
 }
 
 // Correct the PeerPieces slice length. Return false if the existing slice is invalid, such as by
@@ -599,9 +607,8 @@ func (cn *PeerConn) onPeerSentHaveAll() error {
 }
 
 func (cn *PeerConn) peerSentHaveNone() error {
-	if !cn.peerSentHaveAll {
-		cn.t.decPeerPieceAvailability(&cn.Peer)
-	}
+	// This also removes the conn from the set of conns with all pieces if it sent HaveAll.
+	cn.t.decPeerPieceAvailability(&cn.Peer)
 	cn._peerPieces.Clear()
 	cn.peerSentHaveAll = false
 	cn.peerPiecesChanged()
@@ -947,6 +954,29 @@ func (c *PeerConn) logProtocolBehaviour(level log.Level, format string, arg ...i
 
 // Processes incoming BitTorrent wire-protocol messages. The client lock is held upon entry and
 // exit. Returning will end the connection.
+// Pings the peer's DHT node. Only the first Port message on a conn is acted on, so a peer can't
+// make us send a ping per message.
+func (c *PeerConn) onPeerSentPort(port uint16) {
+	if c.sentDhtPing {
+		return
+	}
+	ipa, ok := tryIpPortFromNetAddr(c.RemoteAddr)
+	if !ok {
+		return
+	}
+	c.sentDhtPing = true
+	pingAddr := net.UDPAddr{
+		IP:   ipa.IP,
+		Port: ipa.Port,
+	}
+	if port != 0 {
+		pingAddr.Port = int(port)
+	}
+	c.t.cl.eachDhtServer(func(s DhtServer) {
+		go s.Ping(&pingAddr)
+	})
+}
+
 func (c *PeerConn) mainReadLoop() (err error) {
 	defer func() {
 		if err != nil {
@@ -993,6 +1023,21 @@ func (c *PeerConn) mainReadLoop() (err error) {
 	}
 	defer flushChunkWrites()
 	for {
+		// Replies to the peer are buffered from here. Stop reading until the writer catches up.
+		if wait, taken := c.messageWriter.readLoopShouldWait(); wait {
+			flushChunkWrites()
+			lockedDecodes = 0
+			cl.unlock()
+			select {
+			case <-taken:
+			case <-c.closed.Done():
+			}
+			cl.lock()
+			if t.closed.IsSet() || c.closed.IsSet() {
+				return nil
+			}
+			continue
+		}
 		// Keep batching only while the next message is a Piece that will be decoded without
 		// releasing the lock. Anything else must see the batch's effects first.
 		if len(chunkWrites) != 0 && (len(chunkWrites) >= maxChunkWriteBatch ||
@@ -1122,20 +1167,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			req := newRequestFromMessage(&msg)
 			c.onPeerSentCancel(req)
 		case pp.Port:
-			ipa, ok := tryIpPortFromNetAddr(c.RemoteAddr)
-			if !ok {
-				break
-			}
-			pingAddr := net.UDPAddr{
-				IP:   ipa.IP,
-				Port: ipa.Port,
-			}
-			if msg.Port != 0 {
-				pingAddr.Port = int(msg.Port)
-			}
-			cl.eachDhtServer(func(s DhtServer) {
-				go s.Ping(&pingAddr)
-			})
+			c.onPeerSentPort(msg.Port)
 		case pp.Suggest:
 			torrent.Add("suggests received", 1)
 			log.Fmsg("peer suggested piece %d", msg.Index).AddValues(c, msg.Index).LogLevel(log.Debug, c.t.logger)
@@ -1230,13 +1262,18 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 			c.PeerExtensionIDs[name] = id
 		}
 		if d.MetadataSize != 0 {
-			if err = t.setMetadataSize(d.MetadataSize); err != nil {
+			if err = checkMetadataSize(d.MetadataSize); err != nil {
 				return fmt.Errorf("setting metadata size to %d: %w", d.MetadataSize, err)
 			}
+			c.peerMetadataSize = d.MetadataSize
+			t.updateMetadataSize()
 		}
 		c.requestPendingMetadata()
 		if !t.cl.config.DisablePEX {
-			t.pex.Add(c) // we learnt enough now
+			// The extended handshake can be repeated, only list the conn once.
+			if !c.pex.Listed {
+				t.pex.Add(c) // we learnt enough now
+			}
 			// This checks the extension is supported internally.
 			c.pex.Init(c)
 		}
@@ -1360,7 +1397,14 @@ func (cn *PeerConn) drop() {
 }
 
 func (cn *PeerConn) providedBadData() {
-	cn.t.cl.banPeerIP(cn.remoteIp())
+	ip := cn.remoteIp()
+	if ip == nil {
+		// Without an IP there's nothing to ban, so at least drop this connection.
+		cn.t.slogger().Debug("can't ban peer without ip, dropping it", "peer", cn)
+		cn.drop()
+		return
+	}
+	cn.t.cl.banPeerIP(ip)
 }
 
 // This is called when something has changed that should wake the writer, such as putting stuff into
@@ -1537,15 +1581,16 @@ func (pc *PeerConn) requestMissingHashes() {
 	))
 	nextFileBeginPiece := 0
 file:
-	for _, file := range info.UpvertedFiles() {
+	for _, f := range *pc.t.files {
+		file := f.fi
 		fileNumPieces := int((file.Length + info.PieceLength - 1) / info.PieceLength)
 		// We would be requesting the leaves, the file must be short enough that we can just do with
 		// the pieces root as the piece hash.
+		curFileBeginPiece := nextFileBeginPiece
+		nextFileBeginPiece += fileNumPieces
 		if fileNumPieces <= 1 {
 			continue
 		}
-		curFileBeginPiece := nextFileBeginPiece
-		nextFileBeginPiece += fileNumPieces
 		haveAllHashes := true
 		for i := range fileNumPieces {
 			torrentPieceIndex := curFileBeginPiece + i
@@ -1611,36 +1656,68 @@ func (pc *PeerConn) onReadHashes(msg *pp.Message) (err error) {
 	if file == nil {
 		return fmt.Errorf("no file for pieces root %x", msg.PiecesRoot)
 	}
-	filePieceHashes := pc.receivedHashPieces[msg.PiecesRoot]
-	if filePieceHashes == nil {
-		filePieceHashes = make([][32]byte, file.numPieces())
+	numPieces := file.numPieces()
+	if uint64(msg.Index) > uint64(numPieces) {
+		return fmt.Errorf("hash index %d is past file piece count %d", msg.Index, numPieces)
+	}
+	fileHashes := pc.receivedHashPieces[msg.PiecesRoot]
+	if fileHashes == nil {
+		fileHashes = &receivedFileHashes{
+			hashes:   make([][32]byte, numPieces),
+			received: make([]bool, numPieces),
+		}
 		g.MakeMapIfNil(&pc.receivedHashPieces)
-		pc.receivedHashPieces[msg.PiecesRoot] = filePieceHashes
+		pc.receivedHashPieces[msg.PiecesRoot] = fileHashes
 	}
-	if uint64(msg.Index) > uint64(len(filePieceHashes)) {
-		return fmt.Errorf("hash index %d is past file piece count %d", msg.Index, len(filePieceHashes))
+	fileHashes.add(int(msg.Index), msg.Hashes)
+	// The root can only be checked once every piece hash for the file has arrived. Checking it
+	// sooner costs a full root computation per reply.
+	if fileHashes.numReceived < numPieces {
+		return nil
 	}
-	copy(filePieceHashes[msg.Index:], msg.Hashes)
+	delete(pc.receivedHashPieces, msg.PiecesRoot)
 	root := merkle.RootWithPadHash(
-		filePieceHashes,
+		fileHashes.hashes,
 		metainfo.HashForPiecePad(int64(pc.t.usualPieceSize())))
 	expectedPiecesRoot := file.piecesRoot.Unwrap()
-	if root == expectedPiecesRoot {
-		pc.protocolLogger.WithNames(v2HashesLogName).Levelf(
-			log.Info,
-			"got piece hashes for file %v (num pieces %v)",
-			file, file.numPieces())
-		for filePieceIndex, peerHash := range filePieceHashes {
-			torrentPieceIndex := file.BeginPieceIndex() + filePieceIndex
-			pc.t.piece(torrentPieceIndex).setV2Hash(peerHash)
-		}
-	} else {
-		pc.protocolLogger.WithNames(v2HashesLogName).Levelf(
-			log.Debug,
-			"peer file piece hashes root mismatch: %x != %x",
-			root, expectedPiecesRoot)
+	if root != expectedPiecesRoot {
+		// The peer's hashes are provably wrong.
+		torrent.Add("v2 piece hashes received with wrong root", 1)
+		return fmt.Errorf(
+			"piece hashes for file %v have root %x, expected %x",
+			file, root, expectedPiecesRoot)
+	}
+	pc.protocolLogger.WithNames(v2HashesLogName).Levelf(
+		log.Info,
+		"got piece hashes for file %v (num pieces %v)",
+		file, numPieces)
+	for filePieceIndex, peerHash := range fileHashes.hashes {
+		torrentPieceIndex := file.BeginPieceIndex() + filePieceIndex
+		pc.t.piece(torrentPieceIndex).setV2Hash(peerHash)
 	}
 	return nil
+}
+
+// Piece layer hashes received from a peer for one file.
+type receivedFileHashes struct {
+	hashes      [][32]byte
+	received    []bool
+	numReceived int
+}
+
+// Adds hashes starting at file piece index. Hashes past the end of the file are padding.
+func (me *receivedFileHashes) add(index int, hashes [][32]byte) {
+	for i, h := range hashes {
+		j := index + i
+		if j >= len(me.hashes) {
+			break
+		}
+		me.hashes[j] = h
+		if !me.received[j] {
+			me.received[j] = true
+			me.numReceived++
+		}
+	}
 }
 
 func (pc *PeerConn) getHashes(msg *pp.Message) ([][32]byte, error) {
@@ -1657,7 +1734,8 @@ func (pc *PeerConn) getHashes(msg *pp.Message) ([][32]byte, error) {
 	beginPieceIndex := file.BeginPieceIndex()
 	endPieceIndex := file.EndPieceIndex()
 	length := merkle.RoundUpToPowerOfTwo(uint(endPieceIndex - beginPieceIndex))
-	if uint(msg.Index+msg.Length) > length {
+	// Widen before adding so the sum can't wrap.
+	if uint64(msg.Index)+uint64(msg.Length) > uint64(length) {
 		return nil, errors.New("invalid hash range")
 	}
 
@@ -1886,7 +1964,7 @@ func (cn *PeerConn) shouldRequest(r RequestIndex) error {
 	if cn.t.hashingPiece(pi) {
 		panic("piece is being hashed")
 	}
-	if cn.t.pieces[pi].marking {
+	if cn.t.pieces[pi].check == pieceCheckMarking {
 		panic("piece is being marked")
 	}
 	if cn.t.pieceQueuedForHash(pi) {
@@ -2120,7 +2198,8 @@ func fullMessageBuffered(r *bufio.Reader) bool {
 		return false
 	}
 	b, _ := r.Peek(4)
-	return r.Buffered() >= 4+int(binary.BigEndian.Uint32(b))
+	// Compare as uint64: on 32-bit platforms int(length) can be negative.
+	return uint64(r.Buffered()) >= 4+uint64(binary.BigEndian.Uint32(b))
 }
 
 // Reports whether the next message is a Piece that's wholly in the buffer.

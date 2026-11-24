@@ -12,6 +12,10 @@ import (
 type bufferedPieceCompletion struct {
 	underlying PieceCompletion
 
+	// Serializes Checkpoint and DeleteTorrent, so a checkpoint can't write a stale snapshot back
+	// after its torrent was deleted. Acquired before mu.
+	persistMu sync.Mutex
+
 	mu      sync.RWMutex
 	overlay map[metainfo.PieceKey]g.Option[bool]
 	dirty   map[metainfo.PieceKey]struct{}
@@ -21,6 +25,7 @@ var _ interface {
 	PieceCompletion
 	PieceCompletionCheckpointer
 	PieceCompletionPersistenter
+	PieceCompletionTorrentDeleter
 } = (*bufferedPieceCompletion)(nil)
 
 func newBufferedPieceCompletion(underlying PieceCompletion) PieceCompletion {
@@ -80,6 +85,8 @@ func (me *bufferedPieceCompletion) Set(pk metainfo.PieceKey, complete g.Option[b
 }
 
 func (me *bufferedPieceCompletion) Checkpoint(keys []metainfo.PieceKey) error {
+	me.persistMu.Lock()
+	defer me.persistMu.Unlock()
 	me.mu.RLock()
 	changes := make([]PieceCompletionChange, 0, len(keys))
 	for _, key := range keys {
@@ -126,6 +133,32 @@ func (me *bufferedPieceCompletion) Close() error {
 		return err
 	}
 	return me.underlying.Close()
+}
+
+// Drops pending state for the torrent, then deletes it from the underlying store. Callers should
+// stop writing completion for the torrent first; later Set calls will recreate state. The overlay is
+// cleared before the underlying delete on purpose: if the underlying delete fails, the pending state
+// is lost, which is acceptable because the caller wants it gone either way.
+func (me *bufferedPieceCompletion) DeleteTorrent(infoHash metainfo.Hash) error {
+	me.persistMu.Lock()
+	defer me.persistMu.Unlock()
+	me.mu.Lock()
+	for key := range me.overlay {
+		if key.InfoHash == infoHash {
+			delete(me.overlay, key)
+		}
+	}
+	for key := range me.dirty {
+		if key.InfoHash == infoHash {
+			delete(me.dirty, key)
+		}
+	}
+	me.mu.Unlock()
+
+	if deleter, ok := me.underlying.(PieceCompletionTorrentDeleter); ok {
+		return deleter.DeleteTorrent(infoHash)
+	}
+	return nil
 }
 
 func (me *bufferedPieceCompletion) persistChanges(changes []PieceCompletionChange) error {

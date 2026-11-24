@@ -482,3 +482,20 @@ func TestDecodeMaxStrLenUnmarshaler(t *testing.T) {
 	}
 	qt.Check(t, qt.StringContains(se.Error(), "exceeds limit"))
 }
+
+// Integers too large for int64 decode to *big.Int, which is superlinear in the number of digits,
+// so their length is bounded. That includes values in ignored dict keys.
+func TestDecodeBigIntLengthLimit(t *testing.T) {
+	atLimit := "i" + strings.Repeat("9", maxBigIntLen) + "e"
+	var v interface{}
+	qt.Assert(t, qt.IsNil(Unmarshal([]byte(atLimit), &v)))
+	qt.Check(t, qt.Equals(v.(*big.Int).String(), atLimit[1:len(atLimit)-1]))
+	overLimit := "i" + strings.Repeat("9", maxBigIntLen+1) + "e"
+	var se *SyntaxError
+	qt.Assert(t, qt.ErrorAs(Unmarshal([]byte(overLimit), &v), &se))
+	qt.Check(t, qt.StringContains(se.Error(), "exceeds limit"))
+	var s struct {
+		A int `bencode:"a"`
+	}
+	qt.Assert(t, qt.ErrorAs(Unmarshal([]byte("d1:b"+overLimit+"e"), &s), &se))
+}

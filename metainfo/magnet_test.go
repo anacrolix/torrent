@@ -69,6 +69,22 @@ func TestParseMagnetURI(t *testing.T) {
 	}
 }
 
+// Padding makes a 32 character base32 infohash decode to fewer than 20 bytes.
+func TestParseMagnetPaddedBase32Infohash(t *testing.T) {
+	for _, hash := range []string{
+		"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+		"AAAAAAAAAAAAAAAAAAAAAAAAAAAAA===",
+		"AAAAAAAAAAAAAAAAAAAAAAAAAAAA====",
+		"AAAAAAAAAAAAAAAAAAAAAAAAAA======",
+	} {
+		uri := "magnet:?xt=urn:btih:" + hash
+		_, err := ParseMagnetUri(uri)
+		qt.Check(t, qt.IsNotNil(err), qt.Commentf("ParseMagnetUri(%q)", uri))
+		_, err = ParseMagnetV2Uri(uri)
+		qt.Check(t, qt.IsNotNil(err), qt.Commentf("ParseMagnetV2Uri(%q)", uri))
+	}
+}
+
 func TestMagnetize(t *testing.T) {
 	mi, err := LoadFromFile("../testdata/bootstrap.dat.torrent")
 	qt.Assert(t, qt.IsNil(err))

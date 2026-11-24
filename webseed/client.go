@@ -119,7 +119,19 @@ func (ws *Client) StartNewRequest(ctx context.Context, r RequestSpec, debugLogge
 			ws.Url, i, ws.info, e.Start, e.Length,
 			ws.PathEscaper,
 		)
-		panicif.Err(err)
+		if err != nil {
+			// Fail the request through its body instead of panicking.
+			err = fmt.Errorf("creating request for file %v: %w", i, err)
+			cancel(err)
+			body, w := io.Pipe()
+			w.CloseWithError(err)
+			return Request{
+				ctx:      ctx,
+				cancel:   cancel,
+				Body:     body,
+				bodyPipe: body,
+			}
+		}
 		part := requestPart{
 			req:        req,
 			fileRange:  e,

@@ -100,9 +100,9 @@ func DirLookup(t *torrent.Torrent, path, name string) (TorrentLookup, bool) {
 			dir = true
 		}
 	}
-	if dir && file != nil {
-		panic("both dir and file")
-	}
+	// Malformed metadata can list a path as both a file and a parent directory of another file. A
+	// real filesystem can't, so treat it as the file, matching DirEntries, which lists the file and
+	// hides the shadowed descendants. This must not panic: the file list comes from a remote peer.
 	if file != nil {
 		return TorrentLookup{Torrent: t, File: file, Path: fullPath}, true
 	}

@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anacrolix/bargle/v2"
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/tagflag"
 	"github.com/davecgh/go-spew/spew"
@@ -270,41 +272,114 @@ type downloadFlags struct {
 }
 
 type DownloadCmd struct {
-	SaveMetainfos                  bool           `help:"save metainfo files when info is obtained"`
-	Mmap                           bool           `help:"memory-map torrent data"`
-	Seed                           bool           `help:"seed after download is complete"`
-	Addr                           string         `help:"network listen addr"`
-	MaxUnverifiedBytes             *tagflag.Bytes `help:"maximum number bytes to have pending verification"`
-	UploadRate                     *tagflag.Bytes `help:"max piece bytes to send per second"`
-	MaxAllocPeerRequestDataPerConn *tagflag.Bytes `help:"max bytes to allocate for peer request data per connection"`
-	DownloadRate                   *tagflag.Bytes `help:"max bytes per second down from peers"`
+	SaveMetainfos                  bool
+	Mmap                           bool
+	Seed                           bool
+	Addr                           string
+	MaxUnverifiedBytes             g.Option[tagflag.Bytes]
+	UploadRate                     g.Option[tagflag.Bytes]
+	MaxAllocPeerRequestDataPerConn g.Option[tagflag.Bytes]
+	DownloadRate                   g.Option[tagflag.Bytes]
 	PackedBlocklist                string
 	PublicIP                       net.IP
-	Progress                       bool `default:"true"`
-	PieceStates                    bool `help:"Output piece state runs at progress intervals."`
-	Quiet                          bool `help:"discard client logging"`
-	Stats                          bool `help:"print stats at termination"`
-	Dht                            bool `default:"true"`
-	PortForward                    bool `default:"true"`
-	Verify                         bool `help:"verify data after adding torrent"`
+	Progress                       bool
+	PieceStates                    bool
+	Quiet                          bool
+	Stats                          bool
+	Dht                            bool
+	PortForward                    bool
+	Verify                         bool
 
-	TcpPeers        bool `default:"true"`
-	UtpPeers        bool `default:"true"`
-	Webtorrent      bool `default:"true"`
+	TcpPeers        bool
+	UtpPeers        bool
+	Webtorrent      bool
 	DisableWebseeds bool
 	// Don't progress past handshake for peer connections where the peer doesn't offer the fast
 	// extension.
 	RequireFastExtension bool
 
-	Ipv4 bool `default:"true"`
-	Ipv6 bool `default:"true"`
-	Pex  bool `default:"true"`
+	Ipv4 bool
+	Ipv6 bool
+	Pex  bool
 
-	LinearDiscard bool     `help:"Read and discard selected regions from start to finish. Useful for testing simultaneous Reader and static file prioritization."`
-	TestPeer      []string `help:"addresses of some starting peers"`
+	LinearDiscard bool
+	TestPeer      []string
 
 	File    []string
-	Torrent []string `arity:"+" help:"torrent file path or magnet uri" arg:"positional"`
+	Torrent []string
+}
+
+// The flags that default to enabled. Switches can be turned off with their "--no-" form.
+func newDownloadCmd() DownloadCmd {
+	return DownloadCmd{
+		Progress:    true,
+		Dht:         true,
+		PortForward: true,
+		TcpPeers:    true,
+		UtpPeers:    true,
+		Webtorrent:  true,
+		Ipv4:        true,
+		Ipv6:        true,
+		Pex:         true,
+	}
+}
+
+func downloadCmd(ctx context.Context, p *bargle.Parser, debug bool) action {
+	flags := downloadFlags{
+		Debug:       debug,
+		DownloadCmd: newDownloadCmd(),
+	}
+	args := &flags.DownloadCmd
+	torrents := bargle.Positionals(
+		"torrent",
+		bargle.AppendSlice(&args.Torrent, bargle.BuiltinUnmarshaler[string]))
+	bargle.ParseAll(p,
+		desc("save metainfo files when info is obtained", bargle.Flag("save-metainfos", &args.SaveMetainfos)),
+		desc("memory-map torrent data", bargle.Flag("mmap", &args.Mmap)),
+		desc("seed after download is complete", bargle.Flag("seed", &args.Seed)),
+		desc("network listen addr", bargle.Long("addr", bargle.BuiltinUnmarshaler(&args.Addr))),
+		desc("maximum number bytes to have pending verification",
+			bargle.Long("max-unverified-bytes", bargle.OptionUnmarshaler(&args.MaxUnverifiedBytes, bytesUnmarshaler))),
+		desc("max piece bytes to send per second",
+			bargle.Long("upload-rate", bargle.OptionUnmarshaler(&args.UploadRate, bytesUnmarshaler))),
+		desc("max bytes to allocate for peer request data per connection",
+			bargle.Long(
+				"max-alloc-peer-request-data-per-conn",
+				bargle.OptionUnmarshaler(&args.MaxAllocPeerRequestDataPerConn, bytesUnmarshaler))),
+		desc("max bytes per second down from peers",
+			bargle.Long("download-rate", bargle.OptionUnmarshaler(&args.DownloadRate, bytesUnmarshaler))),
+		desc("path to a packed IP blocklist", bargle.Long("packed-blocklist", bargle.BuiltinUnmarshaler(&args.PackedBlocklist))),
+		desc("public IP to advertise", bargle.Long("public-ip", bargle.BuiltinUnmarshaler(&args.PublicIP))),
+		desc("print download progress", bargle.Flag("progress", &args.Progress)),
+		desc("output piece state runs at progress intervals", bargle.Flag("piece-states", &args.PieceStates)),
+		desc("discard client logging", bargle.Flag("quiet", &args.Quiet)),
+		desc("print stats at termination", bargle.Flag("stats", &args.Stats)),
+		desc("use the DHT", bargle.Flag("dht", &args.Dht)),
+		desc("forward the listen port with UPnP/NAT-PMP", bargle.Flag("port-forward", &args.PortForward)),
+		desc("verify data after adding torrent", bargle.Flag("verify", &args.Verify)),
+		desc("connect to peers over TCP", bargle.Flag("tcp-peers", &args.TcpPeers)),
+		desc("connect to peers over uTP", bargle.Flag("utp-peers", &args.UtpPeers)),
+		desc("connect to WebTorrent peers", bargle.Flag("webtorrent", &args.Webtorrent)),
+		desc("don't use webseeds", bargle.Flag("disable-webseeds", &args.DisableWebseeds)),
+		desc("only use peers that offer the fast extension",
+			bargle.Flag("require-fast-extension", &args.RequireFastExtension)),
+		desc("use IPv4", bargle.Flag("ipv4", &args.Ipv4)),
+		desc("use IPv6", bargle.Flag("ipv6", &args.Ipv6)),
+		desc("use peer exchange", bargle.Flag("pex", &args.Pex)),
+		desc(
+			"read and discard selected regions from start to finish. Useful for testing"+
+				" simultaneous Reader and static file prioritization.",
+			bargle.Flag("linear-discard", &args.LinearDiscard)),
+		desc("addresses of some starting peers",
+			bargle.Long("test-peer", bargle.AppendSlice(&args.TestPeer, bargle.BuiltinUnmarshaler[string]))),
+		desc("only download this file (by display path)",
+			bargle.Long("file", bargle.AppendSlice(&args.File, bargle.BuiltinUnmarshaler[string]))),
+		desc("torrent file path or magnet uri", torrents),
+	)
+	p.Require(torrents)
+	return func() error {
+		return downloadErr(ctx, flags, slog.Default())
+	}
 }
 
 func statsEnabled(flags downloadFlags) bool {
@@ -334,8 +409,8 @@ func downloadErr(ctx context.Context, flags downloadFlags, logger *slog.Logger) 
 	clientConfig.DisablePEX = !flags.Pex
 	clientConfig.DisableWebtorrent = !flags.Webtorrent
 	clientConfig.NoDefaultPortForwarding = !flags.PortForward
-	if flags.MaxAllocPeerRequestDataPerConn != nil {
-		clientConfig.MaxAllocPeerRequestDataPerConn = int(flags.MaxAllocPeerRequestDataPerConn.Int64())
+	if flags.MaxAllocPeerRequestDataPerConn.Ok {
+		clientConfig.MaxAllocPeerRequestDataPerConn = int(flags.MaxAllocPeerRequestDataPerConn.Value.Int64())
 	}
 	if flags.PackedBlocklist != "" {
 		blocklist, err := iplist.MMapPackedFile(flags.PackedBlocklist)
@@ -351,23 +426,23 @@ func downloadErr(ctx context.Context, flags downloadFlags, logger *slog.Logger) 
 	if flags.Addr != "" {
 		clientConfig.SetListenAddr(flags.Addr)
 	}
-	if flags.UploadRate != nil {
+	if flags.UploadRate.Ok {
 		clientConfig.UploadRateLimiter = rate.NewLimiter(
-			rate.Limit(*flags.UploadRate),
+			rate.Limit(flags.UploadRate.Value),
 			// Need to ensure the expected peer request length <= the upload burst. We can't really
 			// encode this logic into the ClientConfig as helper because it's quite specific. We're
 			// assuming the MaxAllocPeerRequestDataPerConn flag is being used to support this.
-			max(int(*flags.MaxAllocPeerRequestDataPerConn), 256<<10))
+			max(int(flags.MaxAllocPeerRequestDataPerConn.UnwrapOrZeroValue()), 256<<10))
 	}
-	if flags.DownloadRate != nil {
-		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(*flags.DownloadRate), 0)
+	if flags.DownloadRate.Ok {
+		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(flags.DownloadRate.Value), 0)
 	}
 	clientConfig.Slogger = logger
 	if flags.RequireFastExtension {
 		clientConfig.MinPeerExtensions.SetBit(pp.ExtensionBitFast, true)
 	}
-	if flags.MaxUnverifiedBytes != nil {
-		clientConfig.MaxUnverifiedBytes = flags.MaxUnverifiedBytes.Int64()
+	if flags.MaxUnverifiedBytes.Ok {
+		clientConfig.MaxUnverifiedBytes = flags.MaxUnverifiedBytes.Value.Int64()
 	}
 
 	client, err := torrent.NewClient(clientConfig)

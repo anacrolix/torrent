@@ -44,8 +44,10 @@ type Announce struct {
 	DialContext         func(ctx context.Context, network, addr string) (net.Conn, error)
 	ListenPacket        func(network, addr string) (net.PacketConn, error)
 	ServerName          string
-	UserAgent           string
-	UdpNetwork          string
+	// Don't verify HTTPS tracker certificates.
+	InsecureSkipVerify bool
+	UserAgent          string
+	UdpNetwork         string
 	// If the port is zero, it's assumed to be the same as the Request.Port.
 	ClientIp4 krpc.NodeAddr
 	// If the port is zero, it's assumed to be the same as the Request.Port.
@@ -72,9 +74,10 @@ const DefaultTrackerAnnounceTimeout = 15 * time.Second
 func (me Announce) Do() (res AnnounceResponse, err error) {
 	cl, err := NewClient(me.TrackerUrl, NewClientOpts{
 		Http: trHttp.NewClientOpts{
-			Proxy:       me.HttpProxy,
-			DialContext: me.DialContext,
-			ServerName:  me.ServerName,
+			Proxy:              me.HttpProxy,
+			DialContext:        me.DialContext,
+			ServerName:         me.ServerName,
+			InsecureSkipVerify: me.InsecureSkipVerify,
 		},
 		UdpNetwork:   me.UdpNetwork,
 		Slogger:      me.slogger().With("trackerUrl", me.TrackerUrl),

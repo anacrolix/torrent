@@ -1,0 +1,67 @@
+# Asks the author of a pull request from a fork to enable "Allow edits from
+# maintainers" when it is off. It only comments: it never fails a check.
+#
+# This runs on pull_request_target so it has a token that can comment on fork
+# pull requests. It must never check out or run code from the pull request.
+name: Maintainer edits
+
+on:
+  pull_request_target:
+    types: [opened, reopened, edited, synchronize]
+
+permissions:
+  pull-requests: write
+
+concurrency:
+  group: maintainer-edits-${{ github.event.pull_request.number }}
+
+jobs:
+  remind:
+    if: github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- maintainer-edits-reminder -->';
+            const { owner, repo } = context.repo;
+            const number = context.payload.pull_request.number;
+
+            // Fetch fresh state: the event payload can be stale if the author
+            // toggled the checkbox after the event fired.
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+            if (pr.head.repo?.full_name === `${owner}/${repo}`) return;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: number, per_page: 100,
+            });
+            const existing = comments.find(
+              (c) => c.user?.type === 'Bot' && c.body?.includes(marker),
+            );
+
+            const docs = 'https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/allowing-changes-to-a-pull-request-branch-created-from-a-fork';
+
+            if (pr.maintainer_can_modify) {
+              if (existing && !existing.body.includes('<!-- resolved -->')) {
+                await github.rest.issues.updateComment({
+                  owner, repo, comment_id: existing.id,
+                  body: `${marker}<!-- resolved -->\nThanks, maintainer edits are enabled on this pull request.`,
+                });
+              }
+              return;
+            }
+
+            if (existing && !existing.body.includes('<!-- resolved -->')) return;
+
+            const body = [
+              marker,
+              `Thanks for the pull request, @${pr.user.login}! Could you tick **Allow edits from maintainers** on this pull request (bottom of the right-hand column)? It lets maintainers update the branch, fix conflicts and push small fixes without a round trip. ([How](${docs}))`,
+              '',
+              'GitHub only offers this option when the fork is owned by a personal account. If your fork belongs to an organization, please mention that here.',
+            ].join('\n');
+
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: number, body });
+            }

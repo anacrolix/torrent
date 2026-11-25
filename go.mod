@@ -15,7 +15,7 @@ require (
 	github.com/anacrolix/gostdapp v0.2.1-0.20251125125325-fbac3f25c013
 	github.com/anacrolix/log v0.17.1-0.20251118025802-918f1157b7bb
 	github.com/anacrolix/missinggo/v2 v2.12.0
-	github.com/anacrolix/multiless v0.4.1-0.20261117234141-fbc4e053da19
+	github.com/anacrolix/multiless v0.4.1-0.20261125114620-1fd283a27f48
 	github.com/anacrolix/possum/go v0.4.1-0.20250821022006-9d91a37b5d3d
 	github.com/anacrolix/squirrel v0.6.4
 	github.com/anacrolix/sync v0.5.5-0.20251119100342-d78dd1f686f1

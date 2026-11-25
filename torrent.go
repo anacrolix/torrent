@@ -1061,8 +1061,8 @@ func (t *Torrent) writeStatus(w io.Writer) {
 				luns.Scheme = ""
 				runs.Scheme = ""
 				var ml multiless.Computation
-				ml = ml.EagerOrdered(luns.String(), runs.String())
-				ml = ml.EagerOrdered(lu.String(), ru.String())
+				ml = ml.Compare(luns.String(), runs.String())
+				ml = ml.Compare(lu.String(), ru.String())
 				return ml.OrderingInt()
 			},
 		)
@@ -1093,7 +1093,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 		lpp := g.ResultFromTuple(l.peerPriority()).ToOption()
 		rpp := g.ResultFromTuple(r.peerPriority()).ToOption()
 		ml = ml.Bool(lpp.Ok, rpp.Ok)
-		ml = ml.EagerOrdered(rpp.Value, lpp.Value)
+		ml = ml.Compare(rpp.Value, lpp.Value)
 		return ml.OrderingInt()
 	})
 

@@ -142,7 +142,7 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 		// the priority through Piece.purePriority, which is probably slower.
 		leftPriority := leftPiece.Priority
 		rightPriority := rightPiece.Priority
-		ml = ml.EagerOrdered(
+		ml = ml.Compare(
 			-int(leftPriority),
 			-int(rightPriority),
 		)
@@ -167,7 +167,7 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 	}
 	if leftPeer != nil {
 		// The right peer should also be set, or we'd have resolved the computation by now.
-		ml = ml.EagerOrdered(
+		ml = ml.Compare(
 			rightPeer.wireState.NumRequests(),
 			leftPeer.wireState.NumRequests(),
 		)
@@ -189,20 +189,20 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 		// Prefer the highest possible request index, since webseeds prefer the lowest. Additionally,
 		// this should mean remote clients serve in reverse order so we meet webseeds responses in
 		// the middle.
-		ml = ml.Cmp(-cmp.Compare(leftRequest, rightRequest))
+		ml = ml.Then(-cmp.Compare(leftRequest, rightRequest))
 	} else {
-		ml = ml.EagerOrdered(
+		ml = ml.Compare(
 			leftPiece.Availability,
 			rightPiece.Availability)
 		if priority == PiecePriorityReadahead {
 			// TODO: For readahead in particular, it would be even better to consider distance from the
 			// reader position so that reads earlier in a torrent don't starve reads later in the
 			// torrent. This would probably require reconsideration of how readahead priority works.
-			ml = ml.EagerOrdered(leftPieceIndex, rightPieceIndex)
+			ml = ml.Compare(leftPieceIndex, rightPieceIndex)
 		} else {
-			ml = ml.EagerOrdered(t.pieceRequestOrder[leftPieceIndex], t.pieceRequestOrder[rightPieceIndex])
+			ml = ml.Compare(t.pieceRequestOrder[leftPieceIndex], t.pieceRequestOrder[rightPieceIndex])
 		}
-		ml = ml.EagerOrdered(leftRequest, rightRequest)
+		ml = ml.Compare(leftRequest, rightRequest)
 	}
 	// Prefer request indexes in order for storage write performance. Since the heap request heap
 	// does not contain duplicates, if we order at the request index level we should never have any

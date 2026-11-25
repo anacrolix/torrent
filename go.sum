@@ -116,6 +116,8 @@ github.com/anacrolix/multiless v0.4.1-0.20261117234141-fbc4e053da19 h1:gY4oyZ3z/
 github.com/anacrolix/multiless v0.4.1-0.20261117234141-fbc4e053da19/go.mod h1:ZlIrPeWchipwq3CxFtCKRWvcnDa0PjB/+tT3nWzmPdA=
 github.com/anacrolix/multiless v0.4.1-0.20261125065632-d4c6edc75e78 h1:yyk00Lnsjp9dzHkmrtxUsuOcTXpj806SzWzABAKQRXI=
 github.com/anacrolix/multiless v0.4.1-0.20261125065632-d4c6edc75e78/go.mod h1:ZlIrPeWchipwq3CxFtCKRWvcnDa0PjB/+tT3nWzmPdA=
+github.com/anacrolix/multiless v0.4.1-0.20261125081834-dbf45d959faa h1:EHH1E83ex0rXeOowbbChg42GBaUs3Frd20Ly+tq86G0=
+github.com/anacrolix/multiless v0.4.1-0.20261125081834-dbf45d959faa/go.mod h1:ZlIrPeWchipwq3CxFtCKRWvcnDa0PjB/+tT3nWzmPdA=
 github.com/anacrolix/possum/go v0.4.1-0.20250821022006-9d91a37b5d3d h1:pfv3nv6j7Cu1taUUECn77jzHAP3g7cq8fKLJY8lcddI=
 github.com/anacrolix/possum/go v0.4.1-0.20250821022006-9d91a37b5d3d/go.mod h1:LMkSvp9JAi1eKzmrDgJ6iDcWGalpb8Ddnsd9Ovy+ey8=
 github.com/anacrolix/squirrel v0.6.4 h1:K6ABRMCms0xwpEIdY3kAaDBUqiUeUYCKLKI0yHTr9IQ=

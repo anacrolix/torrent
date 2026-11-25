@@ -37,7 +37,7 @@ func pieceOrderLess(i, j *PieceRequestOrderItem) multiless.Computation {
 	).Lazy(func() multiless.Computation {
 		a := i.Key.InfoHash.Value()
 		b := j.Key.InfoHash.Value()
-		return multiless.New().Cmp(bytes.Compare(a[:], b[:]))
+		return multiless.New().Then(bytes.Compare(a[:], b[:]))
 	})
 }
 

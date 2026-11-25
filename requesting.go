@@ -191,7 +191,7 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 		// Prefer the highest possible request index, since webseeds prefer the lowest. Additionally,
 		// this should mean remote clients serve in reverse order so we meet webseeds responses in
 		// the middle.
-		ml = ml.Cmp(-cmp.Compare(leftRequest, rightRequest))
+		ml = ml.Then(-cmp.Compare(leftRequest, rightRequest))
 	} else {
 		ml = ml.Compare(
 			leftPiece.Availability,

@@ -2,6 +2,7 @@ package peerWire
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"testing"
 
@@ -340,4 +341,23 @@ func TestOurRequestsDeletedWhenSettled(t *testing.T) {
 	qt.Assert(t, qt.IsNil(err))
 	qt.Check(t, qt.HasLen(s.ourRequests, 0))
 	qt.Check(t, qt.IsTrue(s.LowOnRequests()))
+}
+
+// The count of Pieces we'll accept for a chunk saturates instead of wrapping, so a peer cycling
+// choke on one chunk can't make us reject the Piece for a request we just sent.
+func TestExpectedChunksSaturate(t *testing.T) {
+	s := NewState()
+	s.RecvUnchoke()
+	for range math.MaxUint16 + 10 {
+		qt.Assert(t, qt.IsTrue(sendRequest(&s, 0)))
+		// Without fast, a choke drops the request, and the Piece may still come.
+		_, dropped := s.RecvChoke()
+		qt.Assert(t, qt.HasLen(dropped, 1))
+		s.RecvUnchoke()
+	}
+	qt.Check(t, qt.Equals(s.ourRequests[chunk(0)].expected, math.MaxUint16))
+	qt.Assert(t, qt.IsTrue(sendRequest(&s, 0)))
+	requested, _, err := s.RecvChunk(chunk(0))
+	qt.Check(t, qt.IsNil(err))
+	qt.Check(t, qt.IsTrue(requested))
 }

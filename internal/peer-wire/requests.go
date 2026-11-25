@@ -4,6 +4,7 @@ import (
 	"errors"
 	"iter"
 	"maps"
+	"math"
 
 	"github.com/anacrolix/missinggo/v2/panicif"
 
@@ -29,21 +30,41 @@ func (s *State) SentInterested(interested bool) (changed bool) {
 	return true
 }
 
-// What we're waiting for from the peer about one chunk. Entries with nothing to wait for are
-// deleted, so the map stays the size of what's in flight.
-type ourRequest struct {
+// The reply we await for a chunk we requested. A request is outstanding or cancelled, never both:
+// a cancel ends the outstanding request, and the chunk can't be requested again until the cancel
+// is answered.
+type awaitingReply uint8
+
+const (
+	awaitingNothing awaitingReply = iota
 	// Sent and not yet answered, cancelled or dropped.
-	outstanding bool
+	awaitingRequestReply
 	// We sent a cancel and await a Piece or Reject. See ExpectsCancelReplies.
-	cancelled bool
+	awaitingCancelReply
+)
+
+// What we're waiting for from the peer about one chunk. Entries with nothing to wait for are
+// deleted, so the map stays the size of what's in flight. It's 4 bytes, so a map slot with its
+// 12-byte Request key is 16.
+type ourRequest struct {
+	awaiting awaitingReply
 	// The number of Piece messages we'll accept. Due to latency, buffering, and implementation
 	// differences, we may receive chunks that are no longer requested. Every outstanding or
-	// cancelled request counts one.
-	expected uint32
+	// cancelled request counts one. See expect for the limit.
+	expected uint16
 }
 
 func (r ourRequest) empty() bool {
-	return !r.outstanding && !r.cancelled && r.expected == 0
+	return r.awaiting == awaitingNothing && r.expected == 0
+}
+
+// Allows one more Piece for the chunk. The count saturates: getting there takes a peer cycling
+// choke, or us cancelling, on one chunk tens of thousands of times, and the only effect is that
+// it can't then send that many late Pieces.
+func (r *ourRequest) expect() {
+	if r.expected < math.MaxUint16 {
+		r.expected++
+	}
 }
 
 // Stores r for req, deleting the entry if there's nothing left to wait for.
@@ -61,13 +82,13 @@ func (s *State) putOurRequest(req Request, r ourRequest) {
 // RequestOutstanding returns whether we have requested a chunk and not had a response, or
 // cancelled the request, or had it dropped.
 func (s *State) RequestOutstanding(req Request) bool {
-	return s.ourRequests[req].outstanding
+	return s.ourRequests[req].awaiting == awaitingRequestReply
 }
 
 // RequestCancelled returns whether we sent a cancel for the request and are waiting for the peer
 // to reject it or send it anyway.
 func (s *State) RequestCancelled(req Request) bool {
-	return s.ourRequests[req].cancelled
+	return s.ourRequests[req].awaiting == awaitingCancelReply
 }
 
 // NumRequests returns the number of outstanding requests, not counting cancelled ones.
@@ -91,12 +112,12 @@ func (s *State) LowOnRequests() bool {
 // a reply, since the reply would be ambiguous.
 func (s *State) SentRequest(req Request) (added bool) {
 	r := s.ourRequests[req]
-	if r.outstanding {
+	if r.awaiting == awaitingRequestReply {
 		return false
 	}
-	panicif.True(r.cancelled)
-	r.outstanding = true
-	r.expected++
+	panicif.Eq(r.awaiting, awaitingCancelReply)
+	r.awaiting = awaitingRequestReply
+	r.expect()
 	s.numRequests++
 	s.putOurRequest(req, r)
 	return true
@@ -106,7 +127,7 @@ func (s *State) SentRequest(req Request) (added bool) {
 // call allows one Piece. SentRequest does this itself, so this is only for setting up tests.
 func (s *State) ExpectChunk(req Request) {
 	r := s.ourRequests[req]
-	r.expected++
+	r.expect()
 	s.putOurRequest(req, r)
 }
 
@@ -123,11 +144,11 @@ func (s *State) dropRequests() (dropped []Request) {
 		return
 	}
 	for req, r := range s.ourRequests {
-		if !r.outstanding {
+		if r.awaiting != awaitingRequestReply {
 			continue
 		}
 		dropped = append(dropped, req)
-		r.outstanding = false
+		r.awaiting = awaitingNothing
 		// expected is at least 1, so the entry stays and this doesn't delete during iteration.
 		s.ourRequests[req] = r
 	}
@@ -141,13 +162,13 @@ func (s *State) dropRequests() (dropped []Request) {
 // outstanding, in which case there's nothing to send.
 func (s *State) SentCancel(req Request) bool {
 	r := s.ourRequests[req]
-	if !r.outstanding {
+	if r.awaiting != awaitingRequestReply {
 		return false
 	}
-	r.outstanding = false
+	r.awaiting = awaitingNothing
 	s.numRequests--
 	if s.ExpectsCancelReplies() {
-		r.cancelled = true
+		r.awaiting = awaitingCancelReply
 		s.numCancelled++
 	}
 	s.putOurRequest(req, r)
@@ -157,17 +178,17 @@ func (s *State) SentCancel(req Request) bool {
 // Takes the request or cancel awaiting the reply naming req from r. outstanding is false if it
 // was cancelled.
 func (s *State) takeAwaitingReply(r *ourRequest) (outstanding, ok bool) {
-	switch {
-	case r.outstanding:
-		r.outstanding = false
+	switch r.awaiting {
+	case awaitingRequestReply:
 		s.numRequests--
-		return true, true
-	case r.cancelled:
-		r.cancelled = false
+		outstanding = true
+	case awaitingCancelReply:
 		s.numCancelled--
-		return false, true
+	default:
+		return false, false
 	}
-	return false, false
+	r.awaiting = awaitingNothing
+	return outstanding, true
 }
 
 // RecvReject handles a Reject, which names the request it rejects (BEP 6). outstanding is true if

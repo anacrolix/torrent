@@ -1093,7 +1093,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 		lpp := g.ResultFromTuple(l.peerPriority()).ToOption()
 		rpp := g.ResultFromTuple(r.peerPriority()).ToOption()
 		ml = ml.Bool(lpp.Ok, rpp.Ok)
-		ml = ml.Uint32(rpp.Value, lpp.Value)
+		ml = ml.EagerOrdered(rpp.Value, lpp.Value)
 		return ml.OrderingInt()
 	})
 

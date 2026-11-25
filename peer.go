@@ -546,7 +546,7 @@ type connectionTrust struct {
 }
 
 func (l connectionTrust) Cmp(r connectionTrust) int {
-	return multiless.New().Bool(l.Implicit, r.Implicit).Int64(l.NetGoodPiecesDirted, r.NetGoodPiecesDirted).OrderingInt()
+	return multiless.New().Bool(l.Implicit, r.Implicit).EagerOrdered(l.NetGoodPiecesDirted, r.NetGoodPiecesDirted).OrderingInt()
 }
 
 // Returns a new Bitmap that includes bits for all pieces the peer could have based on their claims.

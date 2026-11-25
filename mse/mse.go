@@ -86,17 +86,14 @@ func newEncrypt(initer bool, s, skey []byte) (c *rc4.Cipher) {
 }
 
 type cipherReader struct {
-	c  *rc4.Cipher
-	r  io.Reader
-	be []byte
+	c *rc4.Cipher
+	r io.Reader
 }
 
 func (cr *cipherReader) Read(b []byte) (n int, err error) {
-	if cap(cr.be) < len(b) {
-		cr.be = make([]byte, len(b))
-	}
-	n, err = cr.r.Read(cr.be[:len(b)])
-	cr.c.XORKeyStream(b[:n], cr.be[:n])
+	n, err = cr.r.Read(b)
+	// XORKeyStream permits dst and src to overlap exactly, so decrypt in place.
+	cr.c.XORKeyStream(b[:n], b[:n])
 	return
 }
 

@@ -22,17 +22,17 @@ type (
 // Is it missing the random piece affinity assigned per torrent? Can we do that deterministically
 // per-client?
 func pieceOrderLess(i, j *PieceRequestOrderItem) multiless.Computation {
-	return multiless.New().Int(
+	return multiless.New().EagerOrdered(
 		int(j.State.Priority), int(i.State.Priority),
 		// TODO: Should we match on complete here to prevent churn when availability changes? (Answer: Yes).
 	).Bool(
 		j.State.Partial, i.State.Partial,
-	).Int(
+	).EagerOrdered(
 		// If this is done with relative availability, do we lose some determinism? If completeness
 		// is used, would that push this far enough down? What happens if we have a piece in the
 		// order, but it has availability 0?
 		i.State.Availability, j.State.Availability,
-	).Int(
+	).EagerOrdered(
 		i.Key.Index, j.Key.Index,
 	).Lazy(func() multiless.Computation {
 		a := i.Key.InfoHash.Value()

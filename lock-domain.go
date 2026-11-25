@@ -313,7 +313,6 @@ func (t *Torrent) deferExclusiveOnce(key any, f func()) {
 
 type (
 	openNewConnsKey                   struct{ t *Torrent }
-	startPieceHashersKey              struct{ t *Torrent }
 	updateRegularTrackerAnnouncingKey struct{ t *Torrent }
 	webseedNeedUpdateRequestsKey      struct{ ws *webseedPeer }
 )

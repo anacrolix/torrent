@@ -3142,7 +3142,10 @@ func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) (targetVerifies pieceVe
 		err = errTorrentClosed
 		return
 	}
-	t.deferExclusiveOnce(startPieceHashersKey{t}, func() { _ = t.startPieceHashers() })
+	// Starting this Torrent's hashers only touches its own state and the atomic Client-wide limit,
+	// so it doesn't need exclusive mode. Deferring it there took the Client write lock once per
+	// downloaded piece, which stalled every other domain.
+	_ = t.startPieceHashers()
 	return
 }
 

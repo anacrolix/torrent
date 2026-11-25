@@ -1395,20 +1395,18 @@ func (t *Torrent) countBytesHashed(n int64) {
 }
 
 func (t *Torrent) countPieceHashed(passed, short bool, ioErr error) {
-	field := func(c *TorrentStatCounters) *Count {
+	for _, c := range [...]*TorrentStatCounters{&t.counters, &t.cl.counters} {
 		switch {
 		case passed:
-			return &c.PiecesHashedGood
+			c.PiecesHashedGood.Add(1)
 		case ioErr != nil:
-			return &c.PiecesHashedErrors
+			c.PiecesHashedErrors.Add(1)
 		case short:
-			return &c.PiecesHashedMissing
+			c.PiecesHashedMissing.Add(1)
 		default:
-			return &c.PiecesHashedBad
+			c.PiecesHashedBad.Add(1)
 		}
 	}
-	field(&t.counters).Add(1)
-	field(&t.cl.counters).Add(1)
 }
 
 func (t *Torrent) hashPiece(piece pieceIndex) (

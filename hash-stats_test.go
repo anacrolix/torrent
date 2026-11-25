@@ -64,6 +64,8 @@ func TestStatsCountPiecesMissingFromStorage(t *testing.T) {
 	st := tt.Stats()
 	missing := st.PiecesHashedMissing.Int64()
 	qt.Check(t, qt.IsTrue(missing >= 1), qt.Commentf("missing: %v", missing))
+	good := st.PiecesHashedGood.Int64()
+	qt.Check(t, qt.IsTrue(good >= int64(tt.NumPieces()-1)), qt.Commentf("good: %v of %v pieces", good, tt.NumPieces()))
 	qt.Check(t, qt.Equals(st.PiecesHashedBad.Int64()+st.PiecesHashedErrors.Int64(), 0))
 	cst := cl.Stats()
 	qt.Check(t, qt.Equals(cst.PiecesHashedMissing.Int64(), missing))
@@ -102,6 +104,7 @@ func TestStatsCountPiecesQueuedForHash(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	defer cl.unlock()
+	qt.Assert(t, qt.Equals(cl.activePieceHashers, 0), qt.Commentf("checks from adding the torrent still running"))
 	for i := range tt.NumPieces() {
 		_, err := tt.queuePieceCheck(i)
 		qt.Assert(t, qt.IsNil(err))

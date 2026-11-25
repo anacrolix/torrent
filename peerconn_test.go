@@ -15,11 +15,14 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
+	"weak"
 
 	g "github.com/anacrolix/generics"
 	"github.com/go-quicktest/qt"
 	"golang.org/x/time/rate"
 
+	peerWire "github.com/anacrolix/torrent/internal/peer-wire"
 	"github.com/anacrolix/torrent/merkle"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -186,9 +189,8 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			// The chunk must be written to storage everytime, to ensure the
 			// writeSem is unlocked.
 			t.pendAllChunkSpecs(0)
-			g.MakeMapIfNil(&cn.validReceiveChunks)
 			eachRequestIndex(func(ri RequestIndex) {
-				cn.validReceiveChunks[ri] = 1
+				cn.wireState.ExpectChunk(cn.t.requestIndexToRequest(ri))
 			})
 			cl.unlock()
 			ts.allChunksWritten.Add(int(numRequests))
@@ -243,6 +245,7 @@ func TestPeerConnRejectsUnsolicitedHashes(t *testing.T) {
 	}
 	qt.Assert(t, qt.IsNil(msg.WriteTo(&msgBuf)))
 	cn := &PeerConn{
+		wireState: new(peerWire.NewState()),
 		Peer: Peer{
 			cl:        cl,
 			t:         tor,
@@ -286,18 +289,18 @@ func TestPeerConnAcceptsSolicitedHashes(t *testing.T) {
 		Hashes:     pieceHashes,
 	}
 	cn := &PeerConn{
+		wireState: new(peerWire.NewState()),
 		Peer: Peer{
 			cl: cl,
 			t:  tor,
 		},
-		sentHashRequests: map[hashRequest]struct{}{
-			hashRequestFromMessage(msg): {},
-		},
 	}
+	cn.wireState.SentHashRequest(peerWire.HashRequestFromMessage(&msg))
 
 	qt.Assert(t, qt.IsNil(cn.onReadHashes(&msg)))
-	_, sentHashRequestPresent := cn.sentHashRequests[hashRequestFromMessage(msg)]
-	qt.Assert(t, qt.IsFalse(sentHashRequestPresent))
+	qt.Assert(t, qt.IsTrue(slices.Collect(cn.wireState.OutstandingHashRequests()) == nil))
+	// An answered request isn't made again.
+	qt.Assert(t, qt.IsFalse(cn.wireState.SentHashRequest(peerWire.HashRequestFromMessage(&msg))))
 	// Matching the requested root should promote the received file layer hashes into piece v2 hashes.
 	qt.Assert(t, qt.DeepEquals(tor.pieces[0].hashV2, &pieceHashes[0]))
 	qt.Assert(t, qt.DeepEquals(tor.pieces[1].hashV2, &pieceHashes[1]))
@@ -323,14 +326,13 @@ func TestPeerConnRejectsHashesForMissingRoot(t *testing.T) {
 		Hashes:     [][32]byte{{}},
 	}
 	cn := &PeerConn{
+		wireState: new(peerWire.NewState()),
 		Peer: Peer{
 			cl: cl,
 			t:  tor,
 		},
-		sentHashRequests: map[hashRequest]struct{}{
-			hashRequestFromMessage(msg): {},
-		},
 	}
+	cn.wireState.SentHashRequest(peerWire.HashRequestFromMessage(&msg))
 
 	err := cn.onReadHashes(&msg)
 	qt.Assert(t, qt.IsNotNil(err))
@@ -366,6 +368,7 @@ func TestRequestMissingHashesTrailingSingleHash(t *testing.T) {
 	}
 	tor.initFiles()
 	c := &PeerConn{
+		wireState: new(peerWire.NewState()),
 		Peer: Peer{
 			cl: cl,
 			t:  tor,
@@ -374,14 +377,14 @@ func TestRequestMissingHashesTrailingSingleHash(t *testing.T) {
 	c.legacyPeerImpl = c
 	c.peerImpl = c
 	c.v2 = true
-	c.peerSentHaveAll = true
+	c.wireState.RecvHaveAll()
 	c.initMessageWriter()
 	c.requestMissingHashes()
 	// The trailing block must be requested with the BEP 52 minimum length of 2.
 	trailing := false
-	for hr := range c.sentHashRequests {
-		if hr.index == 512 {
-			qt.Assert(t, qt.Equals(hr.length, pp.Integer(2)))
+	for hr := range c.wireState.OutstandingHashRequests() {
+		if hr.Index == 512 {
+			qt.Assert(t, qt.Equals(hr.Length, pp.Integer(2)))
 			trailing = true
 		}
 	}
@@ -418,6 +421,7 @@ func TestRequestMissingHashesAfterSinglePieceFile(t *testing.T) {
 	}
 	tor.initFiles()
 	c := &PeerConn{
+		wireState: new(peerWire.NewState()),
 		Peer: Peer{
 			cl: cl,
 			t:  tor,
@@ -426,17 +430,18 @@ func TestRequestMissingHashesAfterSinglePieceFile(t *testing.T) {
 	c.legacyPeerImpl = c
 	c.peerImpl = c
 	c.v2 = true
-	c.peerSentHaveAll = true
+	c.wireState.RecvHaveAll()
 	c.initMessageWriter()
 	c.requestMissingHashes()
-	qt.Assert(t, qt.HasLen(c.sentHashRequests, 1))
+	sent := slices.Collect(c.wireState.OutstandingHashRequests())
+	qt.Assert(t, qt.HasLen(sent, 1))
 	// The reply arrives: the request is done, and b's piece hashes are set.
-	clear(c.sentHashRequests)
+	qt.Assert(t, qt.IsNil(c.wireState.RecvHashReject(sent[0])))
 	for i := 1; i < 5; i++ {
 		tor.pieces[i].hashV2 = &[32]byte{byte(i)}
 	}
 	c.requestMissingHashes()
-	qt.Check(t, qt.HasLen(c.sentHashRequests, 0))
+	qt.Check(t, qt.HasLen(slices.Collect(c.wireState.OutstandingHashRequests()), 0))
 }
 
 func TestConnPexPeerFlags(t *testing.T) {
@@ -448,10 +453,10 @@ func TestConnPexPeerFlags(t *testing.T) {
 		conn *PeerConn
 		f    pp.PexPeerFlags
 	}{
-		{&PeerConn{Peer: Peer{outgoing: false, PeerPrefersEncryption: false}}, 0},
-		{&PeerConn{Peer: Peer{outgoing: false, PeerPrefersEncryption: true}}, pp.PexPrefersEncryption},
-		{&PeerConn{Peer: Peer{outgoing: true, PeerPrefersEncryption: false}}, pp.PexOutgoingConn},
-		{&PeerConn{Peer: Peer{outgoing: true, PeerPrefersEncryption: true}}, pp.PexOutgoingConn | pp.PexPrefersEncryption},
+		{&PeerConn{Peer: Peer{outgoing: false, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: false}}}, 0},
+		{&PeerConn{Peer: Peer{outgoing: false, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: true}}}, pp.PexPrefersEncryption},
+		{&PeerConn{Peer: Peer{outgoing: true, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: false}}}, pp.PexOutgoingConn},
+		{&PeerConn{Peer: Peer{outgoing: true, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: true}}}, pp.PexOutgoingConn | pp.PexPrefersEncryption},
 		{&PeerConn{Peer: Peer{RemoteAddr: udpAddr, Network: udpAddr.Network()}}, pp.PexSupportsUtp},
 		{&PeerConn{Peer: Peer{RemoteAddr: udpAddr, Network: udpAddr.Network(), outgoing: true}}, pp.PexOutgoingConn | pp.PexSupportsUtp},
 		{&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), outgoing: true}}, pp.PexOutgoingConn},
@@ -483,24 +488,21 @@ func TestConnPexEvent(t *testing.T) {
 		{
 			pexDrop,
 			&PeerConn{
-				Peer:           Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), outgoing: true},
-				PeerListenPort: dialTcpAddr.Port,
+				Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), outgoing: true, peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialTcpAddr.Port}},
 			},
 			pexEvent{pexDrop, tcpAddr.AddrPort(), pp.PexOutgoingConn, nil},
 		},
 		{
 			pexAdd,
 			&PeerConn{
-				Peer:           Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network()},
-				PeerListenPort: dialTcpAddr.Port,
+				Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialTcpAddr.Port}},
 			},
 			pexEvent{pexAdd, dialTcpAddr.AddrPort(), 0, nil},
 		},
 		{
 			pexDrop,
 			&PeerConn{
-				Peer:           Peer{RemoteAddr: udpAddr, Network: udpAddr.Network()},
-				PeerListenPort: dialUdpAddr.Port,
+				Peer: Peer{RemoteAddr: udpAddr, Network: udpAddr.Network(), peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialUdpAddr.Port}},
 			},
 			pexEvent{pexDrop, dialUdpAddr.AddrPort(), pp.PexSupportsUtp, nil},
 		},
@@ -519,16 +521,16 @@ func TestHaveAllThenBitfield(t *testing.T) {
 	tt := cl.newTorrentForTesting()
 	//pc := cl.newConnection(nil, newConnectionOpts{})
 	pc := PeerConn{
-		Peer: Peer{t: tt},
+		wireState: new(peerWire.NewState()),
+		Peer:      Peer{t: tt},
 	}
-	pc.initRequestState()
 	pc.legacyPeerImpl = &pc
 	tt.conns[&pc] = struct{}{}
 	g.InitNew(&pc.callbacks)
 	qt.Assert(t, qt.IsNil(pc.onPeerSentHaveAll()))
 	qt.Check(t, qt.DeepEquals(pc.t.connsWithAllPieces, map[*Peer]struct{}{&pc.Peer: {}}))
 	pc.peerSentBitfield([]bool{false, false, true, false, true, true, false, false})
-	qt.Check(t, qt.Equals(pc.peerMinPieces, 6))
+	qt.Check(t, qt.Equals(pc.wireState.PeerMinPieces(), 6))
 	qt.Check(t, qt.HasLen(pc.t.connsWithAllPieces, 0))
 	qt.Assert(t, qt.IsNil(pc.t.setInfoUnlocked(&metainfo.Info{
 		Name:        "herp",
@@ -555,7 +557,7 @@ func peerConnForPreferredNetworkDirection(
 	localPeerId, remotePeerId int,
 	outgoing, utp, ipv6 bool,
 ) *PeerConn {
-	pc := PeerConn{}
+	pc := PeerConn{wireState: new(peerWire.NewState())}
 	pc.outgoing = outgoing
 	if utp {
 		pc.Network = "udp"
@@ -608,8 +610,8 @@ func TestReceiveLargeRequest(t *testing.T) {
 	tor.info = &metainfo.Info{PieceLength: 3 << 20}
 	pc.setTorrent(tor)
 	tor._completedPieces.Add(0)
-	pc.PeerExtensionBytes.SetBit(pp.ExtensionBitFast, true)
-	pc.choking = false
+	pc.testHandshook(cl, pp.NewPeerExtensionBytes(pp.ExtensionBitFast), PeerID{})
+	pc.wireState.SentUnchoke()
 	pc.initMessageWriter()
 	req := Request{}
 	req.Length = defaultChunkSize
@@ -619,7 +621,11 @@ func TestReceiveLargeRequest(t *testing.T) {
 	req.Length = 2 << 20
 	qt.Check(t, qt.IsNil(pc.onReadRequest(req, false)))
 	qt.Check(t, qt.HasLen(pc.unreadPeerRequests, 2))
-	pc.unreadPeerRequests = nil
+	for r := range pc.wireState.PeerRequests() {
+		pc.onPeerSentCancel(r)
+	}
+	// The cancels were answered with rejects.
+	pc.messageWriter.writeBuffer.Reset()
 	pc.t.cl.config.UploadRateLimiter = rate.NewLimiter(1, defaultChunkSize)
 	req.Length = defaultChunkSize
 	qt.Check(t, qt.IsNil(pc.onReadRequest(req, false)))
@@ -642,7 +648,7 @@ func TestChunkOverflowsPiece(t *testing.T) {
 
 // TestServePeerRequestTorrentClosedStorageReadFails verifies that servePeerRequest does not panic
 // when a storage read fails after the torrent has been closed. Previously, peerRequestDataReadFailed
-// returned early on a closed torrent without removing the request from unreadPeerRequests,
+// returned early on a closed torrent without removing the outstanding peer request,
 // violating the invariant checked by the deferred assertion in servePeerRequest.
 func TestServePeerRequestTorrentClosedStorageReadFails(t *testing.T) {
 	var cl Client
@@ -669,8 +675,9 @@ func TestServePeerRequestTorrentClosedStorageReadFails(t *testing.T) {
 	pc.t.chunkSize = 1
 
 	req := Request{Index: 0, ChunkSpec: ChunkSpec{Begin: 0, Length: 1}}
-	g.MakeMapIfNil(&pc.unreadPeerRequests)
-	pc.unreadPeerRequests[req] = struct{}{}
+	pc.wireState.SentUnchoke()
+	pc.wireState.RecvRequest(req, 1)
+	pc.addPeerRequest(req)
 
 	// Simulate the torrent being dropped while the connection is still active.
 	tor.Drop()
@@ -679,7 +686,12 @@ func TestServePeerRequestTorrentClosedStorageReadFails(t *testing.T) {
 	defer cl.unlock()
 	pc.servePeerRequest(req)
 
-	qt.Check(t, qt.IsFalse(g.MapContains(pc.unreadPeerRequests, req)))
+	qt.Check(t, qt.IsFalse(pc.unreadPeerRequest(req)))
+	// The request is outstanding on the wire until the conn closes, and then wireState goes.
+	qt.Check(t, qt.IsTrue(pc.havePeerRequest(req)))
+	pc.onWireClosed("test")
+	qt.Check(t, qt.IsNil(pc.wireState))
+	qt.Check(t, qt.HasLen(pc.readyPeerRequests, 0))
 }
 
 func outstandingChunkPoolBuffers() int64 {
@@ -719,38 +731,42 @@ func TestPeerConnPeerRequestDataLifecycle(t *testing.T) {
 		prd := pc.getPeerRequestData(r.Length.Int())
 		g.MakeMapIfNil(&pc.readyPeerRequests)
 		pc.readyPeerRequests[r] = prd
-		pc.onClose()
+		pc.close()
 		qt.Check(t, qt.Equals(outstandingChunkPoolBuffers(), baseline))
 	})
 
 	t.Run("cancel", func(t *testing.T) {
 		pc, r, baseline := newConn(t, &torrentStorageClient{&torrentStorage{}})
 		prd := pc.getPeerRequestData(r.Length.Int())
-		g.MakeMapIfNil(&pc.unreadPeerRequests)
+		pc.wireState.SentUnchoke()
+		pc.wireState.RecvRequest(r, 1)
 		g.MakeMapIfNil(&pc.readyPeerRequests)
-		pc.unreadPeerRequests[r] = struct{}{}
 		pc.readyPeerRequests[r] = prd
-		pc.deletePeerRequest(r)
+		pc.onPeerSentCancel(r)
 		qt.Check(t, qt.Equals(outstandingChunkPoolBuffers(), baseline))
 	})
 
 	t.Run("choke cleanup", func(t *testing.T) {
 		pc, r, baseline := newConn(t, &torrentStorageClient{&torrentStorage{}})
 		prd := pc.getPeerRequestData(r.Length.Int())
+		pc.wireState.SentUnchoke()
+		pc.wireState.RecvRequest(r, 1)
 		g.MakeMapIfNil(&pc.readyPeerRequests)
 		pc.readyPeerRequests[r] = prd
-		pc.choking = true
-		pc.deleteAllPeerRequests()
+		// Choking a peer without the fast extension discards its requests.
+		pc.choke(func(pp.Message) bool { return true })
+		qt.Check(t, qt.HasLen(pc.readyPeerRequests, 0))
 		qt.Check(t, qt.Equals(outstandingChunkPoolBuffers(), baseline))
 	})
 
 	t.Run("unwanted completed read", func(t *testing.T) {
 		pc, r, baseline := newConn(t, benchmarkUploadStorage{})
-		g.MakeMapIfNil(&pc.unreadPeerRequests)
-		pc.unreadPeerRequests[r] = struct{}{}
+		pc.wireState.SentUnchoke()
+		pc.wireState.RecvRequest(r, 1)
+		pc.addPeerRequest(r)
 		prd, err := pc.readPeerRequestData(r)
 		qt.Assert(t, qt.IsNil(err))
-		delete(pc.unreadPeerRequests, r)
+		pc.onPeerSentCancel(r)
 		pc.releasePeerRequestData(prd)
 		qt.Check(t, qt.Equals(outstandingChunkPoolBuffers(), baseline))
 	})
@@ -804,8 +820,8 @@ func BenchmarkServePeerRequests(b *testing.B) {
 	})))
 	cn := cl.newConnection(nil, newConnectionOpts{network: "test"})
 	cn.setTorrent(t)
-	cn.PeerExtensionBytes.SetBit(pp.ExtensionBitFast, true)
-	cn.choking = false
+	cn.testHandshook(&cl, pp.NewPeerExtensionBytes(pp.ExtensionBitFast), PeerID{})
+	cn.wireState.SentUnchoke()
 	cn.initMessageWriter()
 	// Marshals the message like the real writer, then drops it so the buffer doesn't grow.
 	writeAndDiscard := func(msg pp.Message) bool {
@@ -850,15 +866,15 @@ func newV2HashesTestConn(pieceHashes [][32]byte, reqs ...pp.Message) *PeerConn {
 	}
 	(*tor.files)[0].t = tor
 	cn := &PeerConn{
+		wireState: new(peerWire.NewState()),
 		Peer: Peer{
 			cl: cl,
 			t:  tor,
 		},
-		sentHashRequests: map[hashRequest]struct{}{},
 	}
 	for _, r := range reqs {
 		r.PiecesRoot = piecesRoot
-		cn.sentHashRequests[hashRequestFromMessage(r)] = struct{}{}
+		cn.wireState.SentHashRequest(peerWire.HashRequestFromMessage(&r))
 	}
 	return cn
 }
@@ -884,7 +900,7 @@ func TestPeerConnRejectsWrongHashes(t *testing.T) {
 		qt.Assert(t, qt.IsNil(cn.onReadHashes(&parts[0])))
 		qt.Check(t, qt.IsNil(cn.t.pieces[0].hashV2), qt.Commentf("set before all hashes arrived"))
 		err := cn.onReadHashes(&parts[1])
-		qt.Check(t, qt.HasLen(cn.receivedHashPieces, 0))
+		qt.Check(t, qt.Equals(cn.wireState.NumFilesReceivingHashes(), 0))
 		if correct {
 			qt.Assert(t, qt.IsNil(err))
 			for i := range pieceHashes {
@@ -898,4 +914,49 @@ func TestPeerConnRejectsWrongHashes(t *testing.T) {
 			}
 		}
 	}
+}
+
+// Completes the BEP 3 handshake for a conn made without one, as if the peer sent peerBits and id.
+func (pc *PeerConn) testHandshook(cl *Client, peerBits pp.PeerExtensionBits, id PeerID) {
+	peerWire.RecvHandshake(&pc.peerHandshake, pp.HandshakeResult{PeerExtensionBits: peerBits, PeerID: id})
+	pc.wireState.Handshook(cl.config.Extensions, pc.peerHandshake)
+}
+
+// Closing a conn undoes its requests in the Torrent, so other peers can take them.
+func TestCloseUndoesRequests(t *testing.T) {
+	var cl Client
+	cfg := TestingConfig(t)
+	cl.init(cfg)
+	t.Cleanup(func() { cl.Close() })
+	tor, _ := cl.AddTorrentOpt(AddTorrentOpts{
+		InfoHash:                 testingTorrentInfoHash,
+		Storage:                  &torrentStorageClient{&torrentStorage{}},
+		DisableInitialPieceCheck: true,
+	})
+	qt.Assert(t, qt.IsNil(tor.setInfoUnlocked(&metainfo.Info{
+		Pieces:      make([]byte, metainfo.HashSize),
+		PieceLength: 1,
+		Length:      1,
+		Name:        "test",
+	})))
+	pc := cl.newConnection(nil, newConnectionOpts{network: "test"})
+	pc.setTorrent(tor)
+	pc.t.chunkSize = 1
+	var deleted []Request
+	pc.callbacks = &Callbacks{DeletedRequest: []func(PeerRequestEvent){func(e PeerRequestEvent) {
+		deleted = append(deleted, e.Request)
+	}}}
+	cl.lock()
+	const r RequestIndex = 0
+	pc.wireState.SentRequest(tor.requestIndexToRequest(r))
+	pc.requestIndexes().Requests.Add(r)
+	tor.requestState[r] = requestState{peer: weak.Make(pc), when: time.Now()}
+	qt.Check(t, qt.Equals(tor.requestingPeer(r), pc))
+	pc.close()
+	qt.Check(t, qt.IsNil(pc.wireState))
+	qt.Check(t, qt.IsNil(tor.requestingPeer(r)))
+	qt.Check(t, qt.HasLen(tor.requestState, 0))
+	qt.Check(t, qt.DeepEquals(deleted, []Request{tor.requestIndexToRequest(r)}))
+	cl.unlock()
+	qt.Check(t, qt.Equals(pc.PeerPieces().GetCardinality(), 0))
 }

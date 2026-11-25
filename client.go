@@ -40,6 +40,7 @@ import (
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/check"
+	peerWire "github.com/anacrolix/torrent/internal/peer-wire"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
@@ -1208,8 +1209,8 @@ func (cl *Client) connBtHandshake(ctx context.Context, c *PeerConn, ih *metainfo
 	successfulPeerWireProtocolHandshakePeerReservedBytes.addSafeKey(
 		hex.EncodeToString(res.PeerExtensionBits[:]))
 	ret = res.Hash
-	c.PeerExtensionBytes = res.PeerExtensionBits
-	c.PeerID = res.PeerID
+	peerWire.RecvHandshake(&c.peerHandshake, res)
+	c.wireState.Handshook(reservedBits, c.peerHandshake)
 	c.completedHandshake = time.Now()
 	if cb := cl.config.Callbacks.CompletedHandshake; cb != nil {
 		cb(c, res.Hash)
@@ -1261,10 +1262,8 @@ func (cl *Client) runReceivedConn(c *PeerConn, releaseHandshake func()) {
 func (t *Torrent) runHandshookConn(pc *PeerConn) error {
 	pc.setTorrent(t)
 	cl := t.cl
-	for i, b := range cl.config.MinPeerExtensions {
-		if pc.PeerExtensionBytes[i]&b != b {
-			return fmt.Errorf("peer did not meet minimum peer extensions: %x", pc.PeerExtensionBytes[:])
-		}
+	if !peerWire.MeetsMinExtensions(pc.PeerExtensionBytes, cl.config.MinPeerExtensions) {
+		return fmt.Errorf("peer did not meet minimum peer extensions: %x", pc.PeerExtensionBytes[:])
 	}
 	if pc.PeerID == cl.peerID {
 		if pc.outgoing {
@@ -1383,11 +1382,11 @@ func (pc *PeerConn) sendInitialMessages() {
 		if pc.fastEnabled() {
 			if t.haveAllPieces() {
 				pc.write(pp.Message{Type: pp.HaveAll})
-				pc.sentHaves.AddRange(0, uint64(pc.t.NumPieces()))
+				pc.wireState.SentHaveAll(pc.t.NumPieces())
 				return
 			} else if !t.haveAnyPieces() {
 				pc.write(pp.Message{Type: pp.HaveNone})
-				pc.sentHaves.Clear()
+				pc.wireState.SentHaveNone()
 				return
 			}
 		}
@@ -1433,10 +1432,9 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 	switch d.Type {
 	case pp.DataMetadataExtensionMsgType:
 		c.modifyRelevantConnStats(add(1, func(cs *ConnStats) *Count { return &cs.MetadataChunksRead }))
-		if !c.requestedMetadataPiece(piece) {
+		if !c.wireState.RecvMetadataPiece(piece) {
 			return fmt.Errorf("got unexpected piece %d", piece)
 		}
-		c.metadataRequests[piece] = false
 		if d.TotalSize != len(t.metadataBytes) {
 			// The peer has a different idea of the metadata. Don't mix its data into ours.
 			c.protocolLogger.Levelf(log.Debug, "ignoring metadata piece for total size %v", d.TotalSize)
@@ -1889,21 +1887,21 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 	}
 	c = &PeerConn{
 		Peer: Peer{
-			cl:          cl,
-			outgoing:    opts.outgoing,
-			choking:     true,
-			peerChoking: true,
+			cl:        cl,
+			outgoing:  opts.outgoing,
+			peerExtendedHandshake: peerWire.ExtendedHandshake{
+				PeerMaxRequests: 250,
+			},
 
 			RemoteAddr:      opts.remoteAddr,
 			localPublicAddr: opts.localPublicAddr,
 			Network:         opts.network,
 			callbacks:       &cl.config.Callbacks,
 		},
-		PeerMaxRequests: 250,
-		connString:      opts.connString,
-		conn:            nc,
+		wireState:  new(peerWire.NewState()),
+		connString: opts.connString,
+		conn:       nc,
 	}
-	c.initRequestState()
 	// TODO: Need to be much more explicit about this, including allowing non-IP bannable addresses.
 	if opts.remoteAddr != nil {
 		netipAddrPort, err := netip.ParseAddrPort(opts.remoteAddr.String())

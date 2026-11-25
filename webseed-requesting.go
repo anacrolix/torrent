@@ -185,6 +185,8 @@ func (cl *Client) updateWebseedRequests() {
 
 	unwantedExistingRequests := maps.Clone(existingRequests)
 
+	// The heap only shrinks from here (no heap.Push), so this length covers every slot the deferred
+	// clear needs. Update heapHighWater if anything is pushed below.
 	heapHighWater = len(heapSlice)
 	heap.Init(aprioriHeap)
 	var plan webseedRequestPlan

@@ -95,8 +95,8 @@ func TestDroppedWebseedTorrentsCollected(t *testing.T) {
 	}()
 
 	// Run the webseed scheduler once more with no active torrents (same as the periodic timer
-	// firing after Drop). This clears cl.aprioriMap at entry, isolating cl.heapSlice and
-	// cl.roaringIntIterator retention.
+	// firing after Drop). Checks that a pass with nothing to schedule leaves no dropped Torrents
+	// behind in cl.aprioriMap, cl.heapSlice or cl.roaringIntIterator.
 	cl.lock()
 	cl.updateWebseedRequests()
 	cl.unlock()

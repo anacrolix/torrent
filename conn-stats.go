@@ -87,6 +87,6 @@ func (me connStatsReadWriter) Write(b []byte) (n int, err error) {
 
 func (me connStatsReadWriter) Read(b []byte) (n int, err error) {
 	n, err = me.rw.Read(b)
-	me.c.readBytes(int64(n))
+	readBytes(me.c, int64(n))
 	return
 }

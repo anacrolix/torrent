@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"io"
+	"net"
 
 	"github.com/RoaringBitmap/roaring/v2"
 
@@ -9,11 +10,28 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
-// The methods of Peer that differ by peer type: PeerConn (the BitTorrent protocol over TCP, uTP or
-// WebRTC) and webseedPeer. Peer holds its implementation in Peer.peerImpl, and calls through it
-// explicitly. PeerConn embeds Peer, so code that has a *PeerConn calls these methods directly.
-type peerImpl interface {
+// A peer of a Torrent: a PeerConn (the BitTorrent protocol over TCP, uTP or WebRTC) or a
+// webseedPeer. Both embed commonPeer for the state and methods they share. The unexported methods
+// mean only this package implements Peer.
+type Peer interface {
+	// Returns the Torrent a Peer belongs to. Shouldn't change for the lifetime of the Peer. May be
+	// nil if we are the receiving end of a connection and the handshake hasn't been received or
+	// accepted yet.
+	Torrent() *Torrent
+	Stats() PeerStats
+	DownloadRate() float64
+	Close() error
 	String() string
+	// Returns the PeerConn if this Peer is one. Equivalent to a type assertion.
+	TryAsPeerConn() (*PeerConn, bool)
+
+	// The state shared by all peer types.
+	common() *commonPeer
+
+	// Shared, from commonPeer.
+
+	remoteIp() net.IP
+	trust() connectionTrust
 
 	// Requests.
 
@@ -59,3 +77,17 @@ type peerImpl interface {
 	peerImplStatusLines() []string
 	peerImplWriteStatus(w io.Writer)
 }
+
+// The exported Peer methods that depend on the peer type, defined on each type.
+
+func (cn *PeerConn) Stats() PeerStats { return peerStats(cn) }
+
+func (cn *PeerConn) Close() error { return closePeerLocked(cn) }
+
+func (cn *PeerConn) TryAsPeerConn() (*PeerConn, bool) { return cn, true }
+
+func (ws *webseedPeer) Stats() PeerStats { return peerStats(ws) }
+
+func (ws *webseedPeer) Close() error { return closePeerLocked(ws) }
+
+func (ws *webseedPeer) TryAsPeerConn() (*PeerConn, bool) { return nil, false }

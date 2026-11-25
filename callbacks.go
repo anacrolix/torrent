@@ -27,8 +27,8 @@ type Callbacks struct {
 	ReceivedRequested  []func(PeerMessageEvent)
 	DeletedRequest     []func(PeerRequestEvent)
 	SentRequest        []func(PeerRequestEvent)
-	PeerClosed         []func(*Peer)
-	NewPeer            []func(*Peer)
+	PeerClosed         []func(Peer)
+	NewPeer            []func(Peer)
 	// Called when a PeerConn has been added to a Torrent. It's finished all BitTorrent protocol
 	// handshakes, and is about to start sending and receiving BitTorrent messages. The extended
 	// handshake has not yet occurred. This is a good time to alter the supported extension
@@ -43,12 +43,12 @@ type Callbacks struct {
 type ReceivedUsefulDataEvent = PeerMessageEvent
 
 type PeerMessageEvent struct {
-	Peer    *Peer
+	Peer    Peer
 	Message *pp.Message
 }
 
 type PeerRequestEvent struct {
-	Peer *Peer
+	Peer Peer
 	Request
 }
 

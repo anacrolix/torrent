@@ -19,14 +19,14 @@ type peerData struct {
 // Tracks the order that peers upload requests that we've sent them.
 type PeerUploadOrder struct {
 	mu    sync.Mutex
-	peers map[*torrent.Peer]*peerData
+	peers map[torrent.Peer]*peerData
 }
 
 func (me *PeerUploadOrder) Init() {
-	me.peers = make(map[*torrent.Peer]*peerData)
+	me.peers = make(map[torrent.Peer]*peerData)
 }
 
-func (me *PeerUploadOrder) onNewPeer(p *torrent.Peer) {
+func (me *PeerUploadOrder) onNewPeer(p torrent.Peer) {
 	me.mu.Lock()
 	defer me.mu.Unlock()
 	if _, ok := me.peers[p]; ok {

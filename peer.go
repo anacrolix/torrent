@@ -446,12 +446,12 @@ func receiveChunkPrologue(p Peer, msg *pp.Message) (_ *pendingChunkWrite, err er
 	piece.unpendChunkIndex(chunkIndexFromChunkSpec(ppReq.ChunkSpec, t.chunkSize))
 
 	// Cancel pending requests for this chunk from *other* peers.
-	if p := t.requestingPeer(req); p != nil {
-		if p.peerPtr() == p {
-			p.logger.Slogger().Error("received chunk but still pending request", "peer", p, "req", req)
+	if other := t.requestingPeer(req); other != nil {
+		if other.peerPtr() == p {
+			other.logger.Slogger().Error("received chunk but still pending request", "peer", other, "req", req)
 			panic("should not be pending request from conn that just received it")
 		}
-		p.cancel(req)
+		other.cancel(req)
 	}
 
 	return &pendingChunkWrite{

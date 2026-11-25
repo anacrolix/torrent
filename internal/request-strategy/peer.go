@@ -6,7 +6,7 @@ import (
 
 type PeerRequestState struct {
 	Interested bool
-	Requests   *PeerRequests
+	Requests   PeerRequests
 	// Cancelled and waiting response
 	Cancelled typedRoaring.Bitmap[RequestIndex]
 }

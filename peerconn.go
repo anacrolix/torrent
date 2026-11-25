@@ -1692,7 +1692,7 @@ func (cn *PeerConn) expectingChunks() bool {
 	haveAllowedFastRequests := false
 	cn.wireState.PeerAllowedFast().Iterate(func(i pieceIndex) bool {
 		haveAllowedFastRequests = roaringBitmapRangeCardinality[RequestIndex](
-			cn.requestIndexes().Requests,
+			&cn.requestIndexes().Requests,
 			cn.t.pieceRequestIndexBegin(i),
 			cn.t.pieceRequestIndexBegin(i+1),
 		) == 0
@@ -1927,9 +1927,7 @@ func (c *PeerConn) onDeletedRequest(r RequestIndex) {
 
 // Our request and cancel indexes, for the request strategy.
 func (c *PeerConn) requestIndexes() *requestStrategy.PeerRequestState {
-	if c.requestState.Requests == nil {
-		c.requestState.Requests = &requestStrategy.PeerRequests{}
-	}
+	// The zero value is ready to use.
 	return &c.requestState
 }
 
@@ -1980,7 +1978,7 @@ func (c *PeerConn) onWireClosed(reason updateRequestReason) {
 	c.releaseLocalPeerRequests()
 	reqs := c.requestIndexes()
 	droppedAny := !reqs.Requests.IsEmpty()
-	for r := range reqs.Requests.IterateBitmapSnapshot() {
+	for r := range reqs.Requests.IterateBitmapSnapshot {
 		panicif.False(reqs.Requests.CheckedRemove(r))
 		c.onDeletedRequest(r)
 	}
@@ -2002,7 +2000,7 @@ func (c *PeerConn) assertNoRequests() {
 }
 
 func (c *PeerConn) cancelAllRequests() {
-	for x := range c.requestIndexes().Requests.IterateBitmapSnapshot() {
+	for x := range c.requestIndexes().Requests.IterateBitmapSnapshot {
 		c.cancel(x)
 	}
 	c.assertNoRequests()

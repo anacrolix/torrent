@@ -3999,13 +3999,10 @@ func (t *Torrent) considerStartingHashers() bool {
 	if t.activePieceHashes >= t.cl.config.PieceHashersPerTorrent {
 		return false
 	}
-	if !t.cl.canStartPieceHashers() {
-		return false
-	}
 	if t.piecesQueuedForHash.IsEmpty() {
 		return false
 	}
-	return true
+	return t.cl.pieceHasherSlotFreeOrWanted()
 }
 
 func (t *Torrent) getFile(fileIndex int) *File {

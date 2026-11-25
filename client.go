@@ -2168,7 +2168,13 @@ func (cl *Client) tryAcquirePieceHasher() bool {
 		n := cl.activePieceHashers.Load()
 		if n >= int64(cl.maxActivePieceHashers()) {
 			cl.pieceHashersWanted.Store(true)
-			return false
+			// A hasher may have released its slot and checked pieceHashersWanted between the load
+			// and the store, and then nothing would restart us. Either the load below sees the
+			// release, or that hasher sees the flag.
+			if cl.activePieceHashers.Load() >= int64(cl.maxActivePieceHashers()) {
+				return false
+			}
+			continue
 		}
 		if cl.activePieceHashers.CompareAndSwap(n, n+1) {
 			return true
@@ -2181,7 +2187,14 @@ func (cl *Client) releasePieceHasher() {
 	cl.activePieceHashers.Add(-1)
 }
 
-func (cl *Client) canStartPieceHashers() bool {
+// Reports whether a hasher slot is free. If not, flags that hashers are wanted, so the next hasher to
+// finish restarts them.
+func (cl *Client) pieceHasherSlotFreeOrWanted() bool {
+	if cl.belowMaxActivePieceHashers() {
+		return true
+	}
+	cl.pieceHashersWanted.Store(true)
+	// Either this sees a slot released since the check above, or that hasher sees the flag.
 	return cl.belowMaxActivePieceHashers()
 }
 
@@ -2209,7 +2222,9 @@ func (cl *Client) downloadedPiecesWaitForHash(except *Torrent) bool {
 
 func (cl *Client) startPieceHashers() {
 	cl.assertExclusive()
-	if !cl.canStartPieceHashers() {
+	// Called when hashers were wanted, and that flag has been consumed, so keep it set if there's
+	// still no room.
+	if !cl.pieceHasherSlotFreeOrWanted() {
 		return
 	}
 	var ts []*Torrent
@@ -2230,7 +2245,8 @@ func (cl *Client) startPieceHashers() {
 	for h.Len() > 0 {
 		t := heap.Pop(h)
 		_ = t.startPieceHashers()
-		if !cl.canStartPieceHashers() {
+		// Torrents left in the heap still want hashers.
+		if h.Len() > 0 && !cl.pieceHasherSlotFreeOrWanted() {
 			break
 		}
 	}

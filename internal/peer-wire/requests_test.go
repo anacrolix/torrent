@@ -310,3 +310,34 @@ func TestSentChoke(t *testing.T) {
 		qt.Check(t, qt.Equals(s.HavePeerRequest(peerRequest(0)), fast))
 	}
 }
+
+// Entries for our requests go once there's nothing left to wait for, so the map doesn't grow with
+// requests the peer has answered.
+func TestOurRequestsDeletedWhenSettled(t *testing.T) {
+	s := fastState()
+	s.RecvUnchoke()
+	for i := range 4 {
+		qt.Assert(t, qt.IsTrue(sendRequest(&s, i)))
+	}
+	// Answered with the Piece.
+	_, _, err := s.RecvChunk(chunk(0))
+	qt.Assert(t, qt.IsNil(err))
+	// Rejected.
+	_, ok := s.RecvReject(chunk(1))
+	qt.Assert(t, qt.IsTrue(ok))
+	// Cancelled, then rejected.
+	qt.Assert(t, qt.IsTrue(s.SentCancel(chunk(2))))
+	qt.Check(t, qt.Equals(s.NumCancelled(), 1))
+	_, ok = s.RecvReject(chunk(2))
+	qt.Assert(t, qt.IsTrue(ok))
+	// Dropped by a choke without fast: the Piece may still come.
+	s.fast = false
+	_, dropped := s.RecvChoke()
+	qt.Check(t, qt.DeepEquals(dropped, []Request{chunk(3)}))
+	qt.Check(t, qt.Equals(s.NumRequests(), 0))
+	qt.Check(t, qt.HasLen(s.ourRequests, 1))
+	_, _, err = s.RecvChunk(chunk(3))
+	qt.Assert(t, qt.IsNil(err))
+	qt.Check(t, qt.HasLen(s.ourRequests, 0))
+	qt.Check(t, qt.IsTrue(s.LowOnRequests()))
+}

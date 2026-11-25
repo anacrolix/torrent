@@ -59,13 +59,11 @@ type State struct {
 
 	// We've told the peer we're interested.
 	interested bool
-	// Our requests awaiting a Piece or Reject.
-	ourRequests map[Request]struct{}
-	// Our cancels awaiting a Piece or Reject. See ExpectsCancelReplies.
-	cancelled map[Request]struct{}
-	// The number of Piece messages we'll accept per chunk. Due to latency, buffering, and
-	// implementation differences, we may receive chunks that are no longer requested.
-	validReceiveChunks map[Request]int
+	// Our requests and cancels awaiting a Piece or Reject, and the Pieces we'll accept, in one
+	// map so each message costs one lookup. The counts are of outstanding and cancelled entries.
+	ourRequests  map[Request]ourRequest
+	numRequests  int
+	numCancelled int
 
 	// Requests from the peer that are outstanding.
 	peerRequests map[Request]struct{}

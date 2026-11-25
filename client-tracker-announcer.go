@@ -501,6 +501,8 @@ func (me *regularTrackerAnnounceDispatcher) addKey(key torrentTrackerAnnouncerKe
 		g.MakeMapIfNil(&me.announceStates)
 		g.MapMustAssignNew(me.announceStates, key, g.PtrTo(announceState{}))
 	}
+	// A tracker removed (ModifyTrackers) and added back before it was forgotten is in use again.
+	g.MapMustGet(me.announceStates, key).trackerRemoved = false
 	t.regularTrackerAnnounceState[key] = g.MapMustGet(me.announceStates, key)
 	if me.announceData.ContainsKey(key) {
 		me.resetAnnounceStateForReadd(key)
@@ -926,6 +928,11 @@ func (me *regularTrackerAnnounceDispatcher) nextAnnounceEvent(key torrentTracker
 	state := g.MapMustGet(me.announceStates, key)
 	lastOk := state.lastOk
 	t := me.torrentFromShortInfohash(key.ShortInfohash)
+	if state.trackerRemoved {
+		// The torrent no longer uses this tracker (Torrent.ModifyTrackers): leave it as if the
+		// torrent had been dropped.
+		t = nil
+	}
 	if t == nil {
 		// Our lastOk attempt was an error.
 		if state.Err != nil {
@@ -982,6 +989,9 @@ type announceState struct {
 	consecutiveFailures int
 	// Has ever sent completed event. Should only be sent once.
 	sentCompleted bool
+	// The torrent no longer uses this tracker (Torrent.ModifyTrackers): it's sent Stopped if it was
+	// announced to, then forgotten. Cleared if the tracker is added back.
+	trackerRemoved bool
 }
 
 func (cl *Client) startTrackerAnnouncer(u *url.URL, urlStr trackerAnnouncerKey) error {

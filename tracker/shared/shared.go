@@ -27,6 +27,9 @@ func (me *AnnounceEvent) UnmarshalText(text []byte) error {
 }
 
 func (me AnnounceEvent) MarshalText() ([]byte, error) {
+	if me < 0 || int(me) >= len(announceEventStrings) {
+		return nil, fmt.Errorf("invalid announce event %d", int32(me))
+	}
 	return []byte(announceEventStrings[me]), nil
 }
 
@@ -58,7 +61,11 @@ func (me AnnounceEvent) LogValue() slog.Value {
 
 // MarshalJSON implements json.Marshaler to ensure AnnounceEvent is serialized as a string in JSON
 func (me AnnounceEvent) MarshalJSON() ([]byte, error) {
-	return json.Marshal(me.String())
+	b, err := me.MarshalText()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(string(b))
 }
 
 // UnmarshalJSON implements json.Unmarshaler to deserialize AnnounceEvent from a string in JSON

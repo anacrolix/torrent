@@ -326,3 +326,21 @@ func waitForPeers(t *testing.T, tor *Torrent, num int) {
 		tor.cl.event.Wait()
 	}
 }
+
+// Announces with infohashes that aren't valid hex are ignored, and the valid ones in the same
+// announce are still used.
+func TestLPDBadInfohashIgnored(t *testing.T) {
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	t.Cleanup(func() { cl.Close() })
+	setupTestLPD(cl)
+
+	greetingTempDir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(greetingTempDir)
+	tor, _, err := cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	qt.Assert(t, qt.IsNil(err))
+
+	peer := &net.UDPAddr{IP: net.IPv4(10, 20, 30, 40), Port: 7777}
+	injectAnnounce(t, cl, peer, []string{"zz", strings.Repeat("zz", 20), tor.InfoHash().HexString()})
+	waitForPeers(t, tor, 1)
+}

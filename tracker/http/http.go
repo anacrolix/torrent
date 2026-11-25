@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/anacrolix/missinggo/httptoo"
+	"github.com/anacrolix/missinggo/v2/httptoo"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/tracker/shared"
@@ -116,9 +116,13 @@ func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceO
 	}
 	defer resp.Body.Close()
 	var buf bytes.Buffer
-	io.Copy(&buf, resp.Body)
+	_, err = io.Copy(&buf, cl.limitBody(resp.Body))
+	if err != nil {
+		err = fmt.Errorf("reading response body: %w", err)
+		return
+	}
 	if resp.StatusCode != 200 {
-		err = fmt.Errorf("response from tracker: %s: %q", resp.Status, buf.Bytes())
+		err = fmt.Errorf("response from tracker: %s: %s", resp.Status, quoteBodyForError(buf.Bytes()))
 		return
 	}
 	var trackerResponse HttpResponse
@@ -126,7 +130,7 @@ func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceO
 	if _, ok := err.(bencode.ErrUnusedTrailingBytes); ok {
 		err = nil
 	} else if err != nil {
-		err = fmt.Errorf("error decoding %q: %s", buf.Bytes(), err)
+		err = fmt.Errorf("error decoding %s: %w", quoteBodyForError(buf.Bytes()), err)
 		return
 	}
 	if trackerResponse.FailureReason != "" {
@@ -151,6 +155,18 @@ func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceO
 		})
 	}
 	return
+}
+
+// The most bytes of a response body included in an error.
+const maxErrorBodyBytes = 256
+
+// Quotes a response body for an error message, truncating it to maxErrorBodyBytes, since errors
+// are logged and kept in announce state.
+func quoteBodyForError(b []byte) string {
+	if len(b) <= maxErrorBodyBytes {
+		return strconv.Quote(string(b))
+	}
+	return fmt.Sprintf("%q... (%d bytes)", b[:maxErrorBodyBytes], len(b))
 }
 
 type AnnounceResponse struct {

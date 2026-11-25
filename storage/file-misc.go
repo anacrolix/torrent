@@ -1,9 +1,11 @@
 package storage
 
 import (
-	"io"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/torrent/metainfo"
@@ -28,7 +30,7 @@ func minFileLengthsForTorrentExtent(
 }
 
 func fsync(filePath string) (err error) {
-	f, err := os.OpenFile(filePath, os.O_WRONLY, filePerm)
+	f, err := os.OpenFile(filePath, fsyncOpenFlag, 0)
 	if err != nil {
 		return
 	}
@@ -41,20 +43,25 @@ func fsync(filePath string) (err error) {
 
 // A helper to create zero-length files which won't appear for file-orientated storage since no
 // writes will ever occur to them (no torrent data is associated with a zero-length file). The
-// caller should make sure the file name provided is safe/sanitized.
+// caller should make sure the file name provided is safe/sanitized. An existing file at name is left
+// as it is: there's no torrent data to put in it, so there's no reason to truncate it.
 func CreateNativeZeroLengthFile(name string) error {
-	os.MkdirAll(filepath.Dir(name), dirPerm)
-	var f io.Closer
-	// Must request write perms to create and trunc. But we don't need those for a zero-length file.
-	f, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_TRUNC, filePerm)
-	if err != nil {
+	return createNativeZeroLengthFile(name, defaultFileModes)
+}
+
+func createNativeZeroLengthFile(name string, modes fileModes) error {
+	os.MkdirAll(filepath.Dir(name), modes.dir)
+	f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, modes.file)
+	if err == nil {
+		return f.Close()
+	}
+	if errors.Is(err, fs.ErrExist) {
 		stat, statErr := os.Stat(name)
-		if statErr == nil && stat.Mode().IsRegular() && stat.Size() == 0 {
+		if statErr == nil && stat.Mode().IsRegular() {
 			return nil
 		}
-		return err
 	}
-	return f.Close()
+	return err
 }
 
 // Combines data from different locations required to handle files in file storage.
@@ -90,8 +97,13 @@ type fileExtra struct {
 	safeOsPath string
 	// Utility value to help the race detector find issues for us.
 	race byte
+	// A piece of the file that was incomplete when last checked. See allFilePiecesComplete.
+	incompleteHint atomic.Int64
 }
 
+// Appended to a file's path while it's incomplete, when part files are used.
+const partFileSuffix = ".part"
+
 func (f *fileExtra) partFilePath() string {
-	return f.safeOsPath + ".part"
+	return f.safeOsPath + partFileSuffix
 }

@@ -28,7 +28,6 @@ type (
 )
 
 func (t *Torrent) requestStrategyPieceOrderState(i int) requestStrategy.PieceRequestOrderState {
-	t.slogger().Debug("requestStrategyPieceOrderState", "pieceIndex", i)
 	return requestStrategy.PieceRequestOrderState{
 		Priority:     t.piece(i).purePriority(),
 		Partial:      t.piecePartiallyDownloaded(i),
@@ -143,7 +142,7 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 		// the priority through Piece.purePriority, which is probably slower.
 		leftPriority := leftPiece.Priority
 		rightPriority := rightPiece.Priority
-		ml = ml.Int(
+		ml = ml.Compare(
 			-int(leftPriority),
 			-int(rightPriority),
 		)
@@ -170,7 +169,7 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 	}
 	if leftPeer != nil {
 		// The right peer should also be set, or we'd have resolved the computation by now.
-		ml = ml.Uint64(
+		ml = ml.Compare(
 			rightPeer.requestState.Requests.GetCardinality(),
 			leftPeer.requestState.Requests.GetCardinality(),
 		)
@@ -192,20 +191,20 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 		// Prefer the highest possible request index, since webseeds prefer the lowest. Additionally,
 		// this should mean remote clients serve in reverse order so we meet webseeds responses in
 		// the middle.
-		ml = ml.Cmp(-cmp.Compare(leftRequest, rightRequest))
+		ml = ml.Then(-cmp.Compare(leftRequest, rightRequest))
 	} else {
-		ml = ml.Int(
+		ml = ml.Compare(
 			leftPiece.Availability,
 			rightPiece.Availability)
 		if priority == PiecePriorityReadahead {
 			// TODO: For readahead in particular, it would be even better to consider distance from the
 			// reader position so that reads earlier in a torrent don't starve reads later in the
 			// torrent. This would probably require reconsideration of how readahead priority works.
-			ml = ml.Int(leftPieceIndex, rightPieceIndex)
+			ml = ml.Compare(leftPieceIndex, rightPieceIndex)
 		} else {
-			ml = ml.Int(t.pieceRequestOrder[leftPieceIndex], t.pieceRequestOrder[rightPieceIndex])
+			ml = ml.Compare(t.pieceRequestOrder[leftPieceIndex], t.pieceRequestOrder[rightPieceIndex])
 		}
-		ml = multiless.EagerOrdered(ml, leftRequest, rightRequest)
+		ml = ml.Compare(leftRequest, rightRequest)
 	}
 	// Prefer request indexes in order for storage write performance. Since the heap request heap
 	// does not contain duplicates, if we order at the request index level we should never have any
@@ -242,11 +241,16 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 	if t.dataDownloadDisallowed.Bool() {
 		return
 	}
+	if t.storage == nil {
+		return
+	}
 	requestHeap := desiredPeerRequests{
 		peer:           p,
 		pieceStates:    &t.requestPieceStates,
 		requestIndexes: t.requestIndexes,
 	}
+	candidateLimit := p.requestCandidateLimit()
+	var stealCandidates []RequestIndex
 	requestHeap.pieceStates.Clear()
 	requestHeap.pieceStatesGen = t.requestPieceStates.gen
 	t.logPieceRequestOrder()
@@ -282,14 +286,49 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 					// Can't re-request while awaiting acknowledgement.
 					return
 				}
-				requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
+				requestingPeer := t.requestingPeer(r)
+				if requestingPeer == nil || requestingPeer == p {
+					if len(requestHeap.requestIndexes) < candidateLimit {
+						requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
+					}
+				} else if len(stealCandidates) < candidateLimit {
+					if stealCandidates == nil {
+						stealCandidates = make([]RequestIndex, 0, candidateLimit)
+					}
+					stealCandidates = append(stealCandidates, r)
+				}
 			})
-			return true
+			return len(requestHeap.requestIndexes) < candidateLimit
 		},
+	)
+	requestHeap.requestIndexes = mergeRequestCandidates(
+		requestHeap.requestIndexes,
+		stealCandidates,
+		candidateLimit,
 	)
 	t.assertPendingRequests()
 	desired.Requests = requestHeap
 	return
+}
+
+func mergeRequestCandidates(primary, steal []RequestIndex, limit int) []RequestIndex {
+	remaining := max(0, limit-len(primary))
+	return append(primary, steal[:min(len(steal), remaining)]...)
+}
+
+func (p *PeerConn) requestCandidateLimit() int {
+	// The piece order is already sorted by urgency, partial state,
+	// availability and piece index. Keep enough alternatives to refill the
+	// peer pipeline without rebuilding a heap containing the entire readahead
+	// window after every received 16 KiB chunk.
+	return requestCandidateLimitFor(
+		int(p.t.chunksPerRegularPiece()),
+		int(p.nominalMaxRequests()),
+	)
+}
+
+func requestCandidateLimitFor(chunksPerPiece, nominalMaxRequests int) int {
+	return max(chunksPerPiece*2, nominalMaxRequests*4)
 }
 
 // Update requests if there's a reason assigned.

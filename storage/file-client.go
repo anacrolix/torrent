@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 
 	g "github.com/anacrolix/generics"
@@ -36,7 +37,20 @@ type NewFileClientOpts struct {
 	// returning an error. Set this where something else writes the same files, such as another
 	// downloader for the same content or a sync tool.
 	DisableMmap bool
-	Logger      *slog.Logger
+	// FilePerm and DirPerm are the modes used to create files and directories, before the process
+	// umask and any default ACL of the parent directory apply. They default to 0o644 and 0o755.
+	FilePerm g.Option[os.FileMode]
+	DirPerm  g.Option[os.FileMode]
+	// KeepFileModes stops the storage from changing the mode of existing files: a file promoted
+	// from its part file is not made read-only, and a file that can't be opened for writing is not
+	// chmod'ed to FilePerm. Set this where permissions are managed outside the client, such as a
+	// shared directory with a default ACL, where chmod would rewrite the ACL mask.
+	KeepFileModes bool
+	// By default, OpenTorrent fails if a torrent's file path that already exists goes through a
+	// symlink that resolves outside the torrent's directory. Set this to follow such symlinks, for
+	// example where directories under the download directory are symlinks to other disks.
+	FollowSymlinksOutOfTorrentDir bool
+	Logger                        *slog.Logger
 }
 
 // The specific part-files option or the default.
@@ -44,12 +58,25 @@ func (me NewFileClientOpts) partFiles() bool {
 	return me.UsePartFiles.UnwrapOr(true)
 }
 
-// The file IO implementation to open torrents with.
-func (me NewFileClientOpts) fileIo() fileIo {
-	if me.DisableMmap {
-		return newClassicFileIo()
+func (me NewFileClientOpts) modes() fileModes {
+	return fileModes{
+		file: me.FilePerm.UnwrapOr(filePerm),
+		dir:  me.DirPerm.UnwrapOr(dirPerm),
+		keep: me.KeepFileModes,
 	}
-	return defaultFileIo()
+}
+
+// The file IO implementation to open torrents with.
+func (me NewFileClientOpts) fileIo() (io fileIo) {
+	if me.DisableMmap {
+		io = newClassicFileIo()
+	} else {
+		io = defaultFileIo()
+	}
+	if s, ok := io.(interface{ setModes(fileModes) }); ok {
+		s.setModes(me.modes())
+	}
+	return
 }
 
 // NewFileOpts creates a new ClientImplCloser that stores files using the OS native filesystem.
@@ -92,18 +119,37 @@ func (fs *fileClientImpl) OpenTorrent(
 	fs.opts.Logger.DebugContext(ctx, "opened file torrent storage", slog.String("dir", dir))
 	metainfoFileInfos := info.UpvertedFiles()
 	files := make([]fileExtra, len(metainfoFileInfos))
+	filePaths := make([]string, len(metainfoFileInfos))
 	for i, fileInfo := range metainfoFileInfos {
 		filePath := filepath.Join(dir, fs.opts.FilePathMaker(FilePathMakerOpts{
 			Info: info,
 			File: &fileInfo,
 		}))
+		if filepath.Clean(filePath) == filepath.Clean(dir) && !info.IsDir() {
+			// A single-file torrent with no usable name, such as "" or ".", would be stored at the
+			// torrent directory itself. Name the file after the infohash instead.
+			filePath = filepath.Join(dir, infoHash.HexString())
+		}
 		if !isSubFilepath(dir, filePath) {
 			err = fmt.Errorf("file %v: path %q is not sub path of %q", i, filePath, dir)
 			return
 		}
 		files[i].safeOsPath = filePath
-		if metainfoFileInfos[i].Length == 0 {
-			err = CreateNativeZeroLengthFile(filePath)
+		filePaths[i] = filePath
+	}
+	err = checkTorrentFilePaths(dir, filePaths, metainfoFileInfos, fs.opts.partFiles())
+	if err != nil {
+		return
+	}
+	if !fs.opts.FollowSymlinksOutOfTorrentDir {
+		err = checkTorrentFileLinks(dir, filePaths, fs.opts.partFiles())
+		if err != nil {
+			return
+		}
+	}
+	for i, fileInfo := range metainfoFileInfos {
+		if fileInfo.Length == 0 {
+			err = createNativeZeroLengthFile(files[i].safeOsPath, fs.opts.modes())
 			if err != nil {
 				err = fmt.Errorf("creating zero length file: %w", err)
 				return
@@ -117,7 +163,11 @@ func (fs *fileClientImpl) OpenTorrent(
 		info.FileSegmentsIndex(),
 		infoHash,
 		fs.opts.fileIo(),
+		nil,
 		fs,
+	}
+	if checkpointer, ok := fs.opts.PieceCompletion.(PieceCompletionCheckpointer); ok {
+		t.checkpoint = newTorrentCheckpointBuffer(t, checkpointer)
 	}
 	if t.partFiles() {
 		err = t.setCompletionFromPartFiles()

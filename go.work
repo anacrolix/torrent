@@ -1,6 +1,8 @@
-go 1.26.3
+go 1.27.0
 
 use (
 	.
 	./storage/possum/lib/go
+	./tests/add-webseed-after-priorities
+	./tests/webseed-partial-seed
 )

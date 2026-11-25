@@ -119,15 +119,23 @@ func mMapTorrent(md *metainfo.Info, location string) (mms *mmapSpan.MMapSpan, er
 			}
 		}
 	}()
-	for _, miFile := range md.UpvertedFiles() {
+	miFiles := md.UpvertedFiles()
+	fileNames := make([]string, len(miFiles))
+	for i, miFile := range miFiles {
 		var safeName string
 		safeName, err = ToSafeFilePath(append([]string{md.BestName()}, miFile.BestPath()...)...)
 		if err != nil {
 			return
 		}
-		fileName := filepath.Join(location, safeName)
+		fileNames[i] = filepath.Join(location, safeName)
+	}
+	err = checkTorrentFilePaths(location, fileNames, miFiles, false)
+	if err != nil {
+		return
+	}
+	for i, miFile := range miFiles {
 		var mm FileMapping
-		mm, err = mmapFile(fileName, miFile.Length)
+		mm, err = mmapFile(fileNames[i], miFile.Length)
 		if err != nil {
 			err = fmt.Errorf("file %q: %w", miFile.DisplayPath(md), err)
 			return

@@ -1,4 +1,4 @@
-package webseed_partial_seed
+package add_webseed_after_priorities
 
 import (
 	"path/filepath"

@@ -142,7 +142,7 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 		// the priority through Piece.purePriority, which is probably slower.
 		leftPriority := leftPiece.Priority
 		rightPriority := rightPiece.Priority
-		ml = ml.Int(
+		ml = ml.EagerOrdered(
 			-int(leftPriority),
 			-int(rightPriority),
 		)
@@ -169,9 +169,9 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 	}
 	if leftPeer != nil {
 		// The right peer should also be set, or we'd have resolved the computation by now.
-		ml = ml.Uint64(
-			uint64(rightPeer.wireState.NumRequests()),
-			uint64(leftPeer.wireState.NumRequests()),
+		ml = ml.EagerOrdered(
+			rightPeer.wireState.NumRequests(),
+			leftPeer.wireState.NumRequests(),
 		)
 		// Could either of the lastRequested be Zero? That's what checking an existing peer is for.
 		leftLast := leftRequestState.when
@@ -193,16 +193,16 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 		// the middle.
 		ml = ml.Cmp(-cmp.Compare(leftRequest, rightRequest))
 	} else {
-		ml = ml.Int(
+		ml = ml.EagerOrdered(
 			leftPiece.Availability,
 			rightPiece.Availability)
 		if priority == PiecePriorityReadahead {
 			// TODO: For readahead in particular, it would be even better to consider distance from the
 			// reader position so that reads earlier in a torrent don't starve reads later in the
 			// torrent. This would probably require reconsideration of how readahead priority works.
-			ml = ml.Int(leftPieceIndex, rightPieceIndex)
+			ml = ml.EagerOrdered(leftPieceIndex, rightPieceIndex)
 		} else {
-			ml = ml.Int(t.pieceRequestOrder[leftPieceIndex], t.pieceRequestOrder[rightPieceIndex])
+			ml = ml.EagerOrdered(t.pieceRequestOrder[leftPieceIndex], t.pieceRequestOrder[rightPieceIndex])
 		}
 		ml = ml.EagerOrdered(leftRequest, rightRequest)
 	}

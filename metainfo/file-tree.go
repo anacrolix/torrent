@@ -168,10 +168,19 @@ func (ft *FileTree) Validate() error {
 			return
 		}
 		if node.IsDir() {
+			// A directory node with file properties would be counted as a file by NumPieces but has
+			// no real file, producing phantom pieces.
+			if node.File.Length != 0 || len(node.File.PiecesRoot) != 0 {
+				err = fmt.Errorf("directory %q has file properties", path)
+			}
 			return
 		}
 		n := len(node.File.PiecesRoot)
-		if node.File.Length > 0 && n != 32 {
+		// A negative length makes the piece count negative and the merkle padding size invalid,
+		// which panics in bep52 when the pieces root is read.
+		if node.File.Length < 0 {
+			err = fmt.Errorf("file %q: negative length %d", path, node.File.Length)
+		} else if node.File.Length > 0 && n != 32 {
 			err = fmt.Errorf("file %q: pieces root length %d, expected 32", path, n)
 		} else if node.File.Length == 0 && n != 0 {
 			err = fmt.Errorf("file %q: empty file has pieces root of length %d", path, n)

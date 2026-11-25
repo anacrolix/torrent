@@ -22,10 +22,17 @@
 // file.  It blocks until data is available, the context is cancelled, or
 // Destroy is called on the TorrentFS.
 //
+// # io/fs
+//
+// iofs.go provides TorrentFS.IOFS, a read-only io/fs.FS built on the same
+// helpers, for access to torrent data without FUSE.
+//
 // # Testing
 //
 // The tfstest sub-package contains a shared integration test suite
-// (RunTestSuite) that any backend can run against its MountFunc.
+// (RunTestSuite) that any backend can run against its MountFunc. The same
+// suite runs in this module against TorrentFS.IOFS via RunFSTestSuite, so the
+// shared helpers are tested without FUSE.
 package torrentfs
 
 import (

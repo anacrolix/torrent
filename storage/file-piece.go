@@ -81,6 +81,11 @@ func (me *filePieceImpl) pieceCompletion() PieceCompletion {
 
 func (me *filePieceImpl) Completion() (c Completion) {
 	c = me.t.getCompletion(me.p.Index())
+	if !c.Ok && c.Err == nil && me.dataMissing() {
+		// Nothing to hash: the piece can't be complete, and saying so lets it be requested right
+		// away rather than after a check of everything already in storage.
+		return Completion{Ok: true}
+	}
 	if !c.Ok || c.Err != nil {
 		return c
 	}
@@ -102,6 +107,29 @@ func (me *filePieceImpl) iterFileSegments() iter.Seq2[int, segments.Extent] {
 		}
 		panicif.NotEq(noFiles, pieceExtent.Length == 0)
 	}
+}
+
+// Reports whether a file of the piece is missing or too short to hold its part of it.
+func (me *filePieceImpl) dataMissing() bool {
+	for i, extent := range me.iterFileSegments() {
+		if extent.Length == 0 {
+			continue
+		}
+		file := me.t.file(i)
+		file.mu.RLock()
+		s, err := os.Stat(file.safeOsPath)
+		if me.partFiles() && errors.Is(err, fs.ErrNotExist) {
+			s, err = os.Stat(file.partFilePath())
+		}
+		file.mu.RUnlock()
+		if errors.Is(err, fs.ErrNotExist) {
+			return true
+		}
+		if err == nil && s.Size() < extent.End() {
+			return true
+		}
+	}
+	return false
 }
 
 // If a piece is complete, check constituent files have the minimum required sizes.
@@ -172,13 +200,23 @@ func (me *filePieceImpl) MarkComplete() (err error) {
 	if err != nil {
 		return
 	}
-	if pieceCompletionIsPersistent(me.pieceCompletion()) {
+	if me.t.checkpoint != nil {
+		err = me.t.checkpoint.queuePiece(me.pieceKey(), me.p.Length(), me.checkpointTargets())
+		if err != nil {
+			me.logger().Warn("error checkpointing completed piece", "piece", me.p.Index(), "err", err)
+		}
+	} else if pieceCompletionIsPersistent(me.pieceCompletion()) {
 		err := me.Flush()
 		if err != nil {
 			me.logger().Warn("error flushing completed piece", "piece", me.p.Index(), "err", err)
 		}
 	}
 	for f := range me.pieceFiles() {
+		// Checking the file is complete costs a completion lookup per piece in it. Skip that when
+		// there's no part file to promote, such as when rechecking data that's already complete.
+		if !me.mightPromotePartFile(f) {
+			continue
+		}
 		res := me.allFilePiecesComplete(f)
 		if res.Err != nil {
 			err = res.Err
@@ -196,27 +234,32 @@ func (me *filePieceImpl) MarkComplete() (err error) {
 	return
 }
 
+// Reports whether every piece of the file is complete. The scan starts at the piece found
+// incomplete last time: it's usually still incomplete, or when pieces complete in order, the next
+// incomplete piece follows it. Scanning from the file's first piece instead made completing a file
+// of N pieces in order cost O(N²) completion lookups. The hint only changes the order pieces are
+// checked in, a true result still requires every piece to be complete.
 func (me *filePieceImpl) allFilePiecesComplete(f file) (ret g.Result[bool]) {
-	next, stop := iter.Pull(GetPieceCompletionRange(
-		me.t.pieceCompletion(),
-		me.t.infoHash,
-		f.beginPieceIndex(),
-		f.endPieceIndex(),
-	))
-	defer stop()
-	for p := f.beginPieceIndex(); p < f.endPieceIndex(); p++ {
-		cmpl, ok := next()
-		panicif.False(ok)
-		if cmpl.Err != nil {
-			ret.Err = fmt.Errorf("error getting completion for piece %d: %w", p, cmpl.Err)
-			return
-		}
-		if !cmpl.Ok || !cmpl.Complete {
-			return
-		}
+	begin, end := f.beginPieceIndex(), f.endPieceIndex()
+	start := int(f.incompleteHint.Load())
+	if start < begin || start >= end {
+		start = begin
 	}
-	_, ok := next()
-	panicif.True(ok)
+	for _, r := range [...][2]int{{start, end}, {begin, start}} {
+		p := r[0]
+		for cmpl := range GetPieceCompletionRange(me.t.pieceCompletion(), me.t.infoHash, r[0], r[1]) {
+			if cmpl.Err != nil {
+				ret.Err = fmt.Errorf("error getting completion for piece %d: %w", p, cmpl.Err)
+				return
+			}
+			if !cmpl.Ok || !cmpl.Complete {
+				f.incompleteHint.Store(int64(p))
+				return
+			}
+			p++
+		}
+		panicif.NotEq(p, r[1])
+	}
 	ret.SetOk(true)
 	return
 }
@@ -237,6 +280,19 @@ func (me *filePieceImpl) MarkNotComplete() (err error) {
 
 }
 
+// Whether promotePartFile could have anything to do. Pieces are written before they're marked
+// complete, so the part file for an incomplete file exists by the time its last piece completes.
+func (me *filePieceImpl) mightPromotePartFile(f file) bool {
+	if !me.partFiles() {
+		return false
+	}
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	_, err := os.Stat(f.partFilePath())
+	// Only skip if it definitely doesn't exist.
+	return !errors.Is(err, fs.ErrNotExist)
+}
+
 func (me *filePieceImpl) promotePartFile(f file) (err error) {
 	if !me.partFiles() {
 		return nil
@@ -251,13 +307,26 @@ func (me *filePieceImpl) promotePartFile(f file) (err error) {
 	defer f.mu.Unlock()
 	f.race++
 	renamed, err := me.exclRenameIfExists(f.partFilePath(), f.safeOsPath)
+	if errors.Is(err, fs.ErrExist) && isPaddingFile(f.FileInfo) {
+		// Padding files of the same length can share a path, and another one got there first. It
+		// holds the same zeroes, so the part file isn't needed.
+		err = os.Remove(f.partFilePath())
+		if errors.Is(err, fs.ErrNotExist) {
+			err = nil
+		}
+		return
+	}
 	if err != nil {
 		return
 	}
 	if !renamed {
 		return
 	}
-	err = os.Chmod(f.safeOsPath, filePerm&^0o222)
+	modes := me.t.client.opts.modes()
+	if modes.keep {
+		return
+	}
+	err = os.Chmod(f.safeOsPath, modes.file&^0o222)
 	if err != nil {
 		me.logger().Info("error setting promoted file to read-only", "file", f.safeOsPath, "err", err)
 		err = nil
@@ -265,7 +334,8 @@ func (me *filePieceImpl) promotePartFile(f file) (err error) {
 	return
 }
 
-// Rename from if exists, and if so, to must not exist.
+// Rename from if it exists. Fails with an error matching fs.ErrExist if to exists too, rather than
+// replacing it.
 func (me *filePieceImpl) exclRenameIfExists(from, to string) (renamed bool, err error) {
 	err = me.t.io.rename(from, to)
 	if err != nil {
@@ -296,6 +366,28 @@ func (me *filePieceImpl) onFileNotComplete(f file) (err error) {
 
 func (me *filePieceImpl) partFiles() bool {
 	return me.t.partFiles()
+}
+
+func (me *filePieceImpl) checkpointTargets() []fileCheckpointTarget {
+	targets := make([]fileCheckpointTarget, 0, len(me.t.files))
+	seen := make(map[string]struct{})
+	for fileIndex := range me.fileExtents() {
+		f := me.t.file(fileIndex)
+		primary := me.t.pathForWrite(&f)
+		if _, ok := seen[primary]; ok {
+			continue
+		}
+		seen[primary] = struct{}{}
+		target := fileCheckpointTarget{
+			primary: primary,
+			length:  f.length(),
+		}
+		if primary != f.safeOsPath {
+			target.fallback = f.safeOsPath
+		}
+		targets = append(targets, target)
+	}
+	return targets
 }
 
 func (me *filePieceImpl) WriteTo(w io.Writer) (n int64, err error) {

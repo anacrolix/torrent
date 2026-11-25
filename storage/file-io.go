@@ -29,6 +29,7 @@ type fileIo interface {
 	openForRead(name string) (fileReader, error)
 	openForWrite(name string, size int64) (fileWriter, error)
 	flush(name string, offset, nbytes int64) error
+	// Renames from to to. Fails with an error matching fs.ErrExist if to already exists.
 	rename(from, to string) error
 }
 

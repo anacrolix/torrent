@@ -37,3 +37,22 @@ func TestAddV2TorrentWithPieceLayersAndDataOnDisk(t *testing.T) {
 	qt.Assert(t, qt.IsNil(tt.VerifyData()))
 	qt.Check(t, qt.Equals(tt.BytesCompleted(), tt.Length()))
 }
+
+// Bad piece layers fail the add after the storage is open but before the piece request order
+// exists. Dropping the half-added torrent must not panic, nor must closing the client after.
+func TestAddV2TorrentWithBadPieceLayers(t *testing.T) {
+	mi, err := metainfo.LoadFromFile("testdata/v2-multi-piece.torrent")
+	qt.Assert(t, qt.IsNil(err))
+	for root, layer := range mi.PieceLayers {
+		mi.PieceLayers[root] = layer[:len(layer)-1]
+	}
+
+	cfg := TestingConfig(t)
+	cfg.DefaultStorage = storage.NewFileOpts(storage.NewFileClientOpts{ClientBaseDir: t.TempDir()})
+	cl, err := NewClient(cfg)
+	qt.Assert(t, qt.IsNil(err))
+	_, err = cl.AddTorrent(mi)
+	qt.Check(t, qt.IsNotNil(err))
+	qt.Check(t, qt.HasLen(cl.Torrents(), 0))
+	cl.Close()
+}

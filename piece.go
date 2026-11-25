@@ -32,10 +32,9 @@ type pieceState struct {
 	priority PiecePriority
 	// Value to twiddle to detect races.
 	race byte
-	// Currently being hashed.
-	hashing bool
-	// The piece state may have changed, and is being synchronized with storage.
-	marking bool
+	// Whether the piece is being hashed, or its result is being synchronized with storage. These
+	// are exclusive: a piece goes idle -> hashing -> marking -> idle.
+	check pieceCheckState
 	// The Completion.Ok field cached from the storage layer.
 	storageCompletionOk bool
 	// Sticks on once set for the first time.
@@ -119,17 +118,26 @@ func (p Piece) beginFile() int {
 // endFile is the index one past the last file this piece overlaps. It's derived rather than stored:
 // this piece's end offset is the next piece's begin offset, so the next piece's first file is also
 // this piece's last file, unless the boundary falls exactly on a file boundary (in which case this
-// piece ends at the previous file).
+// piece ends at the previous file). Empty files starting at or after this piece's end offset are
+// not part of it: pieceFirstFileIndex skips them, so they can sit before the next piece's first
+// file, or after the last piece.
 func (p Piece) endFile() int {
 	t := p.t
-	if int(p.index) == len(t.pieces)-1 {
-		return len(*t.files)
+	end := len(*t.files)
+	if int(p.index) != len(t.pieces)-1 {
+		end = t.piece(int(p.index) + 1).beginFile()
+		if (*t.files)[end].offset < p.torrentEndOffset() {
+			end++
+		}
 	}
-	nextBegin := t.piece(int(p.index) + 1).beginFile()
-	if (*t.files)[nextBegin].offset < p.torrentEndOffset() {
-		return nextBegin + 1
+	for end > p.beginFile()+1 {
+		f := (*t.files)[end-1]
+		if f.offset < p.torrentEndOffset() {
+			break
+		}
+		end--
 	}
-	return nextBegin
+	return end
 }
 
 func (p Piece) String() string {
@@ -222,18 +230,6 @@ func (pw *piecePendingWrites) decrementPendingWrites() {
 	}
 }
 
-// withPendingWriteRef records a write in flight for the duration of f. It increments before f and
-// decrements after it returns (even on error), holding the strong reference returned by
-// incrementPendingWrites across the call via the deferred decrement, so the tracking struct can't be
-// reclaimed (nor its count lost to a fresh allocation) while the write is in flight. Call with the
-// Client lock held; f may release and reacquire it, as long as it's held again on return so the
-// decrement stays serialized with allocation.
-func (p Piece) withPendingWriteRef(f func() error) error {
-	pw := p.incrementPendingWrites()
-	defer pw.decrementPendingWrites()
-	return f()
-}
-
 func (p Piece) pendingWritesCount() int64 {
 	pw := p.loadPendingWrites()
 	if pw == nil {
@@ -277,10 +273,13 @@ func (p Piece) iterCleanChunks(it *roaring.IntIterator) iter.Seq[chunkIndexType]
 		for next := begin; next < end; next++ {
 			if !it.HasNext() || it.Next() != next {
 				if !yield(chunkIndexType(next - begin)) {
-					return
+					break
 				}
 			}
 		}
+		// Release the interior pointer to p.t.dirtyChunks.Bitmap so a reused iterator (such as
+		// Client.roaringIntIterator) doesn't keep a dropped Torrent alive.
+		*it = roaring.IntIterator{}
 	}
 }
 
@@ -341,6 +340,7 @@ func (p Piece) VerifyDataContext(ctx context.Context) error {
 	locker := p.t.cl.locker()
 	locker.Lock()
 	if p.t.closed.IsSet() {
+		locker.Unlock()
 		return errTorrentClosed
 	}
 	target, err := p.t.queuePieceCheck(p.Index())
@@ -415,7 +415,7 @@ func (p Piece) ignoreForRequests() bool {
 		// Piece completion unknown.
 		return true
 	}
-	if s.hashing || s.marking || !p.haveHash() || p.t.dataDownloadDisallowed.IsSet() {
+	if s.check != pieceCheckIdle || !p.haveHash() || p.t.dataDownloadDisallowed.IsSet() {
 		return true
 	}
 	// This is valid after we know that storage completion has been cached.
@@ -563,8 +563,9 @@ func (p Piece) numFiles() int {
 func (p Piece) nextNovelHashCount() (ret pieceVerifyCount) {
 	s := p.state()
 	ret = s.numVerifies + 1
-	if s.hashing {
-		// The next novel hash will be the one after the current one.
+	if s.check != pieceCheckIdle {
+		// The next novel hash will be the one after the current one. A hash that is marking has
+		// finished hashing but hasn't been counted in numVerifies yet.
 		ret++
 	}
 	return
@@ -588,3 +589,13 @@ func (p Piece) stalePublicPieceState() (ret unique.Handle[PieceState], stale boo
 	stale = ret != p.state().publicPieceState
 	return
 }
+
+type pieceCheckState uint8
+
+const (
+	pieceCheckIdle pieceCheckState = iota
+	// Currently being hashed.
+	pieceCheckHashing
+	// The piece state may have changed, and is being synchronized with storage.
+	pieceCheckMarking
+)

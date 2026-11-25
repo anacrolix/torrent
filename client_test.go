@@ -7,10 +7,14 @@ import (
 	"io"
 	rand "math/rand/v2"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
 	"testing/iotest"
 	"time"
@@ -36,7 +40,9 @@ func TestClientDefault(t *testing.T) {
 }
 
 func TestClientWithSocks5Dialer(t *testing.T) {
-	cfg := NewDefaultClientConfig()
+	// Use the testing config so we listen on an ephemeral port. The default port (42069) falls in
+	// Linux's ephemeral range, so it can collide with sockets from tests running concurrently.
+	cfg := TestingConfig(t)
 	cfg.DialForPeerConns = false
 	cl, err := NewClient(cfg)
 	qt.Assert(t, qt.IsNil(err))
@@ -366,6 +372,35 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 	qt.Check(t, qt.Equals(n, 0))
 }
 
+func TestDropDuringVerify(t *testing.T) {
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	info := metainfo.Info{
+		Name:        "big.bin",
+		PieceLength: 16384,
+		Length:      1024 * 16384,
+		Pieces:      make([]byte, 1024*20),
+	}
+	b, err := bencode.Marshal(info)
+	qt.Assert(t, qt.IsNil(err))
+	tt, err := cl.AddTorrent(&metainfo.MetaInfo{InfoBytes: b})
+	qt.Assert(t, qt.IsNil(err))
+	go tt.VerifyDataContext(t.Context())
+	tt.Drop()
+	done := make(chan error, 1)
+	go func() {
+		err := tt.VerifyDataContext(t.Context())
+		cl.Close()
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		qt.Check(t, qt.ErrorIs(err, errTorrentClosed))
+	case <-time.After(5 * time.Second):
+		t.Fatal("client lock still held after dropping a torrent during verification")
+	}
+}
+
 func TestDhtInheritBlocklist(t *testing.T) {
 	ipl := iplist.New(nil)
 	qt.Assert(t, qt.IsNotNil(ipl))
@@ -401,6 +436,58 @@ func TestAddTorrentSpecMerging(t *testing.T) {
 	qt.Assert(t, qt.IsNil(err))
 	qt.Assert(t, qt.IsFalse(new))
 	qt.Assert(t, qt.IsNotNil(tt.Info()))
+}
+
+// A magnet link's source (xs) is fetched in the background and merged into the torrent. A good
+// source must give the torrent its info, and info that doesn't decode must fail the source with an
+// error rather than crash the whole client.
+func TestMagnetSourceMetainfo(t *testing.T) {
+	mi := testutil.GreetingMetaInfo()
+	good, err := bencode.Marshal(mi)
+	qt.Assert(t, qt.IsNil(err))
+	for _, tc := range []struct {
+		name    string
+		body    string
+		wantErr string // Empty if the source should give the torrent its info.
+	}{
+		{"valid", string(good), ""},
+		{"no info", "de", "unmarshalling info: EOF"},
+		{"info not a dict", "d4:infoi1ee", "unmarshalling info: .*"},
+		{"field of wrong type", "d4:infod12:piece length3:abcee", "unmarshalling info: .*"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				io.WriteString(w, tc.body)
+			}))
+			defer srv.Close()
+			cl, err := NewClient(TestingConfig(t))
+			qt.Assert(t, qt.IsNil(err))
+			defer cl.Close()
+			tor, err := cl.AddMagnet("magnet:?xt=urn:btih:" + mi.HashInfoBytes().HexString() + "&xs=" + url.QueryEscape(srv.URL))
+			qt.Assert(t, qt.IsNil(err))
+			if tc.wantErr == "" {
+				select {
+				case <-tor.GotInfo():
+				case <-time.After(10 * time.Second):
+					t.Fatal("didn't get info from the source")
+				}
+				return
+			}
+			// The source stores its error when it gives up.
+			deadline := time.Now().Add(10 * time.Second)
+			for {
+				if v, _ := tor.activeSources.Load(srv.URL); v != nil {
+					qt.Assert(t, qt.ErrorMatches(v.(error), tc.wantErr))
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("source didn't finish")
+				}
+				time.Sleep(time.Millisecond)
+			}
+			qt.Assert(t, qt.IsNil(tor.Info()))
+		})
+	}
 }
 
 func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
@@ -949,4 +1036,73 @@ func TestDroppedTorrentsNotReturned(t *testing.T) {
 	_, ok = cl.Torrent(tt.InfoHash())
 	qt.Check(t, qt.IsFalse(ok))
 	qt.Check(t, qt.HasLen(cl.Torrents(), 0))
+}
+
+type closeRecordingPacketConn struct {
+	net.PacketConn
+	closed    *sync.WaitGroup
+	closeOnce sync.Once
+}
+
+// Close may be called more than once (the udp tracker Socket and its reader both close the conn),
+// so only the first call is recorded.
+func (me *closeRecordingPacketConn) Close() error {
+	me.closeOnce.Do(me.closed.Done)
+	return me.PacketConn.Close()
+}
+
+// Tracker clients are cached per tracker URL and must be closed with the Client, or every Client
+// leaks their sockets and reader goroutines.
+func TestClientCloseClosesTrackerClients(t *testing.T) {
+	tracker, err := net.ListenPacket("udp", "127.0.0.1:0")
+	qt.Assert(t, qt.IsNil(err))
+	defer tracker.Close()
+
+	var mu sync.Mutex
+	var open sync.WaitGroup
+	created := 0
+	cfg := TestingConfig(t)
+	cfg.DisableTrackers = false
+	cfg.TrackerListenPacket = func(network, addr string) (net.PacketConn, error) {
+		pc, err := net.ListenPacket(network, addr)
+		if err != nil {
+			return nil, err
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		created++
+		open.Add(1)
+		return &closeRecordingPacketConn{PacketConn: pc, closed: &open}, nil
+	}
+	cl, err := NewClient(cfg)
+	qt.Assert(t, qt.IsNil(err))
+	_, _, err = cl.AddTorrentSpec(&TorrentSpec{
+		AddTorrentOpts: AddTorrentOpts{InfoHash: metainfo.HashBytes([]byte("close-tracker-clients"))},
+		Trackers:       [][]string{{"udp://" + tracker.LocalAddr().String() + "/announce"}},
+	})
+	qt.Assert(t, qt.IsNil(err))
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		mu.Lock()
+		n := created
+		mu.Unlock()
+		if n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("tracker client never opened a socket")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cl.Close()
+	done := make(chan struct{})
+	go func() {
+		open.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("tracker client sockets still open after Client.Close")
+	}
 }

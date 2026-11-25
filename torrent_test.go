@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2"
@@ -247,10 +248,148 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	tt.assertAllPiecesRelativeAvailabilityZero()
 }
 
+// A peer can go from having all pieces, to none, to some. Its availability must still be fully
+// removed when the conn goes away.
+func TestRelativeAvailabilityHaveAllHaveNoneHave(t *testing.T) {
+	cl := newTestingClient(t)
+	mi, _ := testutil.Greeting.Generate(5)
+	tt := cl.newTorrentOpt(AddTorrentOpts{InfoHash: mi.HashInfoBytes()})
+	tt.setChunkSize(2)
+	g.MakeMapIfNil(&tt.conns)
+	qt.Assert(t, qt.IsNil(tt.SetInfoBytes(mi.InfoBytes)))
+	pc := PeerConn{}
+	pc.t = tt
+	pc.legacyPeerImpl = &pc
+	pc.initRequestState()
+	g.InitNew(&pc.callbacks)
+	tt.cl.lock()
+	tt.conns[&pc] = struct{}{}
+	qt.Assert(t, qt.IsNil(pc.onPeerSentHaveAll()))
+	qt.Assert(t, qt.IsNil(pc.peerSentHaveNone()))
+	qt.Check(t, qt.HasLen(tt.connsWithAllPieces, 0))
+	qt.Assert(t, qt.IsNil(pc.peerSentHave(0)))
+	qt.Check(t, qt.Equals(tt.piece(0).availability(), 1))
+	qt.Check(t, qt.Equals(tt.piece(1).availability(), 0))
+	tt.cl.unlock()
+	// Dropping asserts all relative availability returns to zero.
+	tt.Drop()
+}
+
 func TestAppendMissingStringsSkipsRepeats(t *testing.T) {
 	qt.Check(t, qt.DeepEquals(
 		appendMissingStrings(
 			[]string{"http://existing"},
 			[]string{"http://a", "http://b", "http://a", "http://existing"}),
 		[]string{"http://existing", "http://a", "http://b"}))
+}
+
+// A torrent with many leading empty files before a data file: a valid shape (empty files are
+// common as padding/placeholders) that made makePieces rescan the empty files for every piece.
+func benchmarkMakePiecesInfo(n int) *metainfo.Info {
+	const pieceLength = 1 << 14
+	files := make([]metainfo.FileInfo, 0, n+1)
+	for i := 0; i < n; i++ {
+		files = append(files, metainfo.FileInfo{Length: 0, Path: []string{"pad", fmt.Sprintf("%d", i)}})
+	}
+	files = append(files, metainfo.FileInfo{Length: int64(n) * pieceLength, Path: []string{"data"}})
+	return &metainfo.Info{
+		Name:        "x",
+		PieceLength: pieceLength,
+		Pieces:      make([]byte, 20*n),
+		Files:       files,
+	}
+}
+
+func BenchmarkMakePieces(b *testing.B) {
+	cl, err := NewClient(TestingConfig(b))
+	qt.Assert(b, qt.IsNil(err))
+	defer cl.Close()
+	info := benchmarkMakePiecesInfo(20000)
+	tt := cl.newTorrentForTesting()
+	cl.lock()
+	defer cl.unlock()
+	tt.info = info
+	tt.fileSegmentsIndex.Set(info.FileSegmentsIndex())
+	tt.initFiles()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		tt.makePieces()
+	}
+}
+
+type blockingMarkCompleteStorage struct {
+	storage.ClientImpl
+	piece   int
+	marking chan struct{}
+	release chan struct{}
+}
+
+func (me *blockingMarkCompleteStorage) OpenTorrent(
+	ctx context.Context, info *metainfo.Info, ih metainfo.Hash,
+) (ti storage.TorrentImpl, err error) {
+	ti, err = me.ClientImpl.OpenTorrent(ctx, info, ih)
+	if err != nil {
+		return
+	}
+	piece := ti.Piece
+	ti.Piece = func(p metainfo.Piece) storage.PieceImpl {
+		return blockingMarkCompletePiece{piece(p), p.Index() == me.piece, me}
+	}
+	return
+}
+
+type blockingMarkCompletePiece struct {
+	storage.PieceImpl
+	block bool
+	s     *blockingMarkCompleteStorage
+}
+
+func (me blockingMarkCompletePiece) MarkComplete() error {
+	if me.block {
+		close(me.s.marking)
+		<-me.s.release
+	}
+	return me.PieceImpl.MarkComplete()
+}
+
+func TestVerifyDataWaitsForCompletionToBeRecorded(t *testing.T) {
+	dir := t.TempDir()
+	testutil.CreateDummyTorrentData(dir)
+	mi := testutil.GreetingMetaInfo()
+	info, err := mi.UnmarshalInfo()
+	qt.Assert(t, qt.IsNil(err))
+	st := &blockingMarkCompleteStorage{
+		ClientImpl: storage.NewFileOpts(storage.NewFileClientOpts{
+			ClientBaseDir:   dir,
+			PieceCompletion: storage.NewMapPieceCompletion(),
+			UsePartFiles:    g.Some(false),
+		}),
+		piece:   info.NumPieces() - 1,
+		marking: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	cl, err := NewClient(TestingConfig(t))
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	tt, _ := cl.AddTorrentOpt(AddTorrentOpts{
+		InfoHash:                 mi.HashInfoBytes(),
+		InfoBytes:                mi.InfoBytes,
+		Storage:                  st,
+		DisableInitialPieceCheck: true,
+	})
+	verified := make(chan error, 1)
+	go func() { verified <- tt.VerifyData() }()
+	<-st.marking
+	select {
+	case err := <-verified:
+		qt.Check(t, qt.IsNil(err))
+		t.Fatalf("VerifyData returned while the last piece was being marked complete, with %v of %v bytes complete",
+			tt.BytesCompleted(), tt.Length())
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(st.release)
+	qt.Assert(t, qt.IsNil(<-verified))
+	qt.Check(t, qt.Equals(tt.BytesCompleted(), tt.Length()))
+	qt.Check(t, qt.IsTrue(tt.Complete().Bool()))
 }

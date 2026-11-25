@@ -2158,7 +2158,9 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 			t.pex.Drop(c)
 		}
 	}
-	torrent.Add("deleted connections", 1)
+	if ret {
+		torrent.Add("deleted connections", 1)
+	}
 	c.onWireClosed("Torrent.deletePeerConn")
 	if len(t.conns) == 0 {
 		panicif.NotZero(len(t.requestState))
@@ -2215,9 +2217,9 @@ func (t *Torrent) dropConnection(c *PeerConn) {
 	}
 	t.logger.WithDefaultLevel(log.Debug).Printf("dropping connection to %+q, sent peerconn update", c.PeerID)
 
-	if t.deletePeerConn(c) {
-		t.openNewConns()
-	}
+	// Closing removed it from the Torrent (see PeerConn.onClose), perhaps earlier, so there may be
+	// room for another.
+	t.openNewConns()
 }
 
 // Peers as in contact information for dialing out. We should try to get some peers, even if we

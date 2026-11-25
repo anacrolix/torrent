@@ -11,6 +11,7 @@ import (
 	g "github.com/anacrolix/generics"
 	qt "github.com/go-quicktest/qt"
 
+	peerWire "github.com/anacrolix/torrent/internal/peer-wire"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -125,7 +126,7 @@ func TestInitiateHandshakesInfohashChangesMidHandshake(t *testing.T) {
 						copy(b[28:48], r.ih[:])
 						_, res.err = rw.Write(b)
 					}()
-					conn := &PeerConn{r: local, w: local}
+					conn := &PeerConn{r: local, w: local, wireState: new(peerWire.NewState())}
 					conn.headerEncrypted = encrypted
 					err = cl.initiateHandshakes(ctx, conn, tor)
 					peer := <-peerDone

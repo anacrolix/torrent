@@ -1898,7 +1898,7 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 			Network:         opts.network,
 			callbacks:       &cl.config.Callbacks,
 		},
-		wireState:  peerWire.NewState(),
+		wireState:  new(peerWire.NewState()),
 		connString: opts.connString,
 		conn:       nc,
 	}

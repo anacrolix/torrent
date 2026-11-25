@@ -103,7 +103,6 @@ func (me *receivedFileHashes) add(index int, hashes [][32]byte) {
 // SentHashRequest records that we sent hr. It returns false if it was sent before, whether or not
 // it has been answered, in which case it shouldn't be sent again.
 func (s *State) SentHashRequest(hr HashRequest) (added bool) {
-	s.event()
 	if _, ok := s.sentHashRequests[hr]; ok {
 		return false
 	}
@@ -146,7 +145,6 @@ func (s *State) answerHashRequest(hr HashRequest, st sentHashRequestState) error
 // RecvHashReject handles a Hash Reject. It's an error if it doesn't answer an outstanding request.
 // The request isn't made again.
 func (s *State) RecvHashReject(hr HashRequest) error {
-	s.event()
 	return s.answerHashRequest(hr, hashRequestRejected)
 }
 
@@ -158,7 +156,6 @@ func (s *State) RecvHashes(
 	hashes [][32]byte,
 	numPieces int,
 ) (complete [][32]byte, err error) {
-	s.event()
 	if err = s.answerHashRequest(hr, hashRequestAnswered); err != nil {
 		return
 	}

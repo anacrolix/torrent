@@ -15,7 +15,6 @@ const MaxSentRendezvous = 64
 // false if there are already MaxSentRendezvous awaiting a reply, in which case don't send it. A
 // repeat for the same target is allowed.
 func (s *State) SentRendezvous(target netip.AddrPort) (ok bool) {
-	s.event()
 	if _, ok := s.sentRendezvous[target]; ok {
 		return true
 	}
@@ -38,14 +37,12 @@ func (s *State) RendezvousSent(target netip.AddrPort) bool {
 // RecvHolepunchConnect handles a Connect for addr. initiated is true if it answers our
 // Rendezvous. Otherwise we're the target of someone else's, which needs no prior message.
 func (s *State) RecvHolepunchConnect(addr netip.AddrPort) (initiated bool) {
-	s.event()
 	return s.takeRendezvous(addr)
 }
 
 // RecvHolepunchError handles an Error for addr. solicited is false if we have no Rendezvous for
 // addr through the peer, since only a relay answering one sends Error.
 func (s *State) RecvHolepunchError(addr netip.AddrPort) (solicited bool) {
-	s.event()
 	return s.takeRendezvous(addr)
 }
 

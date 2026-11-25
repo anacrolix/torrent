@@ -61,8 +61,11 @@ type PeerConn struct {
 	peerHandshake
 
 	// What we know about the peer from the BitTorrent messages exchanged with it: choke and
-	// interest, claimed pieces, allowed fast, requests in both directions etc.
-	wireState peerWire.State
+	// interest, claimed pieces, allowed fast, requests in both directions etc. It's nil once the
+	// connection closes (see onWireClosed), so recording anything after that panics.
+	wireState *peerWire.State
+	// The peer's claimed pieces when the connection closed, for getters like PeerPieces.
+	closedPieces closedPeerPieces
 
 	// The local extended protocols to advertise in the extended handshake, and to support receiving
 	// from the peer. This will point to the Client default when the PeerConnAdded callback is
@@ -176,11 +179,24 @@ func (l *PeerConn) hasPreferredNetworkOver(r *PeerConn) bool {
 	return ml.Less()
 }
 
+// What's kept of wireState after the connection closes.
+type closedPeerPieces struct {
+	pieces     roaring.Bitmap
+	all, known bool
+	minPieces  pieceIndex
+}
+
 func (cn *PeerConn) peerMinPieces() pieceIndex {
+	if cn.wireState == nil {
+		return cn.closedPieces.minPieces
+	}
 	return cn.wireState.PeerMinPieces()
 }
 
 func (cn *PeerConn) peerHasAllPieces() (all, known bool) {
+	if cn.wireState == nil {
+		return cn.closedPieces.all, cn.closedPieces.known
+	}
 	return cn.wireState.PeerHasAllPieces(cn.t.numPiecesOption())
 }
 
@@ -200,6 +216,9 @@ func (cn *PeerConn) setNumPieces(num pieceIndex) {
 }
 
 func (cn *PeerConn) peerPieces() *roaring.Bitmap {
+	if cn.wireState == nil {
+		return &cn.closedPieces.pieces
+	}
 	return &cn.wireState.PeerPieces().Bitmap
 }
 
@@ -234,7 +253,13 @@ func (cn *PeerConn) utp() bool {
 }
 
 func (cn *PeerConn) onClose() {
-	cn.onWireClosed("PeerConn.onClose")
+	if cn.t != nil {
+		// Removing the conn from the Torrent straight away means nothing there reaches it after its
+		// wireState is gone. deletePeerConn calls onWireClosed.
+		cn.t.deletePeerConn(cn)
+	} else {
+		cn.onWireClosed("PeerConn.onClose")
+	}
 	if cn.pex.IsEnabled() {
 		cn.pex.Close()
 	}
@@ -390,7 +415,7 @@ func (cn *PeerConn) fillWriteBuffer() {
 	cn.requestMissingHashes()
 	cn.maybeUpdateActualRequestState()
 	if cn.pex.IsEnabled() {
-		if flow := cn.pex.Share(&cn.wireState, cn.write); !flow {
+		if flow := cn.pex.Share(cn.wireState, cn.write); !flow {
 			return
 		}
 	}
@@ -769,8 +794,8 @@ func (c *PeerConn) peerRequestDataReadFailed(err error, r Request) {
 		logLevel = log.Debug
 	}
 	c.logger.Levelf(logLevel, "error reading chunk for peer Request %v: %v", r, err)
-	if c.t.closed.IsSet() {
-		// The conn is closing, and wireState will forget the request then.
+	if c.t.closed.IsSet() || c.closed.IsSet() {
+		// The conn is closing or closed, so there's nobody to reject to.
 		c.dropLocalPeerRequest(r)
 		return
 	}
@@ -1186,7 +1211,7 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		if !c.pex.IsEnabled() {
 			return nil // or hang-up maybe?
 		}
-		err = c.pex.Recv(&c.wireState, payload)
+		err = c.pex.Recv(c.wireState, payload)
 		if err != nil {
 			err = fmt.Errorf("receiving pex message: %w", err)
 		}
@@ -1953,15 +1978,17 @@ func (c *PeerConn) onDroppedRequests(dropped []Request, reason updateRequestReas
 	})
 }
 
-// The connection is closed, so wireState is frozen. We drop our buffers for the peer's requests,
-// and our requests and cancels awaiting replies go away, once. It's safe to call more than once.
+// The connection is closed. Our requests and cancels awaiting replies go away, we drop our buffers
+// for the peer's requests, and we keep only the peer's claimed pieces before dropping wireState.
+// It's safe to call more than once.
 func (c *PeerConn) onWireClosed(reason updateRequestReason) {
-	if !c.wireState.Freeze() {
+	w := c.wireState
+	if w == nil {
 		return
 	}
 	c.releaseLocalPeerRequests()
 	droppedAny := false
-	for req, outstanding := range c.wireState.AwaitingReply() {
+	for req, outstanding := range w.AwaitingReply() {
 		r := c.requestIndexOfSent(req)
 		if outstanding {
 			panicif.False(c.requestIndexes().Requests.CheckedRemove(r))
@@ -1974,6 +2001,18 @@ func (c *PeerConn) onWireClosed(reason updateRequestReason) {
 	}
 	panicif.NotZero(c.requestIndexes().Requests.GetCardinality())
 	panicif.NotZero(c.requestIndexes().Cancelled.GetCardinality())
+	var numPieces g.Option[int]
+	if c.t != nil {
+		numPieces = c.t.numPiecesOption()
+	}
+	all, known := w.PeerHasAllPieces(numPieces)
+	c.closedPieces = closedPeerPieces{
+		pieces:    *w.PeerPieces().Bitmap.Clone(),
+		all:       all,
+		known:     known,
+		minPieces: w.PeerMinPieces(),
+	}
+	c.wireState = nil
 	if droppedAny {
 		c.t.iterPeers(func(p *Peer) {
 			if p.isLowOnRequests() {

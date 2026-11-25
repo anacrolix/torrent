@@ -217,10 +217,11 @@ func (p *Peer) close() {
 	if p.updateRequestsTimer != nil {
 		p.updateRequestsTimer.Stop()
 	}
-	p.legacyPeerImpl.onClose()
+	// Before onClose, which drops a PeerConn's wireState and removes it from the Torrent.
 	if p.t != nil {
 		p.t.decPeerPieceAvailability(p)
 	}
+	p.legacyPeerImpl.onClose()
 	for _, f := range p.callbacks.PeerClosed {
 		f(p)
 	}

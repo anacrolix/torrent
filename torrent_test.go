@@ -15,6 +15,7 @@ import (
 	"github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/bencode"
+	peerWire "github.com/anacrolix/torrent/internal/peer-wire"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -228,7 +229,7 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	tt := cl.newTorrentOpt(AddTorrentOpts{InfoHash: mi.HashInfoBytes()})
 	tt.setChunkSize(2)
 	g.MakeMapIfNil(&tt.conns)
-	pc := PeerConn{}
+	pc := PeerConn{wireState: new(peerWire.NewState())}
 	pc.t = tt
 	pc.legacyPeerImpl = &pc
 	g.InitNew(&pc.callbacks)
@@ -256,7 +257,7 @@ func TestRelativeAvailabilityHaveAllHaveNoneHave(t *testing.T) {
 	tt.setChunkSize(2)
 	g.MakeMapIfNil(&tt.conns)
 	qt.Assert(t, qt.IsNil(tt.SetInfoBytes(mi.InfoBytes)))
-	pc := PeerConn{}
+	pc := PeerConn{wireState: new(peerWire.NewState())}
 	pc.t = tt
 	pc.legacyPeerImpl = &pc
 	g.InitNew(&pc.callbacks)

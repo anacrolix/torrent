@@ -243,6 +243,7 @@ func TestPeerConnRejectsUnsolicitedHashes(t *testing.T) {
 	}
 	qt.Assert(t, qt.IsNil(msg.WriteTo(&msgBuf)))
 	cn := &PeerConn{
+		wireState: new(peerWire.NewState()),
 		Peer: Peer{
 			cl:        cl,
 			t:         tor,
@@ -286,6 +287,7 @@ func TestPeerConnAcceptsSolicitedHashes(t *testing.T) {
 		Hashes:     pieceHashes,
 	}
 	cn := &PeerConn{
+		wireState: new(peerWire.NewState()),
 		Peer: Peer{
 			cl: cl,
 			t:  tor,
@@ -322,6 +324,7 @@ func TestPeerConnRejectsHashesForMissingRoot(t *testing.T) {
 		Hashes:     [][32]byte{{}},
 	}
 	cn := &PeerConn{
+		wireState: new(peerWire.NewState()),
 		Peer: Peer{
 			cl: cl,
 			t:  tor,
@@ -363,6 +366,7 @@ func TestRequestMissingHashesTrailingSingleHash(t *testing.T) {
 	}
 	tor.initFiles()
 	c := &PeerConn{
+		wireState: new(peerWire.NewState()),
 		Peer: Peer{
 			cl: cl,
 			t:  tor,
@@ -415,6 +419,7 @@ func TestRequestMissingHashesAfterSinglePieceFile(t *testing.T) {
 	}
 	tor.initFiles()
 	c := &PeerConn{
+		wireState: new(peerWire.NewState()),
 		Peer: Peer{
 			cl: cl,
 			t:  tor,
@@ -514,7 +519,8 @@ func TestHaveAllThenBitfield(t *testing.T) {
 	tt := cl.newTorrentForTesting()
 	//pc := cl.newConnection(nil, newConnectionOpts{})
 	pc := PeerConn{
-		Peer: Peer{t: tt},
+		wireState: new(peerWire.NewState()),
+		Peer:      Peer{t: tt},
 	}
 	pc.legacyPeerImpl = &pc
 	tt.conns[&pc] = struct{}{}
@@ -549,7 +555,7 @@ func peerConnForPreferredNetworkDirection(
 	localPeerId, remotePeerId int,
 	outgoing, utp, ipv6 bool,
 ) *PeerConn {
-	pc := PeerConn{}
+	pc := PeerConn{wireState: new(peerWire.NewState())}
 	pc.outgoing = outgoing
 	if utp {
 		pc.Network = "udp"
@@ -679,11 +685,10 @@ func TestServePeerRequestTorrentClosedStorageReadFails(t *testing.T) {
 	pc.servePeerRequest(req)
 
 	qt.Check(t, qt.IsFalse(pc.unreadPeerRequest(req)))
-	// The request is outstanding on the wire until the conn closes, and then it's frozen there.
+	// The request is outstanding on the wire until the conn closes, and then wireState goes.
 	qt.Check(t, qt.IsTrue(pc.havePeerRequest(req)))
 	pc.onWireClosed("test")
-	qt.Check(t, qt.IsTrue(pc.wireState.Frozen()))
-	qt.Check(t, qt.IsTrue(pc.havePeerRequest(req)))
+	qt.Check(t, qt.IsNil(pc.wireState))
 	qt.Check(t, qt.HasLen(pc.readyPeerRequests, 0))
 }
 
@@ -724,7 +729,7 @@ func TestPeerConnPeerRequestDataLifecycle(t *testing.T) {
 		prd := pc.getPeerRequestData(r.Length.Int())
 		g.MakeMapIfNil(&pc.readyPeerRequests)
 		pc.readyPeerRequests[r] = prd
-		pc.onClose()
+		pc.close()
 		qt.Check(t, qt.Equals(outstandingChunkPoolBuffers(), baseline))
 	})
 
@@ -859,6 +864,7 @@ func newV2HashesTestConn(pieceHashes [][32]byte, reqs ...pp.Message) *PeerConn {
 	}
 	(*tor.files)[0].t = tor
 	cn := &PeerConn{
+		wireState: new(peerWire.NewState()),
 		Peer: Peer{
 			cl: cl,
 			t:  tor,

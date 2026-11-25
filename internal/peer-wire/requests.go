@@ -23,7 +23,6 @@ func (s *State) Interested() bool {
 // SentInterested records that we're sending Interested or NotInterested. It returns false if that
 // was already the state, in which case there is nothing to send.
 func (s *State) SentInterested(interested bool) (changed bool) {
-	s.event()
 	if s.interested == interested {
 		return false
 	}
@@ -112,7 +111,6 @@ func (s *State) LowOnRequests() bool {
 // which case there's nothing to send. A request can't be sent again while a cancel for it awaits
 // a reply, since the reply would be ambiguous.
 func (s *State) SentRequest(req Request) (added bool) {
-	s.event()
 	r := s.ourRequests[req]
 	if r.awaiting == awaitingRequestReply {
 		return false
@@ -128,7 +126,6 @@ func (s *State) SentRequest(req Request) (added bool) {
 // ExpectChunk records that a Piece answering req is acceptable, without making a request. Each
 // call allows one Piece. SentRequest does this itself, so this is only for setting up tests.
 func (s *State) ExpectChunk(req Request) {
-	s.event()
 	r := s.ourRequests[req]
 	r.expect()
 	s.putOurRequest(req, r)
@@ -179,7 +176,6 @@ func (s *State) AwaitingReply() iter.Seq2[Request, bool] {
 // that before the chunk can be requested again. It returns false if the request wasn't
 // outstanding, in which case there's nothing to send.
 func (s *State) SentCancel(req Request) bool {
-	s.event()
 	r := s.ourRequests[req]
 	if r.awaiting != awaitingRequestReply {
 		return false
@@ -214,7 +210,6 @@ func (s *State) takeAwaitingReply(r *ourRequest) (outstanding, ok bool) {
 // the request hadn't been cancelled. ok is false if we have no such request or cancel, which is a
 // protocol error.
 func (s *State) RecvReject(req Request) (outstanding, ok bool) {
-	s.event()
 	r := s.ourRequests[req]
 	outstanding, ok = s.takeAwaitingReply(&r)
 	if !ok {
@@ -233,7 +228,6 @@ var ErrUnexpectedChunk = errors.New("received unexpected chunk")
 // true if it was outstanding or cancelled. A Piece we weren't expecting is an error (BEP 6 says to
 // close the connection).
 func (s *State) RecvChunk(req Request) (requested, intended bool, err error) {
-	s.event()
 	r := s.ourRequests[req]
 	if r.expected == 0 {
 		err = ErrUnexpectedChunk
@@ -287,7 +281,6 @@ var ErrDuplicateRequest = errors.New("received duplicate request with fast enabl
 // then choking, then at most maxOutstanding outstanding. If the request is accepted it's
 // outstanding until SentPiece, SentReject, RecvCancel or SentChoke.
 func (s *State) RecvRequest(r Request, maxOutstanding int) (check PeerRequestCheck, action PeerRequestAction) {
-	s.event()
 	refuse := func(c PeerRequestCheck, fastAction PeerRequestAction) (PeerRequestCheck, PeerRequestAction) {
 		if s.fast {
 			return c, fastAction
@@ -332,7 +325,6 @@ var ErrUnrequestedPiece = errors.New("piece doesn't match an outstanding request
 // must be exactly one of the peer's outstanding requests, which it then answers. Otherwise it's an
 // error and the Piece mustn't be sent.
 func (s *State) SentPiece(piece Request) error {
-	s.event()
 	if !s.deletePeerRequest(piece) {
 		return ErrUnrequestedPiece
 	}
@@ -342,7 +334,6 @@ func (s *State) SentPiece(piece Request) error {
 // SentReject records that we sent a Reject (BEP 6), which needs the fast extension. It returns
 // whether the request was outstanding: a request can be rejected before it's accepted.
 func (s *State) SentReject(r Request) (wasOutstanding bool) {
-	s.event()
 	panicif.False(s.fast)
 	return s.deletePeerRequest(r)
 }
@@ -351,7 +342,6 @@ func (s *State) SentReject(r Request) (wasOutstanding bool) {
 // isn't outstanding after this either way. With the fast extension every request gets exactly one
 // reply (BEP 6), so sendReject says to answer the cancel with a Reject.
 func (s *State) RecvCancel(r Request) (known, sendReject bool) {
-	s.event()
 	if !s.deletePeerRequest(r) {
 		return false, false
 	}

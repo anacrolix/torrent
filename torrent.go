@@ -2162,6 +2162,9 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 		torrent.Add("deleted connections", 1)
 	}
 	c.onWireClosed("Torrent.deletePeerConn")
+	if len(t.conns) == 0 {
+		panicif.NotZero(len(t.requestState))
+	}
 	t.assertPendingRequests()
 	if t.numActivePeers() == 0 && len(t.connsWithAllPieces) != 0 {
 		panic(t.connsWithAllPieces)
@@ -3483,18 +3486,14 @@ func (t *Torrent) cancelRequest(r RequestIndex) *PeerConn {
 	return p
 }
 
-// The conn r is requested from, or nil. A request held by a conn that has since closed counts as
-// unrequested: closing doesn't undo a conn's requests here, so they're forgotten as they're found.
+// The conn r is requested from, or nil. Conns undo their requests here when they close.
 func (t *Torrent) requestingPeer(r RequestIndex) (ret *PeerConn) {
 	state, ok := t.requestState[r]
 	if !ok {
 		return nil
 	}
 	ret = state.peer.Value()
-	if ret == nil || ret.wireClosed() {
-		delete(t.requestState, r)
-		return nil
-	}
+	panicif.Nil(ret)
 	return
 }
 

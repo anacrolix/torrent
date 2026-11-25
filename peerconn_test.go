@@ -922,8 +922,8 @@ func (pc *PeerConn) testHandshook(cl *Client, peerBits pp.PeerExtensionBits, id 
 	pc.wireState.Handshook(cl.config.Extensions, pc.peerHandshake)
 }
 
-// Closing a conn doesn't undo its requests in the Torrent. They count as unrequested once found.
-func TestClosedConnRequestsCountAsUnrequested(t *testing.T) {
+// Closing a conn undoes its requests in the Torrent, so other peers can take them.
+func TestCloseUndoesRequests(t *testing.T) {
 	var cl Client
 	cfg := TestingConfig(t)
 	cl.init(cfg)
@@ -941,15 +941,22 @@ func TestClosedConnRequestsCountAsUnrequested(t *testing.T) {
 	})))
 	pc := cl.newConnection(nil, newConnectionOpts{network: "test"})
 	pc.setTorrent(tor)
+	pc.t.chunkSize = 1
+	var deleted []Request
+	pc.callbacks = &Callbacks{DeletedRequest: []func(PeerRequestEvent){func(e PeerRequestEvent) {
+		deleted = append(deleted, e.Request)
+	}}}
 	cl.lock()
 	const r RequestIndex = 0
+	pc.wireState.SentRequest(tor.requestIndexToRequest(r))
+	pc.requestIndexes().Requests.Add(r)
 	tor.requestState[r] = requestState{peer: weak.Make(pc), when: time.Now()}
 	qt.Check(t, qt.Equals(tor.requestingPeer(r), pc))
 	pc.close()
 	qt.Check(t, qt.IsNil(pc.wireState))
 	qt.Check(t, qt.IsNil(tor.requestingPeer(r)))
-	_, ok := tor.requestState[r]
-	qt.Check(t, qt.IsFalse(ok))
+	qt.Check(t, qt.HasLen(tor.requestState, 0))
+	qt.Check(t, qt.DeepEquals(deleted, []Request{tor.requestIndexToRequest(r)}))
 	cl.unlock()
 	qt.Check(t, qt.Equals(pc.PeerPieces().GetCardinality(), 0))
 }

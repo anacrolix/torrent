@@ -1970,30 +1970,31 @@ func (c *PeerConn) onDroppedRequests(dropped []Request, reason updateRequestReas
 	})
 }
 
-// The connection is closed. We drop our buffers for the peer's requests, and wireState with
-// everything else learned on the wire. Our requests aren't undone one by one: the Torrent treats a
-// request held by a conn whose wire is closed as unrequested (see Torrent.requestingPeer). It's
-// safe to call more than once.
+// The connection is closed. Our requests are undone in the Torrent so other peers can take them,
+// we drop our buffers for the peer's requests, and wireState with everything else learned on the
+// wire. It's safe to call more than once.
 func (c *PeerConn) onWireClosed(reason updateRequestReason) {
-	w := c.wireState
-	if w == nil {
+	if c.wireState == nil {
 		return
 	}
 	c.releaseLocalPeerRequests()
+	reqs := c.requestIndexes()
+	droppedAny := !reqs.Requests.IsEmpty()
+	reqs.Requests.IterateSnapshot(func(r RequestIndex) bool {
+		panicif.False(reqs.Requests.CheckedRemove(r))
+		c.onDeletedRequest(r)
+		return true
+	})
+	// Cancelled requests were undone in the Torrent when we cancelled them.
+	reqs.Cancelled.Clear()
 	c.wireState = nil
-	if w.NumRequests() != 0 {
-		// Our requests are free for other peers now.
+	if droppedAny {
 		c.t.iterPeers(func(p *Peer) {
 			if p.isLowOnRequests() {
 				p.onNeedUpdateRequests(reason)
 			}
 		})
 	}
-}
-
-// Whether the connection has closed, so it can't be sent requests or answer them.
-func (c *PeerConn) wireClosed() bool {
-	return c.wireState == nil
 }
 
 func (c *PeerConn) assertNoRequests() {

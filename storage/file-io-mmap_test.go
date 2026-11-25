@@ -22,7 +22,7 @@ func TestFileIoImplementationsSeekDataDetection(t *testing.T) {
 		name   string
 		fileIo fileIo
 	}{
-		{"classic", newClassicFileIo()},
+		{"classic", newClassicFileIo(defaultFileModes)},
 		{"mmap", &mmapFileIo{}},
 	}
 

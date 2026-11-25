@@ -16,11 +16,9 @@ type classicFileIo struct {
 	modes   fileModes
 }
 
-func newClassicFileIo() fileIo {
-	return &classicFileIo{modes: defaultFileModes}
+func newClassicFileIo(modes fileModes) fileIo {
+	return &classicFileIo{modes: modes}
 }
-
-func (me *classicFileIo) setModes(modes fileModes) { me.modes = modes }
 
 func (me *classicFileIo) Close() error {
 	me.mu.Lock()

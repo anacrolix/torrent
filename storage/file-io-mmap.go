@@ -27,16 +27,16 @@ func init() {
 	defaultFileIo = newDefaultFileIo
 }
 
-func newDefaultFileIo() fileIo {
+func newDefaultFileIo(modes fileModes) fileIo {
 	s, ok := os.LookupEnv("TORRENT_STORAGE_DEFAULT_FILE_IO")
 	if !ok {
-		return &mmapFileIo{modes: defaultFileModes}
+		return &mmapFileIo{modes: modes}
 	}
 	switch s {
 	case "mmap":
-		return &mmapFileIo{modes: defaultFileModes}
+		return &mmapFileIo{modes: modes}
 	case "classic":
-		return newClassicFileIo()
+		return newClassicFileIo(modes)
 	default:
 		panic(s)
 	}
@@ -50,8 +50,6 @@ type mmapFileIo struct {
 	closed bool
 	modes  fileModes
 }
-
-func (me *mmapFileIo) setModes(modes fileModes) { me.modes = modes }
 
 func (me *mmapFileIo) Close() error {
 	me.mu.Lock()

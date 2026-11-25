@@ -69,12 +69,9 @@ func (me NewFileClientOpts) modes() fileModes {
 // The file IO implementation to open torrents with.
 func (me NewFileClientOpts) fileIo() (io fileIo) {
 	if me.DisableMmap {
-		io = newClassicFileIo()
+		io = newClassicFileIo(me.modes())
 	} else {
-		io = defaultFileIo()
-	}
-	if s, ok := io.(interface{ setModes(fileModes) }); ok {
-		s.setModes(me.modes())
+		io = defaultFileIo(me.modes())
 	}
 	return
 }

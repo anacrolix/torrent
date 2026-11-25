@@ -17,7 +17,7 @@ import (
 func TestDefaultFileIoDefaultsToMmapWithoutEnv(t *testing.T) {
 	t.Setenv("TORRENT_STORAGE_DEFAULT_FILE_IO", "")
 	qt.Assert(t, qt.IsNil(os.Unsetenv("TORRENT_STORAGE_DEFAULT_FILE_IO")))
-	ioImpl := defaultFileIo()
+	ioImpl := defaultFileIo(defaultFileModes)
 	t.Cleanup(func() { _ = ioImpl.Close() })
 	_, ok := ioImpl.(*mmapFileIo)
 	qt.Assert(t, qt.IsTrue(ok))
@@ -25,13 +25,13 @@ func TestDefaultFileIoDefaultsToMmapWithoutEnv(t *testing.T) {
 
 func TestDefaultFileIoReadsEnvironmentLazily(t *testing.T) {
 	t.Setenv("TORRENT_STORAGE_DEFAULT_FILE_IO", "classic")
-	ioImpl := defaultFileIo()
+	ioImpl := defaultFileIo(defaultFileModes)
 	t.Cleanup(func() { _ = ioImpl.Close() })
 	_, ok := ioImpl.(*classicFileIo)
 	qt.Assert(t, qt.IsTrue(ok))
 
 	t.Setenv("TORRENT_STORAGE_DEFAULT_FILE_IO", "mmap")
-	ioImpl = defaultFileIo()
+	ioImpl = defaultFileIo(defaultFileModes)
 	t.Cleanup(func() { _ = ioImpl.Close() })
 	_, ok = ioImpl.(*mmapFileIo)
 	qt.Assert(t, qt.IsTrue(ok))
@@ -75,7 +75,7 @@ func TestClassicFileIoRenameClosesCachedWriter(t *testing.T) {
 	oldPath := filepath.Join(tempDir, "old.bin")
 	newPath := filepath.Join(tempDir, "new.bin")
 
-	ioImpl, ok := newClassicFileIo().(*classicFileIo)
+	ioImpl, ok := newClassicFileIo(defaultFileModes).(*classicFileIo)
 	qt.Assert(t, qt.IsTrue(ok))
 	t.Cleanup(func() { _ = ioImpl.Close() })
 
@@ -96,7 +96,7 @@ func TestClassicFileIoOpenForReadBorrowsWriterHandle(t *testing.T) {
 	tempDir := t.TempDir()
 	filePath := filepath.Join(tempDir, "data.bin")
 
-	ioImpl, ok := newClassicFileIo().(*classicFileIo)
+	ioImpl, ok := newClassicFileIo(defaultFileModes).(*classicFileIo)
 	qt.Assert(t, qt.IsTrue(ok))
 	t.Cleanup(func() { _ = ioImpl.Close() })
 
@@ -119,7 +119,7 @@ func TestClassicFileIoCloseWritersClearsCachedHandles(t *testing.T) {
 	tempDir := t.TempDir()
 	filePath := filepath.Join(tempDir, "data.bin")
 
-	ioImpl, ok := newClassicFileIo().(*classicFileIo)
+	ioImpl, ok := newClassicFileIo(defaultFileModes).(*classicFileIo)
 	qt.Assert(t, qt.IsTrue(ok))
 	t.Cleanup(func() { _ = ioImpl.Close() })
 
@@ -142,7 +142,7 @@ func TestClassicFileIoFailedRenameKeepsCachedWriter(t *testing.T) {
 	finalPath := filepath.Join(tempDir, "data.bin")
 	partPath := finalPath + ".part"
 
-	ioImpl, ok := newClassicFileIo().(*classicFileIo)
+	ioImpl, ok := newClassicFileIo(defaultFileModes).(*classicFileIo)
 	qt.Assert(t, qt.IsTrue(ok))
 	t.Cleanup(func() { _ = ioImpl.Close() })
 

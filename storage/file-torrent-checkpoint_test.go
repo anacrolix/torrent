@@ -161,7 +161,7 @@ func TestTorrentCheckpointFlushesReadOnlyPromotedFile(t *testing.T) {
 	torrent := &fileTorrentImpl{
 		info:     info,
 		infoHash: metainfo.HashBytes([]byte("z")),
-		io:       newClassicFileIo(),
+		io:       newClassicFileIo(defaultFileModes),
 	}
 	buffer := newTorrentCheckpointBuffer(torrent, checkpointer)
 	key := metainfo.PieceKey{InfoHash: torrent.infoHash, Index: 0}

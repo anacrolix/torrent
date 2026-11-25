@@ -17,8 +17,8 @@ type fileReader interface {
 }
 
 // This gets clobbered by a hybrid mmap implementation if mmap is available.
-var defaultFileIo = func() fileIo {
-	return newClassicFileIo()
+var defaultFileIo = func(modes fileModes) fileIo {
+	return newClassicFileIo(modes)
 }
 
 type fileIo interface {

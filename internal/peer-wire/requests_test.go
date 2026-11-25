@@ -2,7 +2,6 @@ package peerWire
 
 import (
 	"fmt"
-	"maps"
 	"math"
 	"slices"
 	"testing"
@@ -138,19 +137,6 @@ func TestChokeWithFastKeepsRequests(t *testing.T) {
 	outstanding, ok := s.RecvReject(chunk(1))
 	qt.Check(t, qt.IsTrue(ok))
 	qt.Check(t, qt.IsTrue(outstanding))
-}
-
-func TestAwaitingReply(t *testing.T) {
-	s := fastState()
-	sendRequest(&s, 1)
-	sendRequest(&s, 2)
-	sendRequest(&s, 3)
-	s.SentCancel(chunk(2))
-	// Answered, so nothing's awaited, though the entry remains until then.
-	_, _, err := s.RecvChunk(chunk(3))
-	qt.Assert(t, qt.IsNil(err))
-	awaiting := maps.Collect(s.AwaitingReply())
-	qt.Check(t, qt.DeepEquals(awaiting, map[Request]bool{chunk(1): true, chunk(2): false}))
 }
 
 func TestCancelAwaitingReject(t *testing.T) {

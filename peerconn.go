@@ -62,10 +62,9 @@ type PeerConn struct {
 
 	// What we know about the peer from the BitTorrent messages exchanged with it: choke and
 	// interest, claimed pieces, allowed fast, requests in both directions etc. It's nil once the
-	// connection closes (see onWireClosed), so recording anything after that panics.
+	// connection closes (see onWireClosed), so recording anything after that panics, and getters
+	// like PeerPieces report nothing.
 	wireState *peerWire.State
-	// The peer's claimed pieces when the connection closed, for getters like PeerPieces.
-	closedPieces closedPeerPieces
 
 	// The local extended protocols to advertise in the extended handshake, and to support receiving
 	// from the peer. This will point to the Client default when the PeerConnAdded callback is
@@ -179,23 +178,16 @@ func (l *PeerConn) hasPreferredNetworkOver(r *PeerConn) bool {
 	return ml.Less()
 }
 
-// What's kept of wireState after the connection closes.
-type closedPeerPieces struct {
-	pieces     roaring.Bitmap
-	all, known bool
-	minPieces  pieceIndex
-}
-
 func (cn *PeerConn) peerMinPieces() pieceIndex {
 	if cn.wireState == nil {
-		return cn.closedPieces.minPieces
+		return 0
 	}
 	return cn.wireState.PeerMinPieces()
 }
 
 func (cn *PeerConn) peerHasAllPieces() (all, known bool) {
 	if cn.wireState == nil {
-		return cn.closedPieces.all, cn.closedPieces.known
+		return false, false
 	}
 	return cn.wireState.PeerHasAllPieces(cn.t.numPiecesOption())
 }
@@ -217,7 +209,7 @@ func (cn *PeerConn) setNumPieces(num pieceIndex) {
 
 func (cn *PeerConn) peerPieces() *roaring.Bitmap {
 	if cn.wireState == nil {
-		return &cn.closedPieces.pieces
+		return &roaring.Bitmap{}
 	}
 	return &cn.wireState.PeerPieces().Bitmap
 }
@@ -1978,48 +1970,30 @@ func (c *PeerConn) onDroppedRequests(dropped []Request, reason updateRequestReas
 	})
 }
 
-// The connection is closed. Our requests and cancels awaiting replies go away, we drop our buffers
-// for the peer's requests, and we keep only the peer's claimed pieces before dropping wireState.
-// It's safe to call more than once.
+// The connection is closed. We drop our buffers for the peer's requests, and wireState with
+// everything else learned on the wire. Our requests aren't undone one by one: the Torrent treats a
+// request held by a conn whose wire is closed as unrequested (see Torrent.requestingPeer). It's
+// safe to call more than once.
 func (c *PeerConn) onWireClosed(reason updateRequestReason) {
 	w := c.wireState
 	if w == nil {
 		return
 	}
 	c.releaseLocalPeerRequests()
-	droppedAny := false
-	for req, outstanding := range w.AwaitingReply() {
-		r := c.requestIndexOfSent(req)
-		if outstanding {
-			panicif.False(c.requestIndexes().Requests.CheckedRemove(r))
-			c.onDeletedRequest(r)
-			droppedAny = true
-		} else {
-			// The request's effects went when we cancelled it.
-			panicif.False(c.requestIndexes().Cancelled.CheckedRemove(r))
-		}
-	}
-	panicif.NotZero(c.requestIndexes().Requests.GetCardinality())
-	panicif.NotZero(c.requestIndexes().Cancelled.GetCardinality())
-	var numPieces g.Option[int]
-	if c.t != nil {
-		numPieces = c.t.numPiecesOption()
-	}
-	all, known := w.PeerHasAllPieces(numPieces)
-	c.closedPieces = closedPeerPieces{
-		pieces:    *w.PeerPieces().Bitmap.Clone(),
-		all:       all,
-		known:     known,
-		minPieces: w.PeerMinPieces(),
-	}
 	c.wireState = nil
-	if droppedAny {
+	if w.NumRequests() != 0 {
+		// Our requests are free for other peers now.
 		c.t.iterPeers(func(p *Peer) {
 			if p.isLowOnRequests() {
 				p.onNeedUpdateRequests(reason)
 			}
 		})
 	}
+}
+
+// Whether the connection has closed, so it can't be sent requests or answer them.
+func (c *PeerConn) wireClosed() bool {
+	return c.wireState == nil
 }
 
 func (c *PeerConn) assertNoRequests() {

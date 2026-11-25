@@ -15,6 +15,8 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
+	"weak"
 
 	g "github.com/anacrolix/generics"
 	"github.com/go-quicktest/qt"
@@ -918,4 +920,36 @@ func TestPeerConnRejectsWrongHashes(t *testing.T) {
 func (pc *PeerConn) testHandshook(cl *Client, peerBits pp.PeerExtensionBits, id PeerID) {
 	peerWire.RecvHandshake(&pc.peerHandshake, pp.HandshakeResult{PeerExtensionBits: peerBits, PeerID: id})
 	pc.wireState.Handshook(cl.config.Extensions, pc.peerHandshake)
+}
+
+// Closing a conn doesn't undo its requests in the Torrent. They count as unrequested once found.
+func TestClosedConnRequestsCountAsUnrequested(t *testing.T) {
+	var cl Client
+	cfg := TestingConfig(t)
+	cl.init(cfg)
+	t.Cleanup(func() { cl.Close() })
+	tor, _ := cl.AddTorrentOpt(AddTorrentOpts{
+		InfoHash:                 testingTorrentInfoHash,
+		Storage:                  &torrentStorageClient{&torrentStorage{}},
+		DisableInitialPieceCheck: true,
+	})
+	qt.Assert(t, qt.IsNil(tor.setInfoUnlocked(&metainfo.Info{
+		Pieces:      make([]byte, metainfo.HashSize),
+		PieceLength: 1,
+		Length:      1,
+		Name:        "test",
+	})))
+	pc := cl.newConnection(nil, newConnectionOpts{network: "test"})
+	pc.setTorrent(tor)
+	cl.lock()
+	const r RequestIndex = 0
+	tor.requestState[r] = requestState{peer: weak.Make(pc), when: time.Now()}
+	qt.Check(t, qt.Equals(tor.requestingPeer(r), pc))
+	pc.close()
+	qt.Check(t, qt.IsNil(pc.wireState))
+	qt.Check(t, qt.IsNil(tor.requestingPeer(r)))
+	_, ok := tor.requestState[r]
+	qt.Check(t, qt.IsFalse(ok))
+	cl.unlock()
+	qt.Check(t, qt.Equals(pc.PeerPieces().GetCardinality(), 0))
 }

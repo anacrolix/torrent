@@ -156,21 +156,6 @@ func (s *State) dropRequests() (dropped []Request) {
 	return
 }
 
-// AwaitingReply iterates our requests and cancels awaiting a Piece or Reject, in no particular
-// order. outstanding is false for a cancel. Don't modify the State during iteration.
-func (s *State) AwaitingReply() iter.Seq2[Request, bool] {
-	return func(yield func(req Request, outstanding bool) bool) {
-		for req, r := range s.ourRequests {
-			if r.awaiting == awaitingNothing {
-				continue
-			}
-			if !yield(req, r.awaiting == awaitingRequestReply) {
-				return
-			}
-		}
-	}
-}
-
 // SentCancel records that we're sending a Cancel for an outstanding request. If the peer
 // acknowledges cancels with Reject or the Piece (BEP 6, see ExpectsCancelReplies), we wait for
 // that before the chunk can be requested again. It returns false if the request wasn't

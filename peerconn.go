@@ -1964,8 +1964,8 @@ func (c *PeerConn) onDroppedRequests(dropped []Request, reason updateRequestReas
 	}
 	c.assertNoRequests()
 	c.t.iterPeers(func(p *Peer) {
-		if p.isLowOnRequests() {
-			p.onNeedUpdateRequests(reason)
+		if p.peerImpl.isLowOnRequests() {
+			p.peerImpl.onNeedUpdateRequests(reason)
 		}
 	})
 }
@@ -1990,8 +1990,8 @@ func (c *PeerConn) onWireClosed(reason updateRequestReason) {
 	c.wireState = nil
 	if droppedAny {
 		c.t.iterPeers(func(p *Peer) {
-			if p.isLowOnRequests() {
-				p.onNeedUpdateRequests(reason)
+			if p.peerImpl.isLowOnRequests() {
+				p.peerImpl.onNeedUpdateRequests(reason)
 			}
 		})
 	}

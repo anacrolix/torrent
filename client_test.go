@@ -692,7 +692,7 @@ func TestPeerInvalidHave(t *testing.T) {
 		callbacks: &cfg.Callbacks,
 	}}
 	tt.conns[cn] = struct{}{}
-	cn.legacyPeerImpl = cn
+	cn.peerImpl = cn
 	cl.lock()
 	defer cl.unlock()
 	qt.Check(t, qt.IsNil(cn.peerSentHave(0)))

@@ -116,7 +116,7 @@ func (me *webseedPeer) lastWriteUploadRate() float64 {
 	return 0
 }
 
-var _ legacyPeerImpl = (*webseedPeer)(nil)
+var _ peerImpl = (*webseedPeer)(nil)
 
 func (me *webseedPeer) peerImplStatusLines() []string {
 	lines := []string{
@@ -151,9 +151,6 @@ func (ws *webseedPeer) onGotInfo(info *metainfo.Info) {
 		return true
 	})
 }
-
-// Webseeds check the next request is wanted before reading it.
-func (ws *webseedPeer) handleCancel(RequestIndex) {}
 
 func (ws *webseedPeer) intoSpec(begin, end RequestIndex) webseed.RequestSpec {
 	t := ws.peer.t
@@ -303,10 +300,6 @@ func (ws *webseedPeer) deleteActiveRequest(wr *webseedRequest) {
 	ws.peer.updateExpectingChunks()
 }
 
-func (ws *webseedPeer) connectionFlags() string {
-	return "WS"
-}
-
 // Maybe this should drop all existing connections, or something like that.
 func (ws *webseedPeer) drop() {}
 
@@ -316,8 +309,8 @@ func (cn *webseedPeer) providedBadData() {
 
 func (ws *webseedPeer) onClose() {
 	ws.peer.t.iterPeers(func(p *Peer) {
-		if p.isLowOnRequests() {
-			p.onNeedUpdateRequests("webseedPeer.onClose")
+		if p.peerImpl.isLowOnRequests() {
+			p.peerImpl.onNeedUpdateRequests("webseedPeer.onClose")
 		}
 	})
 }

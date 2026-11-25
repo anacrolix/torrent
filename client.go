@@ -1867,7 +1867,7 @@ func (cl *Client) banPeerIP(ip net.IP) {
 			if p.remoteIp().Equal(ip) {
 				t.slogger().Debug("dropping peer with banned ip", "peer", p, "ip", ip)
 				// Should this be a close?
-				p.drop()
+				p.peerImpl.drop()
 			}
 		})
 	}
@@ -1909,7 +1909,6 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 			c.bannableAddr = g.Some(netipAddrPort.Addr())
 		}
 	}
-	c.legacyPeerImpl = c
 	c.peerImpl = c
 	c.setPeerLoggers(cl.logger, cl.slogger)
 	c.setRW(connStatsReadWriter{nc, c})

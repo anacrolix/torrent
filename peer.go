@@ -32,8 +32,7 @@ type (
 		cl *Client
 		t  *Torrent
 
-		legacyPeerImpl
-		peerImpl  newHotPeerImpl
+		peerImpl  peerImpl
 		callbacks *Callbacks
 
 		RemoteAddr              PeerRemoteAddr
@@ -153,13 +152,13 @@ func (cn *Peer) bestPeerNumPieces() pieceIndex {
 	if cn.t.haveInfo() {
 		return cn.t.numPieces()
 	}
-	return cn.peerMinPieces()
+	return cn.peerImpl.peerMinPieces()
 }
 
 // How many pieces we think the peer has.
 func (cn *Peer) remotePieceCount() pieceIndex {
-	have := pieceIndex(cn.peerPieces().GetCardinality())
-	if all, _ := cn.peerHasAllPieces(); all {
+	have := pieceIndex(cn.peerImpl.peerPieces().GetCardinality())
+	if all, _ := cn.peerImpl.peerHasAllPieces(); all {
 		have = cn.bestPeerNumPieces()
 	}
 	return have
@@ -194,8 +193,8 @@ func (cn *Peer) writeStatus(w io.Writer) {
 	if cn.closed.IsSet() {
 		fmt.Fprint(w, "CLOSED: ")
 	}
-	fmt.Fprintln(w, strings.Join(cn.peerImplStatusLines(), "\n"))
-	cn.peerImplWriteStatus(w)
+	fmt.Fprintln(w, strings.Join(cn.peerImpl.peerImplStatusLines(), "\n"))
+	cn.peerImpl.peerImplWriteStatus(w)
 	fmt.Fprintf(w,
 		"%d pieces touched, good chunks: %v/%v, dr: %.1f KiB/s\n",
 		len(cn.peerTouchedPieces),
@@ -221,7 +220,7 @@ func (p *Peer) close() {
 	if p.t != nil {
 		p.t.decPeerPieceAvailability(p)
 	}
-	p.legacyPeerImpl.onClose()
+	p.peerImpl.onClose()
 	for _, f := range p.callbacks.PeerClosed {
 		f(p)
 	}
@@ -237,10 +236,10 @@ func (p *Peer) Close() error {
 // Peer definitely has a piece, for purposes of requesting. So it's not sufficient that we think
 // they do (known=true).
 func (cn *Peer) peerHasPiece(piece pieceIndex) bool {
-	if all, known := cn.peerHasAllPieces(); all && known {
+	if all, known := cn.peerImpl.peerHasAllPieces(); all && known {
 		return true
 	}
-	return cn.peerPieces().ContainsInt(piece)
+	return cn.peerImpl.peerPieces().ContainsInt(piece)
 }
 
 // 64KiB, but temporarily less to work around an issue with WebRTC. TODO: Update when
@@ -462,7 +461,7 @@ func (c *Peer) receiveChunkEpilogue(w *pendingChunkWrite, err error) {
 		// Necessary to pass TestReceiveChunkStorageFailureSeederFastExtensionDisabled. I think a
 		// request update runs while we're writing the chunk that just failed. Then we never do a
 		// fresh update after pending the failed request.
-		c.onNeedUpdateRequests("Peer.receiveChunk error writing chunk")
+		c.peerImpl.onNeedUpdateRequests("Peer.receiveChunk error writing chunk")
 		t.onWriteChunkErr(err)
 		return
 	}
@@ -500,13 +499,13 @@ func (cn *Peer) netGoodPiecesDirtied() int64 {
 }
 
 func (c *Peer) peerHasWantedPieces() bool {
-	if all, _ := c.peerHasAllPieces(); all {
+	if all, _ := c.peerImpl.peerHasAllPieces(); all {
 		return !c.t.haveAllPieces() && !c.t._pendingPieces.IsEmpty()
 	}
 	if !c.t.haveInfo() {
-		return !c.peerPieces().IsEmpty()
+		return !c.peerImpl.peerPieces().IsEmpty()
 	}
-	return c.peerPieces().Intersects(&c.t._pendingPieces.Bitmap)
+	return c.peerImpl.peerPieces().Intersects(&c.t._pendingPieces.Bitmap)
 }
 
 func (c *Peer) peerPriority() (peerPriority, error) {
@@ -541,8 +540,8 @@ func (l connectionTrust) Cmp(r connectionTrust) int {
 // Returns a new Bitmap that includes bits for all pieces the peer could have based on their claims.
 func (cn *Peer) newPeerPieces() *roaring.Bitmap {
 	// TODO: Can we use copy on write?
-	ret := cn.peerPieces().Clone()
-	if all, _ := cn.peerHasAllPieces(); all {
+	ret := cn.peerImpl.peerPieces().Clone()
+	if all, _ := cn.peerImpl.peerHasAllPieces(); all {
 		if cn.t.haveInfo() {
 			ret.AddRange(0, uint64(cn.t.numPieces()))
 		} else {
@@ -552,8 +551,12 @@ func (cn *Peer) newPeerPieces() *roaring.Bitmap {
 	return ret
 }
 
+func (p *Peer) String() string {
+	return p.peerImpl.String()
+}
+
 func (p *Peer) TryAsPeerConn() (*PeerConn, bool) {
-	pc, ok := p.legacyPeerImpl.(*PeerConn)
+	pc, ok := p.peerImpl.(*PeerConn)
 	return pc, ok
 }
 

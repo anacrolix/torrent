@@ -599,8 +599,8 @@ func (t *Torrent) onSetInfo() {
 	close(t.gotMetainfoC)
 	t.updateWantPeersEvent()
 	t.iterPeers(func(p *Peer) {
-		p.onGotInfo(t.info)
-		p.onNeedUpdateRequests("onSetInfo")
+		p.peerImpl.onGotInfo(t.info)
+		p.peerImpl.onNeedUpdateRequests("onSetInfo")
 	})
 }
 
@@ -652,7 +652,7 @@ func (t *Torrent) OpenStorage(ctx context.Context, impl storage.ClientImpl) (err
 	t.storage = ts
 	t.onStorageOpened()
 	t.iterPeers(func(p *Peer) {
-		p.onNeedUpdateRequests("OpenStorage")
+		p.peerImpl.onNeedUpdateRequests("OpenStorage")
 	})
 	t.cl.event.Broadcast()
 	return nil
@@ -1713,7 +1713,7 @@ func (t *Torrent) updatePeerRequestsForPiece(piece pieceIndex, reason updateRequ
 	}
 	for _, ws := range t.webSeeds {
 		if ws.peer.peerHasPiece(piece) {
-			ws.peer.onNeedUpdateRequests(reason)
+			ws.peer.peerImpl.onNeedUpdateRequests(reason)
 		}
 	}
 }
@@ -2179,7 +2179,7 @@ func (t *Torrent) decPeerPieceAvailability(p *Peer) {
 	if !t.haveInfo() {
 		return
 	}
-	p.peerPieces().Iterate(func(i uint32) bool {
+	p.peerImpl.peerPieces().Iterate(func(i uint32) bool {
 		p.t.decPieceAvailability(pieceIndex(i))
 		return true
 	})
@@ -2830,7 +2830,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 						"piece failed hash. banning peer",
 						"piece", piece,
 						"peer", c)
-					c.providedBadData()
+					c.peerImpl.providedBadData()
 					// TODO: Check if we now have no available peers for pieces we want.
 				}
 			}
@@ -2896,7 +2896,7 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 	// }
 	t.iterPeers(func(conn *Peer) {
 		if conn.peerHasPiece(piece) {
-			conn.onNeedUpdateRequests("piece incomplete")
+			conn.peerImpl.onNeedUpdateRequests("piece incomplete")
 		}
 	})
 }
@@ -2995,7 +2995,7 @@ func (t *Torrent) dropBannedPeers() {
 		}
 		if _, ok := t.cl.badPeerIPs[netipAddr]; ok {
 			// Should this be a close?
-			p.drop()
+			p.peerImpl.drop()
 			t.logger.WithDefaultLevel(log.Debug).Printf("dropped %v for banned remote IP %v", p, netipAddr)
 		}
 	})
@@ -3237,8 +3237,8 @@ func (t *Torrent) disallowDataDownloadLocked() {
 	t.dataDownloadDisallowed.Set()
 	t.iterPeers(func(p *Peer) {
 		// Could check if peer request state is empty/not interested?
-		p.onNeedUpdateRequests("disallow data download")
-		p.cancelAllRequests()
+		p.peerImpl.onNeedUpdateRequests("disallow data download")
+		p.peerImpl.cancelAllRequests()
 	})
 }
 
@@ -3252,7 +3252,7 @@ func (t *Torrent) AllowDataDownload() {
 	}
 	t.updateAllPiecePriorities("data download allowed")
 	t.iterPeers(func(p *Peer) {
-		p.onNeedUpdateRequests("allow data download")
+		p.peerImpl.onNeedUpdateRequests("allow data download")
 	})
 }
 
@@ -3265,7 +3265,7 @@ func (t *Torrent) AllowDataUpload() {
 	}
 	t.dataUploadDisallowed = false
 	t.iterPeers(func(p *Peer) {
-		p.onNeedUpdateRequests("allow data upload")
+		p.peerImpl.onNeedUpdateRequests("allow data upload")
 	})
 }
 
@@ -3397,13 +3397,12 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	ws.peer.slogger = t.slogger().With("webseed", url)
 	ws.client.Logger = ws.peer.slogger
 	// TODO: Abstract out a common struct initializer for this...
-	ws.peer.legacyPeerImpl = &ws
 	ws.peer.peerImpl = &ws
 	if t.haveInfo() {
 		ws.onGotInfo(t.info)
 	}
 	g.MapMustAssignNew(t.webSeeds, urlKey, &ws)
-	ws.peer.onNeedUpdateRequests("Torrent.addWebSeed")
+	ws.peer.peerImpl.onNeedUpdateRequests("Torrent.addWebSeed")
 	return true
 }
 

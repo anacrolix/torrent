@@ -9,33 +9,28 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
-// Contains implementation details that differ between peer types, like WebSeeds and regular
-// BitTorrent protocol connections. These methods are embedded in the child types of Peer for legacy
-// expectations that they exist on the child type. Some methods are underlined to avoid collisions
-// with legacy PeerConn methods. New methods and calls that are fixed up should be migrated over to
-// newHotPeerImpl.
-type legacyPeerImpl interface {
-	// Whether the peer should be told to update requests. Sometimes this is skipped if it's high
-	// priority adjustments to requests. This is kind of only relevant to PeerConn but hasn't been
-	// fully migrated over yet.
-	isLowOnRequests() bool
-	// Notify that the peers requests should be updated for the provided reason.
-	onNeedUpdateRequests(reason updateRequestReason)
-
-	// handleCancel initiates cancellation of a request
-	handleCancel(ri RequestIndex)
-	cancelAllRequests()
-	connectionFlags() string
-	onClose()
-	onGotInfo(info *metainfo.Info)
-	// Drop connection. This may be a no-op if there is no connection.
-	drop()
-	// Rebuke the peer
-	providedBadData()
+// The methods of Peer that differ by peer type: PeerConn (the BitTorrent protocol over TCP, uTP or
+// WebRTC) and webseedPeer. Peer holds its implementation in Peer.peerImpl, and calls through it
+// explicitly. PeerConn embeds Peer, so code that has a *PeerConn calls these methods directly.
+type peerImpl interface {
 	String() string
-	// Per peer-impl lines for WriteStatus.
-	peerImplStatusLines() []string
-	peerImplWriteStatus(w io.Writer)
+
+	// Requests.
+
+	// Whether the peer should be told to update requests. Sometimes this is skipped if it's high
+	// priority adjustments to requests. Webseeds always return false, as their requests are
+	// updated across the Client.
+	isLowOnRequests() bool
+	// Notify that the peer's requests should be updated for the provided reason.
+	onNeedUpdateRequests(reason updateRequestReason)
+	cancelAllRequests()
+	// Bookkeeping for a chunk being received and any specific checks.
+	checkReceivedChunk(ri RequestIndex, msg *pp.Message, req Request) (intended bool, err error)
+	// Whether we're expecting to receive chunks because we have outstanding requests. Used for
+	// example to calculate download rate.
+	expectingChunks() bool
+
+	// What the peer has.
 
 	// All if the peer should have everything, known if we know that for a fact. For example, we can
 	// guess at how many pieces are in a torrent, and assume they have all pieces based on them
@@ -46,15 +41,21 @@ type legacyPeerImpl interface {
 	// The fewest pieces the torrent can have given what the peer has claimed. Used to guess the
 	// piece count before we have the info.
 	peerMinPieces() pieceIndex
-}
 
-// Abstract methods implemented by subclasses of Peer.
-type newHotPeerImpl interface {
+	// Lifecycle.
+
+	onGotInfo(info *metainfo.Info)
+	onClose()
+	// Drop connection. This may be a no-op if there is no connection.
+	drop()
+	// Rebuke the peer
+	providedBadData()
+
+	// Stats and status.
+
 	lastWriteUploadRate() float64
-	// Bookkeeping for a chunk being received and any specific checks.
-	checkReceivedChunk(ri RequestIndex, msg *pp.Message, req Request) (intended bool, err error)
-	// Whether we're expecting to receive chunks because we have outstanding requests. Used for
-	// example to calculate download rate.
-	expectingChunks() bool
 	allConnStatsImplField(*AllConnStats) *ConnStats
+	// Per peer-impl lines for WriteStatus.
+	peerImplStatusLines() []string
+	peerImplWriteStatus(w io.Writer)
 }

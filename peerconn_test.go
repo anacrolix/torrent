@@ -374,7 +374,6 @@ func TestRequestMissingHashesTrailingSingleHash(t *testing.T) {
 			t:  tor,
 		},
 	}
-	c.legacyPeerImpl = c
 	c.peerImpl = c
 	c.v2 = true
 	c.wireState.RecvHaveAll()
@@ -427,7 +426,6 @@ func TestRequestMissingHashesAfterSinglePieceFile(t *testing.T) {
 			t:  tor,
 		},
 	}
-	c.legacyPeerImpl = c
 	c.peerImpl = c
 	c.v2 = true
 	c.wireState.RecvHaveAll()
@@ -524,7 +522,7 @@ func TestHaveAllThenBitfield(t *testing.T) {
 		wireState: new(peerWire.NewState()),
 		Peer:      Peer{t: tt},
 	}
-	pc.legacyPeerImpl = &pc
+	pc.peerImpl = &pc
 	tt.conns[&pc] = struct{}{}
 	g.InitNew(&pc.callbacks)
 	qt.Assert(t, qt.IsNil(pc.onPeerSentHaveAll()))

@@ -11,6 +11,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 	g "github.com/anacrolix/generics"
+	"github.com/anacrolix/missinggo/v2/panicif"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
@@ -23,6 +24,9 @@ import (
 // Piece counts are passed in as g.Option because a peer can send piece messages before we have
 // the torrent info.
 type State struct {
+	// The connection closed. See Freeze.
+	frozen bool
+
 	// Both sides set the fast extension bit in the handshake (BEP 6).
 	fast bool
 	// The peer answers our cancels with a Reject or the Piece. See ExpectsCancelReplies.
@@ -90,6 +94,7 @@ func NewState() State {
 // Handshook records the completed BEP 3 handshake: the reserved bits we sent, and what the peer
 // sent.
 func (s *State) Handshook(ours pp.PeerExtensionBits, peer Handshake) {
+	s.event()
 	s.fast = ours.SupportsFast() && peer.PeerExtensionBytes.SupportsFast()
 	s.cancelReplies = RejectsCancels(peer.PeerID, s.fast)
 }
@@ -115,6 +120,7 @@ func (s *State) Choking() bool {
 // case there's nothing to send. Without the fast extension, choking discards the peer's requests
 // (BEP 3), and droppedPeerRequests is true: none are outstanding now.
 func (s *State) SentChoke() (changed, droppedPeerRequests bool) {
+	s.event()
 	if s.choking {
 		return false, false
 	}
@@ -129,6 +135,7 @@ func (s *State) SentChoke() (changed, droppedPeerRequests bool) {
 // SentUnchoke records that we're unchoking the peer. It returns false if we weren't choking
 // them, in which case there's nothing to send.
 func (s *State) SentUnchoke() (changed bool) {
+	s.event()
 	if !s.choking {
 		return false
 	}
@@ -136,11 +143,27 @@ func (s *State) SentUnchoke() (changed bool) {
 	return true
 }
 
-// Closed records that the connection is closed. Nothing more is sent or received. The peer's
-// requests are forgotten, and so are our outstanding requests, which are returned.
-func (s *State) Closed() (droppedRequests []Request) {
-	clear(s.peerRequests)
-	return s.dropRequests()
+// Freeze records that the connection closed, so nothing more can be sent or received and the
+// State can't change. It keeps what was outstanding at that point, such as AwaitingReply and
+// PeerRequests, for the caller to deal with once. Recording any event after this panics. changed
+// is false if it was already frozen.
+func (s *State) Freeze() (changed bool) {
+	if s.frozen {
+		return false
+	}
+	s.frozen = true
+	return true
+}
+
+// Frozen returns whether Freeze was called.
+func (s *State) Frozen() bool {
+	return s.frozen
+}
+
+// Called first by every method that records an event, to catch events after the connection
+// closed.
+func (s *State) event() {
+	panicif.True(s.frozen)
 }
 
 // PeerChoking returns whether the peer is choking us.
@@ -152,6 +175,7 @@ func (s *State) PeerChoking() bool {
 // the fast extension the peer discards our requests (BEP 3), so they're no longer outstanding and
 // are returned as deleted. With it, they stay outstanding until the peer rejects or serves them.
 func (s *State) RecvChoke() (changed bool, droppedRequests []Request) {
+	s.event()
 	if s.peerChoking {
 		return false, nil
 	}
@@ -165,6 +189,7 @@ func (s *State) RecvChoke() (changed bool, droppedRequests []Request) {
 // RecvUnchoke handles an Unchoke message. It returns false if the peer wasn't choking us. Some
 // clients do this, and it isn't treated as an error.
 func (s *State) RecvUnchoke() (changed bool) {
+	s.event()
 	if !s.peerChoking {
 		return false
 	}
@@ -180,6 +205,7 @@ func (s *State) PeerInterested() bool {
 // RecvInterested handles Interested and NotInterested messages. Requests from the peer aren't
 // cleared on NotInterested since the spec doesn't say to. Choking them does that.
 func (s *State) RecvInterested(interested bool) {
+	s.event()
 	s.peerInterested = interested
 }
 
@@ -197,6 +223,7 @@ const MaxPeerAllowedFast = 256
 // sender does not have". Pieces outside the torrent, or past MaxPeerAllowedFast, are ignored and
 // added is false.
 func (s *State) RecvAllowedFast(piece int, numPieces g.Option[int]) (added bool) {
+	s.event()
 	if piece < 0 || numPieces.Ok && piece >= numPieces.Value {
 		return false
 	}
@@ -219,6 +246,7 @@ func (s *State) NoHavesAnnounced() bool {
 // SentHave records that we're sending Have for a piece. It returns false if the peer already knows,
 // in which case there's nothing to send.
 func (s *State) SentHave(piece int) (added bool) {
+	s.event()
 	if s.sentHaves.Contains(piece) {
 		return false
 	}
@@ -229,6 +257,7 @@ func (s *State) SentHave(piece int) (added bool) {
 // SentBitfield records that we sent Bitfield with the given pieces. It must be the first
 // have-related message.
 func (s *State) SentBitfield(pieces *roaring.Bitmap) error {
+	s.event()
 	if !s.sentHaves.IsEmpty() {
 		return errors.New("bitfield must be first have-related message sent")
 	}
@@ -238,12 +267,14 @@ func (s *State) SentBitfield(pieces *roaring.Bitmap) error {
 
 // SentHaveAll records that we sent HaveAll.
 func (s *State) SentHaveAll(numPieces int) {
+	s.event()
 	s.sentHaves.Clear()
 	s.sentHaves.AddRange(0, uint64(numPieces))
 }
 
 // SentHaveNone records that we sent HaveNone.
 func (s *State) SentHaveNone() {
+	s.event()
 	s.sentHaves.Clear()
 }
 
@@ -309,6 +340,7 @@ func (s *State) BestPeerNumPieces(numPieces g.Option[int]) int {
 // allowed fast by the peer past the end are dropped. They were never counted towards
 // availability, since that needs the info.
 func (s *State) GotInfo(numPieces int) {
+	s.event()
 	s.peerPieces.RemoveRange(uint64(numPieces), roaring.MaxRange)
 	s.peerAllowedFast.RemoveRange(uint64(numPieces), roaring.MaxRange)
 }
@@ -336,6 +368,7 @@ type PiecesChange struct {
 
 // RecvHave handles a Have message. It returns false if the peer already had the piece.
 func (s *State) RecvHave(piece int, numPieces g.Option[int]) (added bool, err error) {
+	s.event()
 	if piece < 0 || numPieces.Ok && piece >= numPieces.Value {
 		return false, errors.New("invalid piece")
 	}
@@ -350,6 +383,7 @@ func (s *State) RecvHave(piece int, numPieces g.Option[int]) (added bool, err er
 // RecvBitfield handles a Bitfield message. bf is the decoded bitfield, which is a whole number of
 // bytes long. Bits past the end of a torrent with known size are ignored.
 func (s *State) RecvBitfield(bf []bool, numPieces g.Option[int]) (change PiecesChange, err error) {
+	s.event()
 	if len(bf)%8 != 0 {
 		return change, fmt.Errorf("bitfield length %d is not a multiple of 8", len(bf))
 	}
@@ -381,6 +415,7 @@ func (s *State) RecvBitfield(bf []bool, numPieces g.Option[int]) (change PiecesC
 
 // RecvHaveAll handles a HaveAll message (BEP 6).
 func (s *State) RecvHaveAll() PiecesChange {
+	s.event()
 	return s.recvHaveAll()
 }
 
@@ -395,6 +430,7 @@ func (s *State) recvHaveAll() (change PiecesChange) {
 
 // RecvHaveNone handles a HaveNone message (BEP 6).
 func (s *State) RecvHaveNone() (change PiecesChange) {
+	s.event()
 	change.WasAll = s.peerSentHaveAll
 	change.Lost = s.peerPieces.Bitmap
 	s.peerPieces = typedRoaring.Bitmap[int]{}
@@ -410,6 +446,7 @@ func (s *State) PeerMetadataSize() int {
 // RecvMetadataSize records the metadata_size from the peer's extended handshake. The caller
 // validates it.
 func (s *State) RecvMetadataSize(size int) {
+	s.event()
 	s.peerMetadataSize = size
 }
 
@@ -422,6 +459,7 @@ func (s *State) MetadataPieceRequested(index int) bool {
 // SentMetadataRequest records that we're sending a ut_metadata request for a piece. It returns
 // false if one is already pending.
 func (s *State) SentMetadataRequest(index int) (added bool) {
+	s.event()
 	if s.MetadataPieceRequested(index) {
 		return false
 	}
@@ -435,6 +473,7 @@ func (s *State) SentMetadataRequest(index int) (added bool) {
 // RecvMetadataPiece records the response to a ut_metadata request. It returns false if we didn't
 // request the piece.
 func (s *State) RecvMetadataPiece(index int) (requested bool) {
+	s.event()
 	if !s.MetadataPieceRequested(index) {
 		return false
 	}
@@ -445,6 +484,7 @@ func (s *State) RecvMetadataPiece(index int) (requested bool) {
 // RecvPort handles a Port message. It returns true only for the first one, so a peer can't make
 // us act on it repeatedly.
 func (s *State) RecvPort() (first bool) {
+	s.event()
 	if s.portReceived {
 		return false
 	}

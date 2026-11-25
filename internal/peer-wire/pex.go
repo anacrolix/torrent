@@ -48,6 +48,7 @@ func (s *State) RecvPex(
 	now time.Time,
 	mayDial func(netip.Addr) bool,
 ) (res PexRecv, err error) {
+	s.event()
 	if since := now.Sub(s.pex.lastRecv); since < PexMinRecvInterval {
 		err = fmt.Errorf("last received only %v ago", since)
 		return
@@ -171,6 +172,7 @@ func (s *State) PexSendWait(now time.Time) time.Duration {
 // added and dropped. If anything is left, it's recorded as sent and send is true. It returns
 // false without changing anything if PexSendWait isn't zero.
 func (s *State) SendPex(msg *pp.PexMsg, now time.Time) (send bool) {
+	s.event()
 	if s.PexSendWait(now) != 0 {
 		return false
 	}

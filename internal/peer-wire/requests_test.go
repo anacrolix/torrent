@@ -2,6 +2,7 @@ package peerWire
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"testing"
@@ -139,21 +140,29 @@ func TestChokeWithFastKeepsRequests(t *testing.T) {
 	qt.Check(t, qt.IsTrue(outstanding))
 }
 
-func TestClosedDeletesRequests(t *testing.T) {
+// Freezing keeps what was outstanding for the caller to deal with once, and events after it are
+// bugs.
+func TestFreeze(t *testing.T) {
 	s := fastState()
 	sendRequest(&s, 1)
 	sendRequest(&s, 2)
 	s.SentCancel(chunk(2))
 	s.SentUnchoke()
 	s.RecvRequest(peerRequest(0), 1)
-	deleted := s.Closed()
-	qt.Check(t, qt.DeepEquals(deleted, []Request{chunk(1)}))
-	qt.Check(t, qt.Equals(s.NumRequests(), 0))
-	qt.Check(t, qt.Equals(s.NumPeerRequests(), 0))
-	qt.Check(t, qt.HasLen(s.Closed(), 0))
-	// The chunk may still arrive.
-	_, _, err := s.RecvChunk(chunk(1))
-	qt.Check(t, qt.IsNil(err))
+	qt.Assert(t, qt.IsTrue(s.Freeze()))
+	qt.Check(t, qt.IsTrue(s.Frozen()))
+	qt.Check(t, qt.IsFalse(s.Freeze()))
+	awaiting := maps.Collect(s.AwaitingReply())
+	qt.Check(t, qt.DeepEquals(awaiting, map[Request]bool{chunk(1): true, chunk(2): false}))
+	qt.Check(t, qt.Equals(s.NumRequests(), 1))
+	qt.Check(t, qt.Equals(s.NumCancelled(), 1))
+	qt.Check(t, qt.DeepEquals(slices.Collect(s.PeerRequests()), []Request{peerRequest(0)}))
+	qt.Check(t, qt.PanicMatches(func() { s.RecvChunk(chunk(1)) }, ".*"))
+	qt.Check(t, qt.PanicMatches(func() { s.SentRequest(chunk(3)) }, ".*"))
+	qt.Check(t, qt.PanicMatches(func() { s.RecvChoke() }, ".*"))
+	qt.Check(t, qt.PanicMatches(func() { s.GotInfo(10) }, ".*"))
+	// Reading is fine.
+	qt.Check(t, qt.IsTrue(s.RequestOutstanding(chunk(1))))
 }
 
 func TestCancelAwaitingReject(t *testing.T) {

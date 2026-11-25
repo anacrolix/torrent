@@ -679,9 +679,12 @@ func TestServePeerRequestTorrentClosedStorageReadFails(t *testing.T) {
 	pc.servePeerRequest(req)
 
 	qt.Check(t, qt.IsFalse(pc.unreadPeerRequest(req)))
-	// The request is outstanding on the wire until the conn closes.
+	// The request is outstanding on the wire until the conn closes, and then it's frozen there.
+	qt.Check(t, qt.IsTrue(pc.havePeerRequest(req)))
 	pc.onWireClosed("test")
-	qt.Check(t, qt.IsFalse(pc.havePeerRequest(req)))
+	qt.Check(t, qt.IsTrue(pc.wireState.Frozen()))
+	qt.Check(t, qt.IsTrue(pc.havePeerRequest(req)))
+	qt.Check(t, qt.HasLen(pc.readyPeerRequests, 0))
 }
 
 func outstandingChunkPoolBuffers() int64 {

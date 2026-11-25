@@ -328,6 +328,11 @@ func (cn *PeerConn) choke(msg messageWriter) (more bool) {
 // Drops our buffers for the peer's requests, after wireState has forgotten them all.
 func (cn *PeerConn) dropAllLocalPeerRequests() {
 	panicif.NotZero(cn.wireState.NumPeerRequests())
+	cn.releaseLocalPeerRequests()
+}
+
+// Drops our read queue and buffered data for peer requests, whatever wireState says.
+func (cn *PeerConn) releaseLocalPeerRequests() {
 	clear(cn.unreadPeerRequests)
 	for _, prd := range cn.readyPeerRequests {
 		cn.releasePeerRequestData(prd)
@@ -1948,12 +1953,34 @@ func (c *PeerConn) onDroppedRequests(dropped []Request, reason updateRequestReas
 	})
 }
 
-// The connection is closed: wireState forgets everything outstanding, and we drop our buffers and
-// apply the effects of our requests going away. It's safe to call more than once.
+// The connection is closed, so wireState is frozen. We drop our buffers for the peer's requests,
+// and our requests and cancels awaiting replies go away, once. It's safe to call more than once.
 func (c *PeerConn) onWireClosed(reason updateRequestReason) {
-	dropped := c.wireState.Closed()
-	c.dropAllLocalPeerRequests()
-	c.onDroppedRequests(dropped, reason)
+	if !c.wireState.Freeze() {
+		return
+	}
+	c.releaseLocalPeerRequests()
+	droppedAny := false
+	for req, outstanding := range c.wireState.AwaitingReply() {
+		r := c.requestIndexOfSent(req)
+		if outstanding {
+			panicif.False(c.requestIndexes().Requests.CheckedRemove(r))
+			c.onDeletedRequest(r)
+			droppedAny = true
+		} else {
+			// The request's effects went when we cancelled it.
+			panicif.False(c.requestIndexes().Cancelled.CheckedRemove(r))
+		}
+	}
+	panicif.NotZero(c.requestIndexes().Requests.GetCardinality())
+	panicif.NotZero(c.requestIndexes().Cancelled.GetCardinality())
+	if droppedAny {
+		c.t.iterPeers(func(p *Peer) {
+			if p.isLowOnRequests() {
+				p.onNeedUpdateRequests(reason)
+			}
+		})
+	}
 }
 
 func (c *PeerConn) assertNoRequests() {

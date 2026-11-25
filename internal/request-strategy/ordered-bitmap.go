@@ -1,4 +1,4 @@
-package torrent
+package requestStrategy
 
 import (
 	"iter"
@@ -9,6 +9,7 @@ import (
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 )
 
+// A set of values iterable by order added, backed by a bitmap for fast membership and rank.
 type orderedBitmap[T typedRoaring.BitConstraint] struct {
 	bitmap typedRoaring.Bitmap[T]
 	// There should be way more efficient ways to do this.
@@ -16,8 +17,13 @@ type orderedBitmap[T typedRoaring.BitConstraint] struct {
 	elements map[T]*list.Element[T]
 }
 
-func (o *orderedBitmap[T]) IterateSnapshot(f func(T) bool) {
-	o.bitmap.Clone().Iterate(f)
+// Iterates a snapshot of the bitmap, so it's safe to modify o during iteration. Values are yielded
+// in bitmap (ascending) order, not the order they were added.
+func (o *orderedBitmap[T]) IterateBitmapSnapshot() iter.Seq[T] {
+	snapshot := o.bitmap.Clone()
+	return func(yield func(T) bool) {
+		snapshot.Iterate(yield)
+	}
 }
 
 func (o *orderedBitmap[T]) IsEmpty() bool {

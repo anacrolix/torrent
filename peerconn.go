@@ -1928,7 +1928,7 @@ func (c *PeerConn) onDeletedRequest(r RequestIndex) {
 // Our request and cancel indexes, for the request strategy.
 func (c *PeerConn) requestIndexes() *requestStrategy.PeerRequestState {
 	if c.requestState.Requests == nil {
-		c.requestState.Requests = &orderedBitmap[RequestIndex]{}
+		c.requestState.Requests = &requestStrategy.PeerRequests{}
 	}
 	return &c.requestState
 }
@@ -1980,11 +1980,10 @@ func (c *PeerConn) onWireClosed(reason updateRequestReason) {
 	c.releaseLocalPeerRequests()
 	reqs := c.requestIndexes()
 	droppedAny := !reqs.Requests.IsEmpty()
-	reqs.Requests.IterateSnapshot(func(r RequestIndex) bool {
+	for r := range reqs.Requests.IterateBitmapSnapshot() {
 		panicif.False(reqs.Requests.CheckedRemove(r))
 		c.onDeletedRequest(r)
-		return true
-	})
+	}
 	// Cancelled requests were undone in the Torrent when we cancelled them.
 	reqs.Cancelled.Clear()
 	c.wireState = nil
@@ -2003,10 +2002,9 @@ func (c *PeerConn) assertNoRequests() {
 }
 
 func (c *PeerConn) cancelAllRequests() {
-	c.requestIndexes().Requests.IterateSnapshot(func(x RequestIndex) bool {
+	for x := range c.requestIndexes().Requests.IterateBitmapSnapshot() {
 		c.cancel(x)
-		return true
-	})
+	}
 	c.assertNoRequests()
 }
 

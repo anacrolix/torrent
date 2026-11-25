@@ -79,11 +79,6 @@ type (
 		// What the peer told us in its extended handshake. Embedded so its fields, like
 		// PeerExtensionIDs and PeerPrefersEncryption, keep their selectors on Peer and PeerConn.
 		peerExtendedHandshake
-
-		// What we know about the peer from the BitTorrent messages exchanged with it: choke and
-		// interest, claimed pieces, allowed fast etc. This belongs in PeerConn, but the request
-		// code is shared with webseeds, which leave it zero (never choked, no allowed fast).
-		wireState peerWire.State
 	}
 
 	PeerSource string
@@ -158,7 +153,7 @@ func (cn *Peer) bestPeerNumPieces() pieceIndex {
 	if cn.t.haveInfo() {
 		return cn.t.numPieces()
 	}
-	return cn.wireState.PeerMinPieces()
+	return cn.peerMinPieces()
 }
 
 // How many pieces we think the peer has.
@@ -401,10 +396,6 @@ func (c *Peer) receiveChunkPrologue(msg *pp.Message) (_ *pendingChunkWrite, err 
 	recordBlockForSmartBan := sync.OnceFunc(func() {
 		c.recordBlockForSmartBan(req, data)
 	})
-
-	if c.wireState.PeerChoking() {
-		ChunksReceived.Add("while choked", 1)
-	}
 
 	intended, err := c.peerImpl.checkReceivedChunk(req, msg, ppReq)
 	if err != nil {

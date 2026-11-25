@@ -60,6 +60,10 @@ type PeerConn struct {
 	// What the peer sent in its BEP 3 handshake: PeerID and PeerExtensionBytes.
 	peerHandshake
 
+	// What we know about the peer from the BitTorrent messages exchanged with it: choke and
+	// interest, claimed pieces, allowed fast, requests in both directions etc.
+	wireState peerWire.State
+
 	// The local extended protocols to advertise in the extended handshake, and to support receiving
 	// from the peer. This will point to the Client default when the PeerConnAdded callback is
 	// invoked. Do not modify this, point it to your own instance. Do not modify the destination
@@ -170,6 +174,10 @@ func (l *PeerConn) hasPreferredNetworkOver(r *PeerConn) bool {
 	ml = ml.Bool(l.utp(), r.utp())
 	ml = ml.Bool(r.ipv6(), l.ipv6())
 	return ml.Less()
+}
+
+func (cn *PeerConn) peerMinPieces() pieceIndex {
+	return cn.wireState.PeerMinPieces()
 }
 
 func (cn *PeerConn) peerHasAllPieces() (all, known bool) {
@@ -1970,6 +1978,9 @@ func (p *PeerConn) isLowOnRequests() bool {
 }
 
 func (c *PeerConn) checkReceivedChunk(req RequestIndex, msg *pp.Message, ppReq Request) (intended bool, err error) {
+	if c.wireState.PeerChoking() {
+		ChunksReceived.Add("while choked", 1)
+	}
 	if !c.wireState.ExpectingChunk(ppReq) {
 		ChunksReceived.Add("unexpected", 1)
 		err = peerWire.ErrUnexpectedChunk

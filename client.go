@@ -1889,7 +1889,6 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 		Peer: Peer{
 			cl:        cl,
 			outgoing:  opts.outgoing,
-			wireState: peerWire.NewState(),
 			peerExtendedHandshake: peerWire.ExtendedHandshake{
 				PeerMaxRequests: 250,
 			},
@@ -1899,6 +1898,7 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 			Network:         opts.network,
 			callbacks:       &cl.config.Callbacks,
 		},
+		wireState:  peerWire.NewState(),
 		connString: opts.connString,
 		conn:       nc,
 	}

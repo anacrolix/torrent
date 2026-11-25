@@ -989,7 +989,8 @@ func (c *PeerConn) mainReadLoop() (err error) {
 	cl := t.cl
 	st := readLoopState{c: c}
 	// Called with the Torrent's domain held. Everything here runs without it: state is only
-	// touched from st.turn, which runs in the domain's actor, or from st.exclusive.
+	// touched from st.turn, which runs with the domain held (see Torrent.callDomainTurn), or in
+	// exclusive mode.
 	t.unlockDomain()
 	defer func() {
 		// The caller expects the domain back. Don't leave chunks half received.
@@ -1021,10 +1022,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		if st.next == len(st.msgs) && (!writesPending || fullMessageBuffered(decoder.R)) {
 			st.decode(&decoder)
 		}
-		if !t.callDomainTurn(st.turn) {
-			// The Torrent or Client is closed.
-			return nil
-		}
+		t.callDomainTurn(st.turn)
 		if st.exclusivePending {
 			// The next message may touch Client-wide state.
 			st.exclusivePending = false
@@ -1146,12 +1144,16 @@ func (st *readLoopState) finishChunkWrites() {
 }
 
 // Handles decoded messages until they run out, or the read loop has to do something first: write
-// chunks to storage, or wait for the writer. Runs in a Client actor turn, so with the client lock.
+// chunks to storage, or wait for the writer. Runs with the domain held, through
+// Torrent.callDomainTurn.
 func (st *readLoopState) turn() {
 	c := st.c
 	t := c.t
 	st.finishChunkWrites()
 	for st.next < len(st.msgs) {
+		if t.closed.IsSet() || c.closed.IsSet() {
+			break
+		}
 		msg := &st.msgs[st.next]
 		// Keep batching chunk writes only while the next message is a Piece. Anything else must
 		// see the batch's effects first.

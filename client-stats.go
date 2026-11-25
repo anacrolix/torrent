@@ -38,9 +38,9 @@ type ClientStats struct {
 	NumPeersDialedSuccessfullyAfterHolepunchConnect int
 	NumPeersProbablyOnlyConnectedDueToHolepunch     int
 
-	// Turns waiting in lock domain actors now, summed over domains.
+	// Turns waiting for their lock domain now, summed over domains.
 	LockDomainTurnsQueued int
-	// The most turns that have waited at once in any one lock domain's actor.
+	// The most turns that have waited at once for any one lock domain.
 	LockDomainTurnsQueuedMax int
 	// The most actions any one lock domain has deferred to exclusive mode in a single hold.
 	LockDomainExclusiveActionsMax int

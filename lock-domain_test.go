@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/go-quicktest/qt"
@@ -61,4 +62,37 @@ func TestDeferExclusive(t *testing.T) {
 	tor.deferExclusive(func() { ran = append(ran, "d") })
 	qt.Check(t, qt.DeepEquals(ran, []string{"a", "b", "d"}))
 	cl.unlock()
+}
+
+// Turns from many goroutines all run, one at a time, with the domain held.
+func TestDomainTurnsCombine(t *testing.T) {
+	cl := new(Client)
+	cl.init(TestingConfig(t))
+	t.Cleanup(func() { cl.Close() })
+	tor, _ := cl.AddTorrentOpt(AddTorrentOpts{InfoHash: testingTorrentInfoHash})
+	const goroutines, turns = 16, 1000
+	var running, total int
+	var wg sync.WaitGroup
+	for range goroutines {
+		wg.Go(func() {
+			for range turns {
+				tor.callDomainTurn(func() {
+					if !tor.inDomainMode() {
+						panic("turn without the domain held")
+					}
+					running++
+					if running != 1 {
+						panic(running)
+					}
+					total++
+					running--
+				})
+			}
+		})
+	}
+	wg.Wait()
+	qt.Check(t, qt.Equals(total, goroutines*turns))
+	stats := cl.Stats()
+	qt.Check(t, qt.Equals(stats.LockDomainTurnsQueued, 0))
+	qt.Check(t, qt.IsTrue(stats.LockDomainTurnsQueuedMax <= goroutines))
 }

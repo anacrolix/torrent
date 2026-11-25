@@ -606,8 +606,6 @@ func (cl *Client) Close() (errs []error) {
 		cl.onClose[len(cl.onClose)-1-i]()
 	}
 	cl.unlock()
-	// Domain turns take the lock for read, so this has to follow the unlock.
-	cl.closeAllLockDomains()
 	cl.event.Broadcast()
 	closeGroup.Wait() // defer is LIFO. We want to Wait() after cl.unlock()
 	return

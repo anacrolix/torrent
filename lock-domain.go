@@ -3,12 +3,12 @@ package torrent
 import (
 	"maps"
 	"slices"
+	"sync/atomic"
 
 	"github.com/RoaringBitmap/roaring/v2"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
 
-	"github.com/anacrolix/torrent/internal/actor"
 	"github.com/anacrolix/torrent/storage"
 )
 
@@ -39,17 +39,39 @@ type lockDomain struct {
 	maxExclusiveActions int
 	// Scratch space for use while the domain is held.
 	roaringIntIterator roaring.IntIterator
-	// Runs turns with the domain held, batching turns from several goroutines into one hold. Peer
-	// read loops hand their messages to it. See Torrent.callDomainTurn.
-	actor *actor.Actor
+	// Turns waiting for the domain, newest first. See Torrent.callDomainTurn.
+	pendingTurns atomic.Pointer[domainTurn]
+	// A goroutine is running pending turns, or is about to.
+	combining atomic.Bool
+	// Turns pushed but not yet run, and the most there have been at once.
+	turnsQueued    atomic.Int64
+	maxTurnsQueued atomic.Int64
 }
+
+// A function waiting to run with its domain held.
+type domainTurn struct {
+	f    func()
+	next *domainTurn
+	// Receives turnRan once f has run, or turnCombine if the waiter should run pending turns.
+	wake chan turnWake
+}
+
+type turnWake uint8
+
+const (
+	turnRan turnWake = iota
+	turnCombine
+)
+
+// How many times a combiner takes all pending turns before handing the job to a waiter, so the
+// combiner's own conn isn't held up indefinitely.
+const maxCombineRounds = 4
 
 func (cl *Client) newLockDomain() *lockDomain {
 	d := &lockDomain{}
 	d.unlockHandlers.init()
 	d.mu.client = cl
 	d.mu.unlockHandlers = &d.unlockHandlers
-	d.actor = actor.New(func() { d.lock(cl) }, func() { d.unlock(cl) })
 	cl.lockDomainsMu.Lock()
 	g.MakeMapIfNil(&cl.lockDomains)
 	cl.lockDomains[d] = struct{}{}
@@ -57,22 +79,11 @@ func (cl *Client) newLockDomain() *lockDomain {
 	return d
 }
 
-// Stops the domain's actor once its queued turns have run. Must not be called with the Client
-// lock held, since turns take it for read.
-func (cl *Client) closeLockDomain(d *lockDomain) {
-	d.actor.Close()
+// Forgets a domain that nothing will use again, for stats.
+func (cl *Client) removeLockDomain(d *lockDomain) {
 	cl.lockDomainsMu.Lock()
 	delete(cl.lockDomains, d)
 	cl.lockDomainsMu.Unlock()
-}
-
-func (cl *Client) closeAllLockDomains() {
-	cl.lockDomainsMu.Lock()
-	ds := slices.Collect(maps.Keys(cl.lockDomains))
-	cl.lockDomainsMu.Unlock()
-	for _, d := range ds {
-		cl.closeLockDomain(d)
-	}
 }
 
 // Takes the domain in domain mode.
@@ -98,15 +109,21 @@ func (d *lockDomain) unlock(cl *Client) {
 	cl.unlock()
 }
 
-// Runs f in a turn of the Torrent's domain actor, so in domain mode, and waits for it. Reports
-// false without running f if the actor is closed. Must be called without any lock held.
-func (t *Torrent) callDomainTurn(f func()) bool {
+// Runs f with the Torrent's domain held, in domain mode, and waits for it. Must be called without
+// any lock held.
+//
+// Callers that find the domain busy don't queue on its mutex. They push f onto the domain's
+// pending turns and wait without holding any lock, and whoever is combining runs every pending
+// turn in one hold of the domain. This saves a lock handoff, with a goroutine park and wake, per
+// turn, and keeps waiters from holding the Client read lock, which an exclusive-mode writer would
+// otherwise have to wait out.
+func (t *Torrent) callDomainTurn(f func()) {
 	for {
 		t.cl._mu.internal.RLock()
 		d := t.domain
 		t.cl._mu.internal.RUnlock()
 		moved := false
-		ok := d.actor.Call(func() {
+		d.runTurn(t.cl, func() {
 			// The Torrent may have moved to its storage capacity's domain since d was read.
 			if t.domain != d {
 				moved = true
@@ -114,8 +131,76 @@ func (t *Torrent) callDomainTurn(f func()) bool {
 			}
 			f()
 		})
-		if !ok || !moved {
-			return ok
+		if !moved {
+			return
+		}
+	}
+}
+
+func (d *lockDomain) runTurn(cl *Client, f func()) {
+	// Nobody is combining, so take the domain and run f straight away.
+	if d.pendingTurns.Load() == nil && d.combining.CompareAndSwap(false, true) {
+		d.combine(cl, f)
+		return
+	}
+	turn := &domainTurn{f: f, wake: make(chan turnWake, 1)}
+	for {
+		old := d.pendingTurns.Load()
+		turn.next = old
+		if d.pendingTurns.CompareAndSwap(old, turn) {
+			break
+		}
+	}
+	n := d.turnsQueued.Add(1)
+	for {
+		m := d.maxTurnsQueued.Load()
+		if n <= m || d.maxTurnsQueued.CompareAndSwap(m, n) {
+			break
+		}
+	}
+	if d.combining.CompareAndSwap(false, true) {
+		d.combine(cl, nil)
+	}
+	for <-turn.wake == turnCombine {
+		d.combine(cl, nil)
+	}
+}
+
+// Runs first, if not nil, and then pending turns, with the domain held. Called by the goroutine
+// that set combining.
+func (d *lockDomain) combine(cl *Client, first func()) {
+	for {
+		d.lock(cl)
+		if first != nil {
+			first()
+			first = nil
+		}
+		for range maxCombineRounds {
+			head := d.pendingTurns.Swap(nil)
+			if head == nil {
+				break
+			}
+			// Run in the order the turns were pushed.
+			var batch []*domainTurn
+			for ; head != nil; head = head.next {
+				batch = append(batch, head)
+			}
+			d.turnsQueued.Add(-int64(len(batch)))
+			for i := len(batch) - 1; i >= 0; i-- {
+				batch[i].f()
+				batch[i].wake <- turnRan
+			}
+		}
+		d.unlock(cl)
+		if next := d.pendingTurns.Load(); next != nil {
+			// Only the combiner removes pending turns, so next stays pending until it combines.
+			next.wake <- turnCombine
+			return
+		}
+		d.combining.Store(false)
+		// A turn pushed after the last check would wait forever if nobody combines it.
+		if d.pendingTurns.Load() == nil || !d.combining.CompareAndSwap(false, true) {
+			return
 		}
 	}
 }
@@ -293,9 +378,8 @@ func (cl *Client) addLockDomainStats(stats *ClientStats) {
 	ds := slices.Collect(maps.Keys(cl.lockDomains))
 	cl.lockDomainsMu.Unlock()
 	for _, d := range ds {
-		as := d.actor.Stats()
-		stats.LockDomainTurnsQueued += as.Queued
-		stats.LockDomainTurnsQueuedMax = max(stats.LockDomainTurnsQueuedMax, as.MaxQueued)
+		stats.LockDomainTurnsQueued += int(d.turnsQueued.Load())
+		stats.LockDomainTurnsQueuedMax = max(stats.LockDomainTurnsQueuedMax, int(d.maxTurnsQueued.Load()))
 		d.mu.internal.RLock()
 		stats.LockDomainExclusiveActionsMax = max(stats.LockDomainExclusiveActionsMax, d.maxExclusiveActions)
 		d.mu.internal.RUnlock()

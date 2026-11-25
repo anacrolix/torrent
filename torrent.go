@@ -1266,10 +1266,9 @@ func (t *Torrent) close(wg *sync.WaitGroup) {
 	t.pieceStateChanges.Close()
 	t.updateWantPeersEvent()
 	g.MustDelete(t.cl.torrents, t)
-	if d := t.domain; !t.hasCapacityDomain() {
-		// Nothing else uses the Torrent's own domain. Turns take the Client lock for read, so
-		// this can't wait here.
-		go t.cl.closeLockDomain(d)
+	if !t.hasCapacityDomain() {
+		// Nothing else uses the Torrent's own domain.
+		t.cl.removeLockDomain(t.domain)
 	}
 	// This doesn't work yet because requests remove themselves after they close, and we don't
 	// remove them synchronously.

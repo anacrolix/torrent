@@ -71,14 +71,18 @@ func (s *Socket) reader(conn net.PacketConn) {
 		n, addr, err := conn.ReadFrom(b)
 		if err != nil {
 			s.mu.Lock()
-			if s.conn == conn {
+			// Close already closed the conn if it isn't current anymore.
+			drop := s.conn == conn
+			if drop {
 				// Don't panic, just drop the conn. The next request opens a new one. See
 				// https://github.com/anacrolix/torrent/issues/845.
 				s.conn = nil
 			}
 			closed := s.closed
 			s.mu.Unlock()
-			conn.Close()
+			if drop {
+				conn.Close()
+			}
 			if !closed {
 				s.logger().Debug("reading udp tracker packet conn", "err", err)
 			}

@@ -78,7 +78,7 @@ func TestReceiveChunkMustMatchRequest(t *testing.T) {
 			tt, c := newNetworkBoundsTestConn(t, TestingConfig(t), true)
 			qt.Assert(t, qt.Equals(tt.pieceLength(0), pp.Integer(5)))
 			ri := tt.requestIndexFromRequest(Request{Index: 0})
-			c.validReceiveChunks = map[RequestIndex]int{ri: 1}
+			c.wireState.ExpectChunk(tt.requestIndexToRequest(ri))
 			err := c.receiveChunk(&pp.Message{
 				Type:  pp.Piece,
 				Index: 0,
@@ -299,7 +299,7 @@ func TestMetadataSizeNotResetByOnePeer(t *testing.T) {
 	qt.Check(t, qt.HasLen(tt.metadataBytes, realSize))
 	qt.Check(t, qt.IsTrue(tt.haveMetadataPiece(0)))
 	// Data for b's size isn't mixed into ours.
-	b.metadataRequests = []bool{true}
+	b.wireState.SentMetadataRequest(0)
 	payload := append(bencode.MustMarshal(pp.ExtendedMetadataRequestMsg{
 		Piece:     0,
 		TotalSize: realSize + 1,

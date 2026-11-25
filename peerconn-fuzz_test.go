@@ -165,9 +165,10 @@ func FuzzPeerConnMessages(f *testing.F) {
 			remoteAddr: netip.AddrPortFrom(netip.AddrFrom4([4]byte{1, 2, 3, 4}), 1234),
 			network:    "tcp",
 		})
-		pc.PeerExtensionBytes.SetBit(pp.ExtensionBitFast, flags&fuzzPeerConnFast != 0)
-		pc.PeerExtensionBytes.SetBit(pp.ExtensionBitLtep, flags&fuzzPeerConnExtended != 0)
-		pc.PeerID = [20]byte{'f', 'u', 'z', 'z'}
+		var peerBits pp.PeerExtensionBits
+		peerBits.SetBit(pp.ExtensionBitFast, flags&fuzzPeerConnFast != 0)
+		peerBits.SetBit(pp.ExtensionBitLtep, flags&fuzzPeerConnExtended != 0)
+		pc.testHandshook(cl, peerBits, [20]byte{'f', 'u', 'z', 'z'})
 		// Errors are expected: most inputs are invalid. Only panics matter.
 		_ = tt.runHandshookConn(pc)
 	})

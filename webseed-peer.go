@@ -432,6 +432,10 @@ func (me *webseedPeer) peerPieces() *roaring.Bitmap {
 	return &me.client.Pieces
 }
 
+func (*webseedPeer) peerMinPieces() pieceIndex {
+	return 0
+}
+
 func (cn *webseedPeer) peerHasAllPieces() (all, known bool) {
 	if !cn.peer.t.haveInfo() {
 		return true, false

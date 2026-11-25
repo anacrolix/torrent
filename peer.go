@@ -18,9 +18,9 @@ import (
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/multiless"
 
+	peerWire "github.com/anacrolix/torrent/internal/peer-wire"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
-	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 )
 
 type (
@@ -76,18 +76,9 @@ type (
 		lastBecameInterested time.Time
 		priorInterest        time.Duration
 
-		choking bool
-
-		// Stuff controlled by the remote peer.
-		peerInterested        bool
-		peerChoking           bool
-		PeerPrefersEncryption bool // as indicated by 'e' field in extension handshake
-		// The highest possible number of pieces the torrent could have based on
-		// communication with the peer. Generally only useful until we have the
-		// torrent info.
-		peerMinPieces pieceIndex
-
-		peerAllowedFast typedRoaring.Bitmap[pieceIndex]
+		// What the peer told us in its extended handshake. Embedded so its fields, like
+		// PeerExtensionIDs and PeerPrefersEncryption, keep their selectors on Peer and PeerConn.
+		peerExtendedHandshake
 	}
 
 	PeerSource string
@@ -96,7 +87,8 @@ type (
 		String() string
 	}
 
-	peerRequests = orderedBitmap[RequestIndex]
+	peerExtendedHandshake = peerWire.ExtendedHandshake
+	peerHandshake         = peerWire.Handshake
 
 	updateRequestReason string
 )
@@ -164,7 +156,7 @@ func (cn *Peer) bestPeerNumPieces() pieceIndex {
 	if cn.t.haveInfo() {
 		return cn.t.numPieces()
 	}
-	return cn.peerMinPieces
+	return cn.peerMinPieces()
 }
 
 // How many pieces we think the peer has.
@@ -228,10 +220,11 @@ func (p *Peer) close() {
 	if p.updateRequestsTimer != nil {
 		p.updateRequestsTimer.Stop()
 	}
-	p.legacyPeerImpl.onClose()
+	// Before onClose, which drops a PeerConn's wireState and removes it from the Torrent.
 	if p.t != nil {
 		p.t.decPeerPieceAvailability(p)
 	}
+	p.legacyPeerImpl.onClose()
 	for _, f := range p.callbacks.PeerClosed {
 		f(p)
 	}
@@ -407,10 +400,6 @@ func (c *Peer) receiveChunkPrologue(msg *pp.Message) (_ *pendingChunkWrite, err 
 		c.recordBlockForSmartBan(req, data)
 	})
 
-	if c.peerChoking {
-		ChunksReceived.Add("while choked", 1)
-	}
-
 	intended, err := c.peerImpl.checkReceivedChunk(req, msg, ppReq)
 	if err != nil {
 		recordBlockForSmartBan()
@@ -548,7 +537,7 @@ type connectionTrust struct {
 }
 
 func (l connectionTrust) Cmp(r connectionTrust) int {
-	return multiless.New().Bool(l.Implicit, r.Implicit).Int64(l.NetGoodPiecesDirted, r.NetGoodPiecesDirted).OrderingInt()
+	return multiless.New().Bool(l.Implicit, r.Implicit).Compare(l.NetGoodPiecesDirted, r.NetGoodPiecesDirted).OrderingInt()
 }
 
 // Returns a new Bitmap that includes bits for all pieces the peer could have based on their claims.

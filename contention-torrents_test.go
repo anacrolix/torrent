@@ -9,7 +9,6 @@ import (
 	"sync"
 	"testing"
 
-	g "github.com/anacrolix/generics"
 	"github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -134,9 +133,8 @@ func benchContentionTorrents(b *testing.B, kind string, shareClient, shareCapaci
 			if isPiece {
 				bt.t.lockDomain()
 				bt.t.pendAllChunkSpecs(0)
-				g.MakeMapIfNil(&bt.cn.validReceiveChunks)
 				for ri := bt.t.pieceRequestIndexBegin(0); ri < bt.t.pieceRequestIndexBegin(1); ri++ {
-					bt.cn.validReceiveChunks[ri] = 1
+					bt.cn.wireState.ExpectChunk(bt.t.requestIndexToRequest(ri))
 				}
 				bt.t.unlockDomain()
 				bt.ts.allChunksWritten.Add(chunksPerPiece)

@@ -43,6 +43,9 @@ type legacyPeerImpl interface {
 	// message, then it's clear that they do.
 	peerHasAllPieces() (all, known bool)
 	peerPieces() *roaring.Bitmap
+	// The fewest pieces the torrent can have given what the peer has claimed. Used to guess the
+	// piece count before we have the info.
+	peerMinPieces() pieceIndex
 }
 
 // Abstract methods implemented by subclasses of Peer.

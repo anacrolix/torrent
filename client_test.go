@@ -27,6 +27,7 @@ import (
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/dialer"
+	peerWire "github.com/anacrolix/torrent/internal/peer-wire"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
@@ -686,7 +687,7 @@ func TestPeerInvalidHave(t *testing.T) {
 	})
 	qt.Check(t, qt.IsTrue(_new))
 	defer tt.Drop()
-	cn := &PeerConn{Peer: Peer{
+	cn := &PeerConn{wireState: new(peerWire.NewState()), Peer: Peer{
 		t:         tt,
 		callbacks: &cfg.Callbacks,
 	}}

@@ -118,17 +118,26 @@ func (p Piece) beginFile() int {
 // endFile is the index one past the last file this piece overlaps. It's derived rather than stored:
 // this piece's end offset is the next piece's begin offset, so the next piece's first file is also
 // this piece's last file, unless the boundary falls exactly on a file boundary (in which case this
-// piece ends at the previous file).
+// piece ends at the previous file). Empty files starting at or after this piece's end offset are
+// not part of it: pieceFirstFileIndex skips them, so they can sit before the next piece's first
+// file, or after the last piece.
 func (p Piece) endFile() int {
 	t := p.t
-	if int(p.index) == len(t.pieces)-1 {
-		return len(*t.files)
+	end := len(*t.files)
+	if int(p.index) != len(t.pieces)-1 {
+		end = t.piece(int(p.index) + 1).beginFile()
+		if (*t.files)[end].offset < p.torrentEndOffset() {
+			end++
+		}
 	}
-	nextBegin := t.piece(int(p.index) + 1).beginFile()
-	if (*t.files)[nextBegin].offset < p.torrentEndOffset() {
-		return nextBegin + 1
+	for end > p.beginFile()+1 {
+		f := (*t.files)[end-1]
+		if f.offset < p.torrentEndOffset() {
+			break
+		}
+		end--
 	}
-	return nextBegin
+	return end
 }
 
 func (p Piece) String() string {
@@ -264,10 +273,13 @@ func (p Piece) iterCleanChunks(it *roaring.IntIterator) iter.Seq[chunkIndexType]
 		for next := begin; next < end; next++ {
 			if !it.HasNext() || it.Next() != next {
 				if !yield(chunkIndexType(next - begin)) {
-					return
+					break
 				}
 			}
 		}
+		// Release the interior pointer to p.t.dirtyChunks.Bitmap so a reused iterator (such as
+		// Client.roaringIntIterator) doesn't keep a dropped Torrent alive.
+		*it = roaring.IntIterator{}
 	}
 }
 

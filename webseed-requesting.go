@@ -76,7 +76,8 @@ func (cl *Client) updateWebseedRequests() {
 
 	g.MakeMapIfNil(&cl.aprioriMap)
 	aprioriMap := cl.aprioriMap
-	clear(aprioriMap)
+	// Don't keep dropped Torrents alive between scheduler runs.
+	defer clear(aprioriMap)
 	for uniqueKey, value := range cl.iterPossibleWebseedRequests() {
 		//if len(aprioriMap) >= webseedHostRequestConcurrency {
 		//	break
@@ -111,8 +112,13 @@ func (cl *Client) updateWebseedRequests() {
 	if cap(heapSlice) < requiredCap {
 		heapSlice = slices.Grow(heapSlice, requiredCap-cap(heapSlice))
 	}
+	var heapHighWater int
 	defer func() {
-		// Will this let GC collect values? If not do we need to clear? :(
+		// Clear every slot touched during this run, not just len(heapSlice): heap.Pop trims the
+		// length without zeroing popped slots, which would otherwise keep dropped Torrents and
+		// webseedRequests alive. Avoid clearing untouched capacity beyond the high-water mark so
+		// idle ticks stay O(1).
+		clear(heapSlice[:max(heapHighWater, len(heapSlice))])
 		cl.heapSlice = heapSlice[:0]
 	}()
 
@@ -180,6 +186,9 @@ func (cl *Client) updateWebseedRequests() {
 
 	unwantedExistingRequests := maps.Clone(existingRequests)
 
+	// The heap only shrinks from here (no heap.Push), so this length covers every slot the deferred
+	// clear needs. Update heapHighWater if anything is pushed below.
+	heapHighWater = len(heapSlice)
 	heap.Init(aprioriHeap)
 	var plan webseedRequestPlan
 	// Could also return early here if all known costKeys are fully assigned.

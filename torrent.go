@@ -135,6 +135,8 @@ type Torrent struct {
 	fileSegmentsIndex g.Option[segments.Index]
 
 	_chunksPerRegularPiece chunkIndexType
+	// Info.NumPieces walks a v2 file tree per call, and webseeds call it constantly.
+	_numPieces pieceIndex
 
 	webSeeds map[webseedUrlKey]*webseedPeer
 	// Active peer connections, running message stream loops. TODO: Make this open (not-closed)
@@ -454,7 +456,7 @@ func (t *Torrent) metadataSize() int {
 }
 
 func (t *Torrent) makePieces() {
-	t.pieces = make([]pieceState, t.info.NumPieces())
+	t.pieces = make([]pieceState, t.numPieces())
 	files := *t.files
 	// The hash and end file index are derived on demand from the info and the following piece, so
 	// only the begin file index is stored here. Piece offsets and file offsets both increase, so a
@@ -554,6 +556,7 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 	if err := validateInfo(info); err != nil {
 		return fmt.Errorf("bad info: %w", err)
 	}
+	info.CachePieceLengths()
 	if t.storageOpener != nil && !t.deferStorageOpen {
 		var err error
 		ctx := log.ContextWithLogger(context.Background(), t.logger)
@@ -563,6 +566,7 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 		}
 	}
 	t.nameMu.Lock()
+	t._numPieces = info.NumPieces()
 	t.info = info
 	panicif.True(t.fileSegmentsIndex.Set(info.FileSegmentsIndex()).Ok)
 	t.getInfoCtxCancel(errors.New("got info"))
@@ -806,8 +810,8 @@ func (t *Torrent) updateMetadataSize() {
 	}
 	counts := make(map[int]int)
 	for c := range t.conns {
-		if c.peerMetadataSize != 0 {
-			counts[c.peerMetadataSize]++
+		if size := c.wireState.PeerMetadataSize(); size != 0 {
+			counts[size]++
 		}
 	}
 	best := len(t.metadataBytes)
@@ -1067,8 +1071,8 @@ func (t *Torrent) writeStatus(w io.Writer) {
 				luns.Scheme = ""
 				runs.Scheme = ""
 				var ml multiless.Computation
-				ml = ml.EagerOrdered(luns.String(), runs.String())
-				ml = ml.EagerOrdered(lu.String(), ru.String())
+				ml = ml.Compare(luns.String(), runs.String())
+				ml = ml.Compare(lu.String(), ru.String())
 				return ml.OrderingInt()
 			},
 		)
@@ -1099,7 +1103,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 		lpp := g.ResultFromTuple(l.peerPriority()).ToOption()
 		rpp := g.ResultFromTuple(r.peerPriority()).ToOption()
 		ml = ml.Bool(lpp.Ok, rpp.Ok)
-		ml = ml.Uint32(rpp.Value, lpp.Value)
+		ml = ml.Compare(rpp.Value, lpp.Value)
 		return ml.OrderingInt()
 	})
 
@@ -1128,6 +1132,14 @@ func (t *Torrent) writePeerStatuses(w io.Writer, peers iter.Seq[*Peer]) {
 
 func (t *Torrent) haveInfo() bool {
 	return t.info != nil
+}
+
+// The number of pieces, if the info is known.
+func (t *Torrent) numPiecesOption() g.Option[pieceIndex] {
+	if !t.haveInfo() {
+		return g.None[pieceIndex]()
+	}
+	return g.Some(t.numPieces())
 }
 
 // isPrivate reports whether the torrent's metainfo carries BEP 27's
@@ -1221,7 +1233,7 @@ func (t *Torrent) usualPieceSize() int {
 }
 
 func (t *Torrent) numPieces() pieceIndex {
-	return t.info.NumPieces()
+	return t._numPieces
 }
 
 func (t *Torrent) numPiecesCompleted() (num pieceIndex) {
@@ -1707,7 +1719,7 @@ func (t *Torrent) updatePeerRequestsForPiece(piece pieceIndex, reason updateRequ
 			if !c.peerHasPiece(piece) {
 				return
 			}
-			if c.requestState.Interested && c.peerChoking && !c.peerAllowedFast.Contains(piece) {
+			if c.wireState.Interested() && c.wireState.PeerChoking() && !c.wireState.PeerAllowedFast().Contains(piece) {
 				return
 			}
 			c.onNeedUpdateRequests(reason)
@@ -1819,8 +1831,8 @@ func (t *Torrent) byteRegionPieces(off, size int64) (begin, end pieceIndex) {
 	}
 	begin = pieceIndex(off / t.info.PieceLength)
 	end = pieceIndex((off + size + t.info.PieceLength - 1) / t.info.PieceLength)
-	if end > t.info.NumPieces() {
-		end = t.info.NumPieces()
+	if end > t.numPieces() {
+		end = t.numPieces()
 	}
 	return
 }
@@ -2155,7 +2167,7 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 	}
 	_, ret = t.conns[c]
 	delete(t.conns, c)
-	if ret && c.peerMetadataSize != 0 {
+	if ret && c.wireState.PeerMetadataSize() != 0 {
 		// The conn no longer counts towards the metadata size.
 		t.updateMetadataSize()
 	}
@@ -2166,8 +2178,10 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 			t.pex.Drop(c)
 		}
 	}
-	torrent.Add("deleted connections", 1)
-	c.deleteAllRequests("Torrent.deletePeerConn")
+	if ret {
+		torrent.Add("deleted connections", 1)
+	}
+	c.onWireClosed("Torrent.deletePeerConn")
 	if len(t.conns) == 0 {
 		panicif.NotZero(len(t.requestState))
 	}
@@ -2223,9 +2237,9 @@ func (t *Torrent) dropConnection(c *PeerConn) {
 	}
 	t.logger.WithDefaultLevel(log.Debug).Printf("dropping connection to %+q, sent peerconn update", c.PeerID)
 
-	if t.deletePeerConn(c) {
-		t.openNewConns()
-	}
+	// Closing removed it from the Torrent (see PeerConn.onClose), perhaps earlier, so there may be
+	// room for another.
+	t.openNewConns()
 }
 
 // Peers as in contact information for dialing out. We should try to get some peers, even if we
@@ -3534,6 +3548,7 @@ func (t *Torrent) cancelRequest(r RequestIndex) *PeerConn {
 	return p
 }
 
+// The conn r is requested from, or nil. Conns undo their requests here when they close.
 func (t *Torrent) requestingPeer(r RequestIndex) (ret *PeerConn) {
 	state, ok := t.requestState[r]
 	if !ok {
@@ -3723,7 +3738,10 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 		return nil
 	case utHolepunch.Connect:
 		holepunchAddr := msg.AddrPort
-		t.logger.Printf("got holepunch connect request for %v from %p", holepunchAddr, sender)
+		initiated := sender.wireState.RecvHolepunchConnect(holepunchAddr)
+		t.logger.Printf(
+			"got holepunch connect request for %v from %p (initiated by us: %v)",
+			holepunchAddr, sender, initiated)
 		// Connects skip the dial rate limiter so the punch is timely, and any peer can send them
 		// for any address. Respect the half-open limits so a peer can't make us dial without bound.
 		if len(t.halfOpen) >= t.cl.config.HalfOpenConnsPerTorrent ||
@@ -3741,11 +3759,12 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 				setAdd(&t.cl.probablyOnlyConnectedDueToHolepunch, holepunchAddr)
 			}
 		}
+		pexFlags, _ := sender.wireState.PeerPexLiveConn(msg.AddrPort)
 		opts := outgoingConnOpts{
 			peerInfo: PeerInfo{
 				Addr:         msg.AddrPort,
 				Source:       PeerSourceUtHolepunch,
-				PexPeerFlags: sender.pex.remoteLiveConns[msg.AddrPort].UnwrapOrZeroValue(),
+				PexPeerFlags: pexFlags,
 			},
 			t: t,
 			// Don't attempt to start our own rendezvous if we fail to connect.
@@ -3759,6 +3778,10 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 		return nil
 	case utHolepunch.Error:
 		torrent.Add("holepunch error messages received", 1)
+		if !sender.wireState.RecvHolepunchError(msg.AddrPort) {
+			// Only a relay answering our rendezvous sends Error.
+			torrent.Add("holepunch unsolicited error messages received", 1)
+		}
 		t.logger.Levelf(log.Debug, "received ut_holepunch error message from %v: %v", sender, msg.ErrCode)
 		return nil
 	default:
@@ -3785,9 +3808,13 @@ func (t *Torrent) trySendHolepunchRendezvous(addrPort netip.AddrPort) error {
 			continue
 		}
 		if pc.supportsExtension(pp.ExtensionNamePex) {
-			if !g.MapContains(pc.pex.remoteLiveConns, addrPort) {
+			if _, ok := pc.wireState.PeerPexLiveConn(addrPort); !ok {
 				continue
 			}
+		}
+		if !pc.wireState.SentRendezvous(addrPort) {
+			torrent.Add("holepunch rendezvous skipped for relay awaiting too many replies", 1)
+			continue
 		}
 		t.logger.Levelf(log.Debug, "sent ut_holepunch rendezvous message to %v for %v", pc, addrPort)
 		sendUtHolepunchMsg(pc, utHolepunch.Rendezvous, addrPort, 0)

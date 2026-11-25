@@ -97,8 +97,8 @@ func TestRequestCandidateLimitSkipsRequestsHeldByOtherPeers(t *testing.T) {
 	requestingPeer.setTorrent(tor)
 	holdingPeer := cl.newConnection(nil, newConnectionOpts{network: "test"})
 	holdingPeer.setTorrent(tor)
-	requestingPeer.onPeerHasAllPiecesNoTriggers()
-	requestingPeer.peerChoking = false
+	requestingPeer.onPeerSentHaveAll()
+	requestingPeer.wireState.RecvUnchoke()
 
 	tor.cl.lock()
 	for i := 0; i < tor.numPieces(); i++ {
@@ -110,7 +110,8 @@ func TestRequestCandidateLimitSkipsRequestsHeldByOtherPeers(t *testing.T) {
 	limit := requestingPeer.requestCandidateLimit()
 	qt.Assert(t, qt.Equals(limit, 32))
 	for req := range RequestIndex(limit) {
-		holdingPeer.requestState.Requests.Add(req)
+		holdingPeer.wireState.SentRequest(tor.requestIndexToRequest(req))
+		holdingPeer.requestIndexes().Requests.Add(req)
 		tor.requestState[req] = requestState{peer: weak.Make(holdingPeer)}
 	}
 
@@ -145,14 +146,14 @@ func BenchmarkRequestStrategy(b *testing.B) {
 	peer.setTorrent(tor)
 	qt.Assert(b, qt.IsNotNil(tor.storage))
 	const chunkSize = defaultChunkSize
-	peer.onPeerHasAllPiecesNoTriggers()
+	peer.onPeerSentHaveAll()
 	tor.cl.lock()
 	for i := 0; i < tor.numPieces(); i++ {
 		tor.pieces[i].priority.Raise(PiecePriorityNormal)
 		tor.updatePiecePriorityNoRequests(i)
 	}
 	tor.cl.unlock()
-	peer.peerChoking = false
+	peer.wireState.RecvUnchoke()
 	for b.Loop() {
 		storageClient.completed = 0
 		for pieceIndex := range iter.N(numPieces) {

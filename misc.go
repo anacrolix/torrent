@@ -6,7 +6,6 @@ import (
 	"math"
 	"net"
 
-	"github.com/RoaringBitmap/roaring/v2"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"golang.org/x/time/rate"
@@ -217,12 +216,3 @@ type (
 	InfoHash = infohash.T
 	IpPort   = missinggo.IpPort
 )
-
-func boolSliceToBitmap(slice []bool) (rb roaring.Bitmap) {
-	for i, b := range slice {
-		if b {
-			rb.AddInt(i)
-		}
-	}
-	return
-}

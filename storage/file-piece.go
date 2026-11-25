@@ -322,7 +322,11 @@ func (me *filePieceImpl) promotePartFile(f file) (err error) {
 	if !renamed {
 		return
 	}
-	err = os.Chmod(f.safeOsPath, filePerm&^0o222)
+	modes := me.t.client.opts.modes()
+	if modes.keep {
+		return
+	}
+	err = os.Chmod(f.safeOsPath, modes.file&^0o222)
 	if err != nil {
 		me.logger().Info("error setting promoted file to read-only", "file", f.safeOsPath, "err", err)
 		err = nil

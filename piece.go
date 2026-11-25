@@ -273,10 +273,13 @@ func (p Piece) iterCleanChunks(it *roaring.IntIterator) iter.Seq[chunkIndexType]
 		for next := begin; next < end; next++ {
 			if !it.HasNext() || it.Next() != next {
 				if !yield(chunkIndexType(next - begin)) {
-					return
+					break
 				}
 			}
 		}
+		// Release the interior pointer to p.t.dirtyChunks.Bitmap so a reused iterator (such as
+		// Client.roaringIntIterator) doesn't keep a dropped Torrent alive.
+		*it = roaring.IntIterator{}
 	}
 }
 

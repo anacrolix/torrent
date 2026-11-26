@@ -147,6 +147,7 @@ func (me *regularTrackerAnnounceDispatcher) initTables() {
 		func(old, new g.Option[announceDataRow]) g.Option[announceDataRow] {
 			if new.Ok {
 				new.Value.Right.overdue = new.Value.Right.When.Compare(time.Now()) <= 0
+				new.Value.Right.infohashBusy = me.infohashBusy(new.Value.Left.ShortInfohash)
 			}
 			return new
 		})
@@ -168,11 +169,11 @@ func (me *regularTrackerAnnounceDispatcher) initTables() {
 		// the check occurred prematurely while updating announceData. The fix is to update all
 		// indexes, then to do triggers. This is massive overkill for this project right now. TODO:
 		// This is probably doable now.
-		actual := new.Value.infohashActive
-		expected := g.OptionFromTuple(me.infohashAnnouncing.Get(key.ShortInfohash)).Value.count
+		actual := new.Value.infohashBusy
+		expected := me.infohashBusy(key.ShortInfohash)
 		if actual != expected {
 			me.logger.Debug(
-				"announceData.infohashActive != infohashAnnouncing.count",
+				"announceData.infohashBusy doesn't match infohashAnnouncing",
 				"key", key,
 				"actual", actual,
 				"expected", expected)
@@ -224,10 +225,14 @@ func (me *regularTrackerAnnounceDispatcher) initTables() {
 	})
 	me.infohashAnnouncing.Init(shortInfohash.Compare)
 	me.infohashAnnouncing.OnValueChange(func(shortIh shortInfohash, old, new g.Option[infohashConcurrency]) {
+		// Rows order on busy, not on the count, so a changed count alone reindexes nothing.
+		busy := new.Value.count > 0
+		if busy == (old.Value.count > 0) {
+			return
+		}
 		start := me.announceData.MinRecord()
 		start.Left.ShortInfohash = shortIh
 		keys := make([]torrentTrackerAnnouncerKey, 0, len(me.trackerClients))
-		var expectedCount g.Option[int]
 		for r := range indexed.IterClusteredWhere(
 			me.announceData,
 			start,
@@ -235,12 +240,9 @@ func (me *regularTrackerAnnounceDispatcher) initTables() {
 				return p.Left.ShortInfohash == shortIh
 			},
 		) {
-			if expectedCount.Ok {
-				panicif.NotEq(r.Right.infohashActive, expectedCount.Value)
-			} else {
-				expectedCount.Set(r.Right.infohashActive)
-			}
-			if r.Right.infohashActive != new.Value.count {
+			// Busy only orders rows that are due and waiting. The rest are ordered by When, and
+			// pick up busy in the insteadOf above whenever they change, at the latest when due.
+			if r.Right.overdue && !r.Right.active && r.Right.infohashBusy != busy {
 				keys = append(keys, r.Left)
 			}
 		}
@@ -248,7 +250,7 @@ func (me *regularTrackerAnnounceDispatcher) initTables() {
 			panicif.False(me.announceData.Update(
 				key,
 				func(input nextAnnounceInput) nextAnnounceInput {
-					input.infohashActive = new.Value.count
+					input.infohashBusy = busy
 					return input
 				},
 			).Exists)
@@ -318,6 +320,10 @@ func announceIndexCompare(a, b nextAnnounceRecord) int {
 
 type infohashConcurrency struct {
 	count int
+}
+
+func (me *regularTrackerAnnounceDispatcher) infohashBusy(ih shortInfohash) bool {
+	return g.OptionFromTuple(me.infohashAnnouncing.Get(ih)).Value.count > 0
 }
 
 // Picks the best announce with a deadline for a given tracker.
@@ -399,7 +405,7 @@ func (me *regularTrackerAnnounceDispatcher) putNextAnnounceRecordCols(
 		r.active,
 		r.overdue,
 		time.Until(r.When),
-		r.infohashActive,
+		r.infohashBusy,
 		r.torrent.Value.WantPeers,
 		r.torrent.Value.NeedData,
 		progress,
@@ -501,6 +507,8 @@ func (me *regularTrackerAnnounceDispatcher) addKey(key torrentTrackerAnnouncerKe
 		g.MakeMapIfNil(&me.announceStates)
 		g.MapMustAssignNew(me.announceStates, key, g.PtrTo(announceState{}))
 	}
+	// A tracker removed (ModifyTrackers) and added back before it was forgotten is in use again.
+	g.MapMustGet(me.announceStates, key).trackerRemoved = false
 	t.regularTrackerAnnounceState[key] = g.MapMustGet(me.announceStates, key)
 	if me.announceData.ContainsKey(key) {
 		me.resetAnnounceStateForReadd(key)
@@ -516,7 +524,7 @@ func (me *regularTrackerAnnounceDispatcher) addKey(key torrentTrackerAnnouncerKe
 	me.announceData.Create(key, nextAnnounceInput{
 		torrent:                me.makeTorrentInput(t),
 		nextAnnounceStateInput: me.makeAnnounceStateInput(key),
-		infohashActive:         g.OptionFromTuple(me.infohashAnnouncing.Get(key.ShortInfohash)).Value.count,
+		infohashBusy:           me.infohashBusy(key.ShortInfohash),
 	})
 	me.updateTimer()
 	return true
@@ -887,7 +895,7 @@ func compareNextAnnounce(ar, br nextAnnounceInput) (ret int) {
 		}
 	}
 	return cmp.Or(
-		cmp.Compare(ar.infohashActive, br.infohashActive),
+		extracmp.CompareBool(ar.infohashBusy, br.infohashBusy),
 		-extracmp.CompareBool(ar.torrent.Ok, br.torrent.Ok),
 		-extracmp.CompareBool(ar.torrent.Value.WantPeers, br.torrent.Value.WantPeers),
 		-extracmp.CompareBool(ar.torrent.Value.NeedData, br.torrent.Value.NeedData),
@@ -907,9 +915,10 @@ type nextAnnounceRecord struct {
 type nextAnnounceInput struct {
 	torrent g.Option[nextAnnounceTorrentInput]
 	nextAnnounceStateInput
-	infohashActive int
-	overdue        bool
-	active         bool
+	// Another announce for the infohash is running.
+	infohashBusy bool
+	overdue      bool
+	active       bool
 }
 
 type nextAnnounceStateInput struct {
@@ -929,6 +938,11 @@ func (me *regularTrackerAnnounceDispatcher) nextAnnounceEvent(key torrentTracker
 	state := g.MapMustGet(me.announceStates, key)
 	lastOk := state.lastOk
 	t := me.torrentFromShortInfohash(key.ShortInfohash)
+	if state.trackerRemoved {
+		// The torrent no longer uses this tracker (Torrent.ModifyTrackers): leave it as if the
+		// torrent had been dropped.
+		t = nil
+	}
 	if t == nil {
 		// Our lastOk attempt was an error.
 		if state.Err != nil {
@@ -992,6 +1006,9 @@ type announceState struct {
 	consecutiveFailures int
 	// Has ever sent completed event. Should only be sent once.
 	sentCompleted bool
+	// The torrent no longer uses this tracker (Torrent.ModifyTrackers): it's sent Stopped if it was
+	// announced to, then forgotten. Cleared if the tracker is added back.
+	trackerRemoved bool
 }
 
 func (cl *Client) startTrackerAnnouncer(u *url.URL, urlStr trackerAnnouncerKey) error {

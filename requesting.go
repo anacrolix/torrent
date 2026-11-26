@@ -126,10 +126,10 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 	// Push requests that can't be served right now to the end. But we don't throw them away unless
 	// there's a better alternative. This is for when we're using the fast extension and get choked
 	// but our requests could still be good when we get unchoked.
-	if p.peer.peerChoking {
+	if p.peer.wireState.PeerChoking() {
 		ml = ml.Bool(
-			!p.peer.peerAllowedFast.Contains(leftPieceIndex),
-			!p.peer.peerAllowedFast.Contains(rightPieceIndex),
+			!p.peer.wireState.PeerAllowedFast().Contains(leftPieceIndex),
+			!p.peer.wireState.PeerAllowedFast().Contains(rightPieceIndex),
 		)
 	}
 	leftPiece := p.pieceStates.Get(leftPieceIndex)
@@ -156,10 +156,8 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 	if ml.Ok() {
 		return ml.MustLess()
 	}
-	leftRequestState := t.requestState[leftRequest]
-	rightRequestState := t.requestState[rightRequest]
-	leftPeer := leftRequestState.peer.Value()
-	rightPeer := rightRequestState.peer.Value()
+	leftPeer := t.requestingPeer(leftRequest)
+	rightPeer := t.requestingPeer(rightRequest)
 	// Prefer chunks already requested from this peer.
 	ml = ml.Bool(rightPeer == p.peer, leftPeer == p.peer)
 	// Prefer unrequested chunks.
@@ -170,12 +168,12 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 	if leftPeer != nil {
 		// The right peer should also be set, or we'd have resolved the computation by now.
 		ml = ml.Compare(
-			rightPeer.requestState.Requests.GetCardinality(),
-			leftPeer.requestState.Requests.GetCardinality(),
+			rightPeer.wireState.NumRequests(),
+			leftPeer.wireState.NumRequests(),
 		)
 		// Could either of the lastRequested be Zero? That's what checking an existing peer is for.
-		leftLast := leftRequestState.when
-		rightLast := rightRequestState.when
+		leftLast := t.requestState[leftRequest].when
+		rightLast := t.requestState[rightRequest].when
 		if leftLast.IsZero() || rightLast.IsZero() {
 			panic("expected non-zero last requested times")
 		}
@@ -265,7 +263,7 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 				return true
 			}
 			requestHeap.pieceStates.Set(pieceIndex, pieceExtra)
-			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
+			allowedFast := p.wireState.PeerAllowedFast().Contains(pieceIndex)
 			t.iterUndirtiedRequestIndexesInPiece(&it, pieceIndex, func(r requestStrategy.RequestIndex) {
 				if !allowedFast {
 					// We must signal interest to request this. TODO: We could set interested if the
@@ -276,12 +274,12 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 					// have made the request previously (presumably while unchoked), and haven't had
 					// the peer respond yet (and the request was retained because we are using the
 					// fast extension).
-					if p.peerChoking && !p.requestState.Requests.Contains(r) {
+					if p.wireState.PeerChoking() && !p.requestIndexes().Requests.Contains(r) {
 						// We can't request this right now.
 						return
 					}
 				}
-				cancelled := &p.requestState.Cancelled
+				cancelled := &p.requestIndexes().Cancelled
 				if !cancelled.IsEmpty() && cancelled.Contains(r) {
 					// Can't re-request while awaiting acknowledgement.
 					return
@@ -404,9 +402,9 @@ func (p *Peer) allowSendNotInterested() bool {
 // some piece order randomization within the preferred state calculated earlier in next. Cancels are
 // not done here, those are handled synchronously. We only track pending cancel acknowledgements.
 func (p *PeerConn) applyRequestState(next desiredRequestState) {
-	current := &p.requestState
+	current := p.requestIndexes()
 	// Make interest sticky
-	if !next.Interested && p.requestState.Interested {
+	if !next.Interested && p.wireState.Interested() {
 		if !p.allowSendNotInterested() {
 			next.Interested = true
 		}

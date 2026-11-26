@@ -188,7 +188,7 @@ type Torrent struct {
 	piecesDownloadedForHash typedRoaring.Bitmap[pieceIndex]
 	activePieceHashes       int
 
-	connsWithAllPieces map[Peer]struct{}
+	connsWithAllPieces map[*PeerConn]struct{}
 
 	// Last active PeerConn request for each chunk.
 	requestState map[RequestIndex]requestState
@@ -247,14 +247,19 @@ func (t *Torrent) length() int64 {
 
 func (t *Torrent) selectivePieceAvailabilityFromPeers(i pieceIndex) (count int) {
 	// This could be done with roaring.BitSliceIndexing.
-	t.iterPeers(func(peer Peer) {
-		if _, ok := t.connsWithAllPieces[peer]; ok {
-			return
+	for c := range t.conns {
+		if _, ok := t.connsWithAllPieces[c]; ok {
+			continue
 		}
-		if peerHasPiece(peer, i) {
+		if peerHasPiece(c, i) {
 			count++
 		}
-	})
+	}
+	for _, ws := range t.webSeeds {
+		if peerHasPiece(ws, i) {
+			count++
+		}
+	}
 	return
 }
 
@@ -1113,7 +1118,7 @@ func (t *Torrent) writePeerStatuses(w io.Writer, peers iter.Seq[Peer]) {
 	for c := range peers {
 		fmt.Fprintf(w, "- ")
 		buf.Reset()
-		writePeerStatus(c, &buf)
+		c.writeStatus(&buf)
 		w.Write(bytes.TrimRight(
 			bytes.ReplaceAll(buf.Bytes(), []byte("\n"), []byte("\n  ")),
 			" "))
@@ -1257,7 +1262,7 @@ func (t *Torrent) close(wg *sync.WaitGroup) {
 		}()
 	}
 	t.iterPeers(func(p Peer) {
-		closePeer(p)
+		p.close()
 	})
 	if t.storage != nil {
 		t.deletePieceRequestOrder()
@@ -2172,7 +2177,7 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 	return
 }
 
-func (t *Torrent) decPeerPieceAvailability(p Peer) {
+func (t *Torrent) decPeerPieceAvailability(p *PeerConn) {
 	if t.deleteConnWithAllPieces(p) {
 		return
 	}
@@ -2180,7 +2185,7 @@ func (t *Torrent) decPeerPieceAvailability(p Peer) {
 		return
 	}
 	p.peerPieces().Iterate(func(i uint32) bool {
-		p.common().t.decPieceAvailability(pieceIndex(i))
+		t.decPieceAvailability(pieceIndex(i))
 		return true
 	})
 }
@@ -2207,7 +2212,7 @@ func (t *Torrent) assertPendingRequests() {
 
 func (t *Torrent) dropConnection(c *PeerConn) {
 	t.cl.event.Broadcast()
-	closePeer(c)
+	c.close()
 
 	for _, cb := range c.callbacks.StatusUpdated {
 		cb(StatusUpdatedEvent{
@@ -2629,7 +2634,7 @@ func (t *Torrent) addPeerConn(c *PeerConn) (err error) {
 			continue
 		}
 		if c.hasPreferredNetworkOver(c0) {
-			closePeer(c0)
+			c0.close()
 			t.deletePeerConn(c0)
 		} else {
 			return errors.New("existing connection preferred")
@@ -2647,7 +2652,7 @@ func (t *Torrent) addPeerConn(c *PeerConn) (err error) {
 		if c == nil {
 			return errors.New("don't want conn")
 		}
-		closePeer(c)
+		c.close()
 		t.deletePeerConn(c)
 	}
 	if len(t.conns) >= t.maxEstablishedConns {
@@ -2810,7 +2815,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 					piece,
 					func() (ret []connectionTrust) {
 						for _, c := range bannableTouchers {
-							ret = append(ret, c.trust())
+							ret = append(ret, c.common().trust())
 						}
 						return
 					}(),
@@ -2820,7 +2825,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 			if len(bannableTouchers) >= 1 {
 				c := bannableTouchers[0]
 				if len(bannableTouchers) != 1 {
-					t.logger.Levelf(log.Debug, "would have banned %v for touching piece %v after failed piece check", c.remoteIp(), piece)
+					t.logger.Levelf(log.Debug, "would have banned %v for touching piece %v after failed piece check", c.common().remoteIp(), piece)
 				} else {
 					// Turns out it's still useful to ban peers like this because if there's only a
 					// single peer for a piece, and we never progress that piece to completion, we
@@ -2979,26 +2984,27 @@ func (t *Torrent) getPieceToHash() (_ g.Option[pieceIndex]) {
 }
 
 func (t *Torrent) dropBannedPeers() {
-	t.iterPeers(func(p Peer) {
+	// Webseeds aren't banned by address.
+	for p := range t.conns {
 		remoteIp := p.remoteIp()
 		if remoteIp == nil {
-			if p.common().bannableAddr.Ok {
+			if p.bannableAddr.Ok {
 				t.logger.WithDefaultLevel(log.Debug).Printf("can't get remote ip for peer %v", p)
 			}
-			return
+			continue
 		}
 		netipAddr := netip.MustParseAddr(remoteIp.String())
-		if g.Some(netipAddr) != p.common().bannableAddr {
+		if g.Some(netipAddr) != p.bannableAddr {
 			t.logger.WithDefaultLevel(log.Debug).Printf(
 				"peer remote ip does not match its bannable addr [peer=%v, remote ip=%v, bannable addr=%v]",
-				p, remoteIp, p.common().bannableAddr)
+				p, remoteIp, p.bannableAddr)
 		}
 		if _, ok := t.cl.badPeerIPs[netipAddr]; ok {
 			// Should this be a close?
 			p.drop()
 			t.logger.WithDefaultLevel(log.Debug).Printf("dropped %v for banned remote IP %v", p, netipAddr)
 		}
-	})
+	}
 }
 
 // Storage lock is held. Release storage lock after we're done reading and relock Client. Return
@@ -3288,6 +3294,16 @@ func (t *Torrent) SetOnWriteChunkError(f func(error)) {
 	t.userOnWriteChunkErr = f
 }
 
+// Requests freed up for other peers to take. Webseed requests are updated across the Client
+// instead.
+func (t *Torrent) updateRequestsOfConnsLowOnRequests(reason updateRequestReason) {
+	for c := range t.conns {
+		if c.isLowOnRequests() {
+			c.onNeedUpdateRequests(reason)
+		}
+	}
+}
+
 func (t *Torrent) iterPeers(f func(p Peer)) {
 	for pc := range t.conns {
 		f(pc)
@@ -3333,7 +3349,7 @@ func (t *Torrent) RemoveWebSeeds() {
 	t.cl.lock()
 	defer t.cl.unlock()
 	for key, ws := range t.webSeeds {
-		closePeer(ws)
+		ws.close()
 		delete(t.webSeeds, key)
 	}
 }
@@ -3361,10 +3377,9 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	const defaultMaxRequests = 2
 	ws := webseedPeer{
 		commonPeer: commonPeer{
-			cl:       t.cl,
-			t:        t,
-			outgoing: true,
-			Network:  "http",
+			cl:   t.cl,
+			t:    t,
+			kind: peerKindWebseed,
 			// TODO: Set ban prefix?
 			RemoteAddr: remoteAddrFromUrl(url),
 			callbacks:  t.callbacks(),
@@ -3495,14 +3510,14 @@ func (t *Torrent) requestingPeer(r RequestIndex) (ret *PeerConn) {
 	return
 }
 
-func (t *Torrent) addConnWithAllPieces(p Peer) {
+func (t *Torrent) addConnWithAllPieces(p *PeerConn) {
 	if t.connsWithAllPieces == nil {
-		t.connsWithAllPieces = make(map[Peer]struct{}, t.maxEstablishedConns)
+		t.connsWithAllPieces = make(map[*PeerConn]struct{}, t.maxEstablishedConns)
 	}
 	t.connsWithAllPieces[p] = struct{}{}
 }
 
-func (t *Torrent) deleteConnWithAllPieces(p Peer) bool {
+func (t *Torrent) deleteConnWithAllPieces(p *PeerConn) bool {
 	_, ok := t.connsWithAllPieces[p]
 	delete(t.connsWithAllPieces, p)
 	return ok
@@ -4026,7 +4041,7 @@ func (t *Torrent) incrementPiecesDirtiedStats(p Piece, inc func(stats *ConnStats
 		inc(&c.common()._stats)
 		// Collect distinct upstream connection stats.
 		count := 0
-		for cs := range upstreamConnStats(c) {
+		for cs := range c.common().upstreamConnStats() {
 			distinctUpstreamConnStats[cs] = struct{}{}
 			count++
 		}

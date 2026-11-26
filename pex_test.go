@@ -92,8 +92,8 @@ var testcases = []struct {
 		in: func() *pexState {
 			s := new(pexState)
 			s.Add(&PeerConn{commonPeer: commonPeer{RemoteAddr: addrs[0]}})
-			s.Add(&PeerConn{commonPeer: commonPeer{RemoteAddr: addrs[1], outgoing: true}})
-			s.Add(&PeerConn{commonPeer: commonPeer{RemoteAddr: addrs[2], outgoing: true}})
+			s.Add(&PeerConn{commonPeer: commonPeer{RemoteAddr: addrs[1]}, outgoing: true})
+			s.Add(&PeerConn{commonPeer: commonPeer{RemoteAddr: addrs[2]}, outgoing: true})
 			s.Add(&PeerConn{commonPeer: commonPeer{RemoteAddr: addrs[3]}})
 			return s
 		}(),

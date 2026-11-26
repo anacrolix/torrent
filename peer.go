@@ -19,7 +19,6 @@ import (
 	"github.com/anacrolix/multiless"
 
 	peerWire "github.com/anacrolix/torrent/internal/peer-wire"
-	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
@@ -50,34 +49,14 @@ type (
 		logger  log.Logger
 		slogger *slog.Logger
 
-		// Belongs in PeerConn:
-
-		outgoing bool
-		Network  string
-		// The local address as observed by the remote peer. WebRTC seems to get this right without needing hints from the
-		// config.
-		localPublicAddr peerLocalPublicAddr
-		bannableAddr    g.Option[bannableAddr]
-		// True if the connection is operating over MSE obfuscation.
-		headerEncrypted bool
-		cryptoMethod    mse.CryptoMethod
-
-		lastMessageReceived time.Time
-		completedHandshake  time.Time
-		lastChunkSent       time.Time
-
-		// Stuff controlled by the local peer.
-		needRequestUpdate    updateRequestReason
-		updateRequestsTimer  *releasedTimer
-		lastRequestUpdate    time.Time
-		peakRequests         maxRequests
-		lastBecameInterested time.Time
-		priorInterest        time.Duration
-
-		// What the peer told us in its extended handshake. Embedded so its fields, like
-		// PeerExtensionIDs and PeerPrefersEncryption, keep their selectors on PeerConn and webseedPeer.
-		peerExtendedHandshake
+		// Which of a Torrent's and Client's per-type ConnStats this peer counts toward.
+		kind peerKind
+		// Set for peers that can be banned by address.
+		bannableAddr g.Option[bannableAddr]
 	}
+
+	// The types of Peer. The zero value is a PeerConn.
+	peerKind uint8
 
 	PeerSource string
 
@@ -90,6 +69,18 @@ type (
 
 	updateRequestReason string
 )
+
+const (
+	peerKindPeerConn peerKind = iota
+	peerKindWebseed
+)
+
+func (k peerKind) connStats(all *AllConnStats) *ConnStats {
+	if k == peerKindWebseed {
+		return &all.WebSeeds
+	}
+	return &all.PeerConns
+}
 
 const (
 	PeerSourceUtHolepunch     = "C"
@@ -119,20 +110,17 @@ func (p *commonPeer) Torrent() *Torrent {
 	return p.t
 }
 
-func peerStats(p Peer) (ret PeerStats) {
-	cp := p.common()
-	cp.locker().RLock()
-	defer cp.locker().RUnlock()
+// The stats every peer type has. Each type's Stats adds its own. Requires the Client lock.
+func (cp *commonPeer) baseStats() (ret PeerStats) {
 	ret.ConnStats = cp._stats.Copy()
 	ret.DownloadRate = cp.downloadRate()
-	ret.LastWriteUploadRate = p.lastWriteUploadRate()
-	ret.RemotePieceCount = remotePieceCount(p)
 	return
 }
 
-func updateExpectingChunks(p Peer) {
-	cp := p.common()
-	if p.expectingChunks() {
+// Records whether the peer owes us chunks, to time how long it's expected to be sending. Each peer
+// type calls this when what it's waiting for changes.
+func (cp *commonPeer) setExpectingChunks(expecting bool) {
+	if expecting {
 		if cp.lastStartedExpectingToReceiveChunks.IsZero() {
 			cp.lastStartedExpectingToReceiveChunks = time.Now()
 		}
@@ -149,25 +137,24 @@ func (cn *commonPeer) locker() *lockWithDeferreds {
 }
 
 // The best guess at number of pieces in the torrent for this peer.
-func bestPeerNumPieces(p Peer) pieceIndex {
-	cp := p.common()
-	if cp.t.haveInfo() {
-		return cp.t.numPieces()
+func (cn *PeerConn) bestPeerNumPieces() pieceIndex {
+	if cn.t.haveInfo() {
+		return cn.t.numPieces()
 	}
-	return p.peerMinPieces()
+	return cn.peerMinPieces()
 }
 
 // How many pieces we think the peer has.
-func remotePieceCount(p Peer) pieceIndex {
-	have := pieceIndex(p.peerPieces().GetCardinality())
-	if all, _ := p.peerHasAllPieces(); all {
-		have = bestPeerNumPieces(p)
+func (cn *PeerConn) remotePieceCount() pieceIndex {
+	have := pieceIndex(cn.peerPieces().GetCardinality())
+	if all, _ := cn.peerHasAllPieces(); all {
+		have = cn.bestPeerNumPieces()
 	}
 	return have
 }
 
 func (cn *PeerConn) completedString() string {
-	return fmt.Sprintf("%d/%d", remotePieceCount(cn), bestPeerNumPieces(cn))
+	return fmt.Sprintf("%d/%d", cn.remotePieceCount(), cn.bestPeerNumPieces())
 }
 
 func eventAgeString(t time.Time) string {
@@ -192,14 +179,16 @@ func (p *commonPeer) DownloadRate() float64 {
 	return p.downloadRate()
 }
 
-func writePeerStatus(p Peer, w io.Writer) {
-	cp := p.common()
+// Writes the status every peer type has, around the lines and extra output of the type calling it.
+func (cp *commonPeer) writeStatus(w io.Writer, lines []string, writeExtra func(io.Writer)) {
 	// \t isn't preserved in <pre> blocks?
 	if cp.closed.IsSet() {
 		fmt.Fprint(w, "CLOSED: ")
 	}
-	fmt.Fprintln(w, strings.Join(p.peerImplStatusLines(), "\n"))
-	p.peerImplWriteStatus(w)
+	fmt.Fprintln(w, strings.Join(lines, "\n"))
+	if writeExtra != nil {
+		writeExtra(w)
+	}
 	fmt.Fprintf(w,
 		"%d pieces touched, good chunks: %v/%v, dr: %.1f KiB/s\n",
 		len(cp.peerTouchedPieces),
@@ -210,34 +199,17 @@ func writePeerStatus(p Peer, w io.Writer) {
 	fmt.Fprintf(w, "\n")
 }
 
-func closePeer(p Peer) {
-	cp := p.common()
+// Marks the peer closed and cancels its context. Returns false if it was already closed. Each peer
+// type's close starts with this, and then undoes what that type added to its Torrent.
+func (cp *commonPeer) beginClose() bool {
 	if !cp.closed.Set() {
-		return
+		return false
 	}
 	// Not set until Torrent is known.
 	if cp.closedCtx != nil {
 		cp.closedCtxCancel()
 	}
-	if cp.updateRequestsTimer != nil {
-		cp.updateRequestsTimer.Stop()
-	}
-	// Before onClose, which drops a PeerConn's wireState and removes it from the Torrent.
-	if cp.t != nil {
-		cp.t.decPeerPieceAvailability(p)
-	}
-	p.onClose()
-	for _, f := range cp.callbacks.PeerClosed {
-		f(p)
-	}
-}
-
-func closePeerLocked(p Peer) error {
-	cp := p.common()
-	cp.locker().Lock()
-	defer cp.locker().Unlock()
-	closePeer(p)
-	return nil
+	return true
 }
 
 func (p *commonPeer) common() *commonPeer {
@@ -246,7 +218,7 @@ func (p *commonPeer) common() *commonPeer {
 
 // Peer definitely has a piece, for purposes of requesting. So it's not sufficient that we think
 // they do (known=true).
-func peerHasPiece(p Peer, piece pieceIndex) bool {
+func peerHasPiece(p peerPieceClaims, piece pieceIndex) bool {
 	if all, known := p.peerHasAllPieces(); all && known {
 		return true
 	}
@@ -286,34 +258,32 @@ type messageWriter func(pp.Message) bool
 
 // All ConnStats that include this connection. Some objects are not known until the handshake is
 // complete, after which it's expected to reconcile the differences.
-func modifyRelevantConnStats(p Peer, f func(*ConnStats)) {
-	cp := p.common()
+func (cp *commonPeer) modifyRelevantConnStats(f func(*ConnStats)) {
 	// Every peer has basic ConnStats for now.
 	f(&cp._stats)
 	incAll := func(stats *ConnStats) bool {
 		f(stats)
 		return true
 	}
-	upstreamConnStats(p)(incAll)
+	cp.upstreamConnStats()(incAll)
 }
 
 // Yields relevant upstream ConnStats. Skips Torrent if it isn't set.
-func upstreamConnStats(p Peer) iter.Seq[*ConnStats] {
-	cp := p.common()
+func (cp *commonPeer) upstreamConnStats() iter.Seq[*ConnStats] {
 	return func(yield func(*ConnStats) bool) {
 		// PeerConn can be nil when it hasn't completed handshake.
 		if cp.t != nil {
-			relevantConnStats(p, &cp.t.connStats)(yield)
+			cp.relevantConnStats(&cp.t.connStats)(yield)
 		}
-		relevantConnStats(p, &cp.cl.connStats)(yield)
+		cp.relevantConnStats(&cp.cl.connStats)(yield)
 	}
 }
 
-func readBytes(p Peer, n int64) {
-	modifyRelevantConnStats(p, add(n, func(cs *ConnStats) *Count { return &cs.BytesRead }))
+func (cp *commonPeer) readBytes(n int64) {
+	cp.modifyRelevantConnStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesRead }))
 }
 
-func (c *commonPeer) lastHelpful() (ret time.Time) {
+func (c *PeerConn) lastHelpful() (ret time.Time) {
 	ret = c.lastUsefulChunkReceived
 	if c.t.seeding() && c.lastChunkSent.After(ret) {
 		ret = c.lastChunkSent
@@ -341,39 +311,24 @@ func runSafeExtraneous(f func()) {
 	}
 }
 
-func doChunkReadStats(p Peer, size int64) {
-	modifyRelevantConnStats(p, func(cs *ConnStats) { cs.receivedChunk(size) })
-}
-
-// Handle a received chunk from a peer. TODO: Break this out into non-wire protocol specific
-// handling. Avoid shoehorning into a pp.Message. Called with the Client lock held, which is released
-// while the chunk is written to storage.
-func receiveChunk(p Peer, msg *pp.Message) error {
-	cp := p.common()
-	w, err := receiveChunkPrologue(p, msg)
-	if err != nil || w == nil {
-		return err
-	}
-	cl := cp.t.cl
-	cl.unlock()
-	writeErr := w.write()
-	cl.lock()
-	receiveChunkEpilogue(p, w, writeErr)
-	return nil
+func (cp *commonPeer) doChunkReadStats(size int64) {
+	cp.modifyRelevantConnStats(func(cs *ConnStats) { cs.receivedChunk(size) })
 }
 
 // A received chunk that has been accepted and must be written to storage. Created by
-// receiveChunkPrologue, and finished with receiveChunkEpilogue once write has returned. The chunk
-// data is borrowed from the message, so it must stay valid until the epilogue.
+// Torrent.acceptChunk, and finished with Torrent.finishChunkWrite once write has returned. The chunk
+// data is borrowed from the message, so it must stay valid until then.
 type pendingChunkWrite struct {
-	t     *Torrent
+	t *Torrent
+	// Who sent the chunk.
+	from  Peer
 	req   RequestIndex
 	piece Piece
 	index int
 	begin int64
 	data  []byte
-	// Holds the pending-write reference until the epilogue, so hashing and storage readers wait for
-	// the write, and the tracking struct can't be reclaimed while the write is in flight.
+	// Holds the pending-write reference until the write is finished, so hashing and storage readers
+	// wait for the write, and the tracking struct can't be reclaimed while the write is in flight.
 	pw                     *piecePendingWrites
 	recordBlockForSmartBan func()
 }
@@ -387,54 +342,61 @@ func (w *pendingChunkWrite) write() error {
 	return w.t.writeChunk(w.index, w.begin, w.data)
 }
 
-// Validates a received chunk and updates state as though it's already written, so it isn't
-// requested from anyone else while the write is in flight. Returns nil if the chunk doesn't need
-// writing. Called with the Client lock held. Every non-nil result must be passed to
-// receiveChunkEpilogue after its write.
-func receiveChunkPrologue(p Peer, msg *pp.Message) (_ *pendingChunkWrite, err error) {
-	cp := p.common()
-	ChunksReceived.Add("total", 1)
+// Receiving a chunk is driven by the peer type it arrived on, in these steps, with the Client lock
+// held except for the write:
+//
+//  1. Torrent.validateReceivedChunk
+//  2. Anything the peer type checks for itself, like whether it asked for the chunk.
+//  3. Torrent.acceptChunk
+//  4. pendingChunkWrite.write, without the Client lock.
+//  5. Torrent.finishChunkWrite
+//
+// TODO: Avoid shoehorning into a pp.Message.
 
-	ppReq := newRequestFromMessage(msg)
-	t := cp.t
+// Counts a received chunk and checks that it's one the Torrent could have asked for.
+func (t *Torrent) validateReceivedChunk(msg *pp.Message) (ppReq Request, req RequestIndex, err error) {
+	ChunksReceived.Add("total", 1)
+	ppReq = newRequestFromMessage(msg)
 	err = t.checkValidReceiveChunk(ppReq)
 	if err != nil {
 		err = log.WithLevel(log.Warning, err)
 		return
 	}
-	req := cp.t.requestIndexFromRequest(ppReq)
+	req = t.requestIndexFromRequest(ppReq)
+	return
+}
+
+// Takes a valid chunk from p, and updates state as though it's already written, so it isn't
+// requested from anyone else while the write is in flight. intended is whether p was still wanted to
+// send it. Returns nil if the chunk doesn't need writing. Called with the Client lock held. Every
+// non-nil result must be passed to finishChunkWrite after its write.
+func (t *Torrent) acceptChunk(p Peer, msg *pp.Message, intended bool) *pendingChunkWrite {
+	cp := p.common()
+	ppReq := newRequestFromMessage(msg)
+	req := t.requestIndexFromRequest(ppReq)
 
 	// This needs to occur for every valid chunk, but we try to do it when the client is unlocked
 	// (in pendingChunkWrite.write). It can't be done before checking if chunks are valid because
 	// they won't be deallocated from the smart ban cache by piece hashing if they're out of bounds.
 	data := msg.Piece
-	recordBlockForSmartBan := sync.OnceFunc(func() {
-		cp.recordBlockForSmartBan(req, data)
-	})
-
-	intended, err := p.checkReceivedChunk(req, msg, ppReq)
-	if err != nil {
-		recordBlockForSmartBan()
-		return
-	}
 
 	// Do we actually want this chunk?
 	if t.haveChunk(ppReq) {
 		// panic(fmt.Sprintf("%+v", ppReq))
 		ChunksReceived.Add("redundant", 1)
-		modifyRelevantConnStats(p, add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
-		recordBlockForSmartBan()
-		return
+		cp.modifyRelevantConnStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
+		cp.recordBlockForSmartBan(req, data)
+		return nil
 	}
 
 	piece := t.piece(ppReq.Index.Int())
 
-	modifyRelevantConnStats(p, add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
-	modifyRelevantConnStats(p, add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))
+	cp.modifyRelevantConnStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
+	cp.modifyRelevantConnStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))
 	if intended {
-		modifyRelevantConnStats(p, add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulIntendedData }))
+		cp.modifyRelevantConnStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulIntendedData }))
 	}
-	for _, f := range cp.t.cl.config.Callbacks.ReceivedUsefulData {
+	for _, f := range t.cl.config.Callbacks.ReceivedUsefulData {
 		f(ReceivedUsefulDataEvent{p, msg})
 	}
 	cp.lastUsefulChunkReceived = time.Now()
@@ -447,7 +409,7 @@ func receiveChunkPrologue(p Peer, msg *pp.Message) (_ *pendingChunkWrite, err er
 
 	// Cancel pending requests for this chunk from *other* peers.
 	if other := t.requestingPeer(req); other != nil {
-		if other.peerPtr() == p {
+		if Peer(other) == p {
 			other.logger.Slogger().Error("received chunk but still pending request", "peer", other, "req", req)
 			panic("should not be pending request from conn that just received it")
 		}
@@ -455,34 +417,35 @@ func receiveChunkPrologue(p Peer, msg *pp.Message) (_ *pendingChunkWrite, err er
 	}
 
 	return &pendingChunkWrite{
-		t:                      t,
-		req:                    req,
-		piece:                  piece,
-		index:                  int(msg.Index),
-		begin:                  int64(msg.Begin),
-		data:                   data,
-		pw:                     pw,
-		recordBlockForSmartBan: recordBlockForSmartBan,
-	}, nil
+		t:     t,
+		from:  p,
+		req:   req,
+		piece: piece,
+		index: int(msg.Index),
+		begin: int64(msg.Begin),
+		data:  data,
+		pw:    pw,
+		recordBlockForSmartBan: sync.OnceFunc(func() {
+			cp.recordBlockForSmartBan(req, data)
+		}),
+	}
 }
 
 // Applies the result of writing a chunk. Called with the Client lock held.
-func receiveChunkEpilogue(p Peer, w *pendingChunkWrite, err error) {
-	cp := p.common()
-	t := w.t
+func (t *Torrent) finishChunkWrite(w *pendingChunkWrite, err error) {
 	w.pw.decrementPendingWrites()
 	if err != nil {
-		cp.logger.WithDefaultLevel(log.Error).Printf("writing received chunk %v: %v", w.req, err)
+		w.from.common().logger.WithDefaultLevel(log.Error).Printf("writing received chunk %v: %v", w.req, err)
 		t.pendRequest(w.req)
 		// Necessary to pass TestReceiveChunkStorageFailureSeederFastExtensionDisabled. I think a
 		// request update runs while we're writing the chunk that just failed. Then we never do a
 		// fresh update after pending the failed request.
-		p.onNeedUpdateRequests("Peer.receiveChunk error writing chunk")
+		w.from.onNeedUpdateRequests("Peer.receiveChunk error writing chunk")
 		t.onWriteChunkErr(err)
 		return
 	}
 
-	onDirtiedPiece(p, w.index)
+	t.onDirtiedPiece(w.from, w.index)
 
 	// We need to ensure the piece is only queued once, so only the last chunk writer gets this job.
 	if t.pieceAllDirty(w.index) && w.piece.pendingWritesCount() == 0 {
@@ -498,13 +461,13 @@ func receiveChunkEpilogue(p Peer, w *pendingChunkWrite, err error) {
 	t.deferPublishPieceStateChange(w.index)
 }
 
-func onDirtiedPiece(p Peer, piece pieceIndex) {
+func (t *Torrent) onDirtiedPiece(p Peer, piece pieceIndex) {
 	cp := p.common()
 	if cp.peerTouchedPieces == nil {
 		cp.peerTouchedPieces = make(map[pieceIndex]struct{})
 	}
 	cp.peerTouchedPieces[piece] = struct{}{}
-	ds := &cp.t.pieces[piece].dirtiers
+	ds := &t.pieces[piece].dirtiers
 	if *ds == nil {
 		*ds = make(map[Peer]struct{})
 	}
@@ -525,7 +488,7 @@ func (c *PeerConn) peerHasWantedPieces() bool {
 	return c.peerPieces().Intersects(&c.t._pendingPieces.Bitmap)
 }
 
-func (c *commonPeer) peerPriority() (peerPriority, error) {
+func (c *PeerConn) peerPriority() (peerPriority, error) {
 	return bep40Priority(c.remoteIpPort(), c.localPublicAddr)
 }
 
@@ -570,7 +533,7 @@ func (cn *PeerConn) newPeerPieces() *roaring.Bitmap {
 
 type peerLocalPublicAddr = IpPort
 
-func (p *commonPeer) decPeakRequests() {
+func (p *PeerConn) decPeakRequests() {
 	// // This can occur when peak requests are altered by the update request timer to be lower than
 	// // the actual number of outstanding requests. Let's let it go negative and see what happens. I
 	// // wonder what happens if maxRequests is not signed.
@@ -592,9 +555,9 @@ func (p *commonPeer) initClosedCtx() {
 }
 
 // Iterates base and peer-impl specific ConnStats from all.
-func relevantConnStats(p Peer, all *AllConnStats) iter.Seq[*ConnStats] {
+func (cp *commonPeer) relevantConnStats(all *AllConnStats) iter.Seq[*ConnStats] {
 	return func(yield func(*ConnStats) bool) {
 		yield(&all.ConnStats)
-		yield(p.allConnStatsImplField(all))
+		yield(cp.kind.connStats(all))
 	}
 }

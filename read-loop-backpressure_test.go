@@ -50,7 +50,7 @@ func TestReadLoopWaitsForWriteBuffer(t *testing.T) {
 	cl.unlock()
 	defer func() {
 		cl.lock()
-		closePeer(c)
+		c.close()
 		cl.unlock()
 		ours.Close()
 		<-readLoopDone

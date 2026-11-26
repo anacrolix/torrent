@@ -196,7 +196,7 @@ func chunkIndexSpec(index, pieceLength, chunkSize pp.Integer) ChunkSpec {
 }
 
 func comparePeerTrust(l, r Peer) int {
-	return l.trust().Cmp(r.trust())
+	return l.common().trust().Cmp(r.common().trust())
 }
 
 func connIsIpv6(nc interface {

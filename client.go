@@ -736,7 +736,7 @@ func (cl *Client) incomingConnection(nc net.Conn, releaseHandshake func()) {
 	cl.runReceivedConn(c, releaseHandshake)
 
 	cl.lock()
-	closePeer(c)
+	c.close()
 	cl.unlock()
 }
 
@@ -1018,7 +1018,7 @@ func (cl *Client) outgoingConnection(
 		}
 		return
 	}
-	defer closePeer(c)
+	defer c.close()
 	c.Discovery = opts.peerInfo.Source
 	c.trusted = opts.peerInfo.Trusted
 	opts.t.runHandshookConnLoggingErr(c)
@@ -1431,7 +1431,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 	}
 	switch d.Type {
 	case pp.DataMetadataExtensionMsgType:
-		modifyRelevantConnStats(c, add(1, func(cs *ConnStats) *Count { return &cs.MetadataChunksRead }))
+		c.modifyRelevantConnStats(add(1, func(cs *ConnStats) *Count { return &cs.MetadataChunksRead }))
 		if !c.wireState.RecvMetadataPiece(piece) {
 			return fmt.Errorf("got unexpected piece %d", piece)
 		}
@@ -1863,13 +1863,13 @@ func (cl *Client) banPeerIP(ip net.IP) {
 	g.MakeMapIfNil(&cl.badPeerIPs)
 	cl.badPeerIPs[ipAddr] = struct{}{}
 	for t := range cl.torrents {
-		t.iterPeers(func(p Peer) {
+		for p := range t.conns {
 			if p.remoteIp().Equal(ip) {
 				t.slogger().Debug("dropping peer with banned ip", "peer", p, "ip", ip)
 				// Should this be a close?
 				p.drop()
 			}
-		})
+		}
 	}
 }
 
@@ -1887,20 +1887,19 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 	}
 	c = &PeerConn{
 		commonPeer: commonPeer{
-			cl:        cl,
-			outgoing:  opts.outgoing,
-			peerExtendedHandshake: peerWire.ExtendedHandshake{
-				PeerMaxRequests: 250,
-			},
-
-			RemoteAddr:      opts.remoteAddr,
-			localPublicAddr: opts.localPublicAddr,
-			Network:         opts.network,
-			callbacks:       &cl.config.Callbacks,
+			cl:         cl,
+			RemoteAddr: opts.remoteAddr,
+			callbacks:  &cl.config.Callbacks,
 		},
-		wireState:  new(peerWire.NewState()),
-		connString: opts.connString,
-		conn:       nc,
+		outgoing: opts.outgoing,
+		peerExtendedHandshake: peerWire.ExtendedHandshake{
+			PeerMaxRequests: 250,
+		},
+		localPublicAddr: opts.localPublicAddr,
+		Network:         opts.network,
+		wireState:       new(peerWire.NewState()),
+		connString:      opts.connString,
+		conn:            nc,
 	}
 	// TODO: Need to be much more explicit about this, including allowing non-IP bannable addresses.
 	if opts.remoteAddr != nil {

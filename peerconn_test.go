@@ -449,14 +449,14 @@ func TestConnPexPeerFlags(t *testing.T) {
 		conn *PeerConn
 		f    pp.PexPeerFlags
 	}{
-		{&PeerConn{commonPeer: commonPeer{outgoing: false, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: false}}}, 0},
-		{&PeerConn{commonPeer: commonPeer{outgoing: false, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: true}}}, pp.PexPrefersEncryption},
-		{&PeerConn{commonPeer: commonPeer{outgoing: true, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: false}}}, pp.PexOutgoingConn},
-		{&PeerConn{commonPeer: commonPeer{outgoing: true, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: true}}}, pp.PexOutgoingConn | pp.PexPrefersEncryption},
-		{&PeerConn{commonPeer: commonPeer{RemoteAddr: udpAddr, Network: udpAddr.Network()}}, pp.PexSupportsUtp},
-		{&PeerConn{commonPeer: commonPeer{RemoteAddr: udpAddr, Network: udpAddr.Network(), outgoing: true}}, pp.PexOutgoingConn | pp.PexSupportsUtp},
-		{&PeerConn{commonPeer: commonPeer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), outgoing: true}}, pp.PexOutgoingConn},
-		{&PeerConn{commonPeer: commonPeer{RemoteAddr: tcpAddr, Network: tcpAddr.Network()}}, 0},
+		{&PeerConn{outgoing: false, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: false}}, 0},
+		{&PeerConn{outgoing: false, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: true}}, pp.PexPrefersEncryption},
+		{&PeerConn{outgoing: true, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: false}}, pp.PexOutgoingConn},
+		{&PeerConn{outgoing: true, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: true}}, pp.PexOutgoingConn | pp.PexPrefersEncryption},
+		{&PeerConn{commonPeer: commonPeer{RemoteAddr: udpAddr}, Network: udpAddr.Network()}, pp.PexSupportsUtp},
+		{&PeerConn{commonPeer: commonPeer{RemoteAddr: udpAddr}, Network: udpAddr.Network(), outgoing: true}, pp.PexOutgoingConn | pp.PexSupportsUtp},
+		{&PeerConn{commonPeer: commonPeer{RemoteAddr: tcpAddr}, Network: tcpAddr.Network(), outgoing: true}, pp.PexOutgoingConn},
+		{&PeerConn{commonPeer: commonPeer{RemoteAddr: tcpAddr}, Network: tcpAddr.Network()}, 0},
 	}
 	for i, tc := range testcases {
 		f := tc.conn.pexPeerFlags()
@@ -478,27 +478,27 @@ func TestConnPexEvent(t *testing.T) {
 	}{
 		{
 			pexAdd,
-			&PeerConn{commonPeer: commonPeer{RemoteAddr: udpAddr, Network: udpAddr.Network()}},
+			&PeerConn{commonPeer: commonPeer{RemoteAddr: udpAddr}, Network: udpAddr.Network()},
 			pexEvent{pexAdd, udpAddr.AddrPort(), pp.PexSupportsUtp, nil},
 		},
 		{
 			pexDrop,
 			&PeerConn{
-				commonPeer: commonPeer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), outgoing: true, peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialTcpAddr.Port}},
+				commonPeer: commonPeer{RemoteAddr: tcpAddr}, Network: tcpAddr.Network(), outgoing: true, peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialTcpAddr.Port},
 			},
 			pexEvent{pexDrop, tcpAddr.AddrPort(), pp.PexOutgoingConn, nil},
 		},
 		{
 			pexAdd,
 			&PeerConn{
-				commonPeer: commonPeer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialTcpAddr.Port}},
+				commonPeer: commonPeer{RemoteAddr: tcpAddr}, Network: tcpAddr.Network(), peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialTcpAddr.Port},
 			},
 			pexEvent{pexAdd, dialTcpAddr.AddrPort(), 0, nil},
 		},
 		{
 			pexDrop,
 			&PeerConn{
-				commonPeer: commonPeer{RemoteAddr: udpAddr, Network: udpAddr.Network(), peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialUdpAddr.Port}},
+				commonPeer: commonPeer{RemoteAddr: udpAddr}, Network: udpAddr.Network(), peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialUdpAddr.Port},
 			},
 			pexEvent{pexDrop, dialUdpAddr.AddrPort(), pp.PexSupportsUtp, nil},
 		},
@@ -523,7 +523,7 @@ func TestHaveAllThenBitfield(t *testing.T) {
 	tt.conns[&pc] = struct{}{}
 	g.InitNew(&pc.callbacks)
 	qt.Assert(t, qt.IsNil(pc.onPeerSentHaveAll()))
-	qt.Check(t, qt.DeepEquals(pc.t.connsWithAllPieces, map[Peer]struct{}{&pc: {}}))
+	qt.Check(t, qt.DeepEquals(pc.t.connsWithAllPieces, map[*PeerConn]struct{}{&pc: {}}))
 	pc.peerSentBitfield([]bool{false, false, true, false, true, true, false, false})
 	qt.Check(t, qt.Equals(pc.wireState.PeerMinPieces(), 6))
 	qt.Check(t, qt.HasLen(pc.t.connsWithAllPieces, 0))
@@ -726,7 +726,7 @@ func TestPeerConnPeerRequestDataLifecycle(t *testing.T) {
 		prd := pc.getPeerRequestData(r.Length.Int())
 		g.MakeMapIfNil(&pc.readyPeerRequests)
 		pc.readyPeerRequests[r] = prd
-		closePeer(pc)
+		pc.close()
 		qt.Check(t, qt.Equals(outstandingChunkPoolBuffers(), baseline))
 	})
 
@@ -947,7 +947,7 @@ func TestCloseUndoesRequests(t *testing.T) {
 	pc.requestIndexes().Requests.Add(r)
 	tor.requestState[r] = requestState{peer: weak.Make(pc), when: time.Now()}
 	qt.Check(t, qt.Equals(tor.requestingPeer(r), pc))
-	closePeer(pc)
+	pc.close()
 	qt.Check(t, qt.IsNil(pc.wireState))
 	qt.Check(t, qt.IsNil(tor.requestingPeer(r)))
 	qt.Check(t, qt.HasLen(tor.requestState, 0))

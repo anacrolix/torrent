@@ -77,23 +77,12 @@ func (ws *webseedPeer) removeFilePieces(fi int) {
 	ws.cl.updateWebseedRequestsWithReason("file unavailable on webseed")
 }
 
-func (*webseedPeer) allConnStatsImplField(stats *AllConnStats) *ConnStats {
-	return &stats.WebSeeds
-}
-
 func (me *webseedPeer) cancelAllRequests() {
 	// Is there any point to this? Won't we fail to receive a chunk and cancel anyway? Should we
 	// Close requests instead?
 	for req := range me.activeRequests {
 		req.Cancel("all requests cancelled", me.t)
 	}
-}
-
-func (me *webseedPeer) peerImplWriteStatus(w io.Writer) {}
-
-func (me *webseedPeer) isLowOnRequests() bool {
-	// Updates globally instead.
-	return false
 }
 
 // Trigger the webseed request scheduler if this webseed's URL is under-utilized.
@@ -103,22 +92,37 @@ func (me *webseedPeer) onNeedUpdateRequests(reason updateRequestReason) {
 	}
 }
 
-func (me *webseedPeer) expectingChunks() bool {
-	return len(me.activeRequests) > 0
+func (me *webseedPeer) updateExpectingChunks() {
+	me.setExpectingChunks(len(me.activeRequests) > 0)
 }
 
-func (me *webseedPeer) checkReceivedChunk(RequestIndex, *pp.Message, Request) (bool, error) {
-	return true, nil
+func (ws *webseedPeer) Stats() (ret PeerStats) {
+	ws.commonPeer.locker().RLock()
+	defer ws.commonPeer.locker().RUnlock()
+	ret = ws.baseStats()
+	// Without the info, how many pieces there are isn't known.
+	if ws.t.haveInfo() {
+		ret.RemotePieceCount = pieceIndex(ws.client.Pieces.GetCardinality())
+	}
+	return
 }
 
-func (me *webseedPeer) lastWriteUploadRate() float64 {
-	// We never upload to webseeds.
-	return 0
+func (ws *webseedPeer) Close() error {
+	ws.commonPeer.locker().Lock()
+	defer ws.commonPeer.locker().Unlock()
+	ws.close()
+	return nil
+}
+
+func (ws *webseedPeer) TryAsPeerConn() (*PeerConn, bool) { return nil, false }
+
+func (ws *webseedPeer) writeStatus(w io.Writer) {
+	ws.commonPeer.writeStatus(w, ws.statusLines(), nil)
 }
 
 var _ Peer = (*webseedPeer)(nil)
 
-func (me *webseedPeer) peerImplStatusLines() []string {
+func (me *webseedPeer) statusLines() []string {
 	lines := []string{
 		me.client.Url,
 	}
@@ -183,7 +187,7 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex, logger *slog.Logger
 	t.deferUpdateRegularTrackerAnnouncing()
 	g.MakeMapIfNil(&cl.activeWebseedRequests)
 	g.MapMustAssignNew(cl.activeWebseedRequests, ws.getRequestKey(&wsReq), &wsReq)
-	updateExpectingChunks(ws)
+	ws.updateExpectingChunks()
 	panicif.Zero(ws.hostKey)
 	ws.t.cl.numWebSeedRequests[ws.hostKey]++
 	ws.slogger().Debug(
@@ -297,22 +301,47 @@ func (ws *webseedPeer) deleteActiveRequest(wr *webseedRequest) {
 	cl := ws.cl
 	cl.numWebSeedRequests[ws.hostKey]--
 	g.MustDelete(cl.activeWebseedRequests, ws.getRequestKey(wr))
-	updateExpectingChunks(ws)
+	ws.updateExpectingChunks()
 }
-
-// Maybe this should drop all existing connections, or something like that.
-func (ws *webseedPeer) drop() {}
 
 func (cn *webseedPeer) providedBadData() {
 	cn.convict(errors.New("provided bad data"), time.Minute)
 }
 
-func (ws *webseedPeer) onClose() {
-	ws.t.iterPeers(func(p Peer) {
-		if p.isLowOnRequests() {
-			p.onNeedUpdateRequests("webseedPeer.onClose")
-		}
-	})
+func (ws *webseedPeer) close() {
+	if !ws.beginClose() {
+		return
+	}
+	// Undo onGotInfo.
+	if ws.t.haveInfo() {
+		ws.client.Pieces.Iterate(func(x uint32) bool {
+			ws.t.decPieceAvailability(pieceIndex(x))
+			return true
+		})
+	}
+	ws.t.updateRequestsOfConnsLowOnRequests("webseedPeer.onClose")
+	for _, f := range ws.callbacks.PeerClosed {
+		f(ws)
+	}
+}
+
+// Handle a chunk read from a response. Called with the Client lock held, which is released while
+// the chunk is written to storage.
+func (ws *webseedPeer) receiveChunk(msg *pp.Message) error {
+	t := ws.t
+	if _, _, err := t.validateReceivedChunk(msg); err != nil {
+		return err
+	}
+	// Webseed requests are for whole slices, so a chunk is never one we no longer intended to get.
+	w := t.acceptChunk(ws, msg, true)
+	if w == nil {
+		return nil
+	}
+	t.cl.unlock()
+	writeErr := w.write()
+	t.cl.lock()
+	t.finishChunkWrite(w, writeErr)
+	return nil
 }
 
 // Do we want a chunk, assuming it's valid etc.
@@ -351,7 +380,7 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 		buf = buf[:chunkLen]
 		var n int
 		n, err = io.ReadFull(wr.request.Body, buf)
-		readBytes(ws, int64(n))
+		ws.readBytes(int64(n))
 		reqCtxErr := context.Cause(wr.request.Context())
 		if errors.Is(err, reqCtxErr) {
 			err = reqCtxErr
@@ -388,7 +417,7 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 		}
 		// TODO: This happens outside Client lock, and stats can be written out of sync with each
 		// other. Why even bother with atomics? This needs to happen after the err check above.
-		doChunkReadStats(ws, int64(n))
+		ws.doChunkReadStats(int64(n))
 		// TODO: Clean up the parameters for receiveChunk.
 		msg.Piece = buf
 		msg.Index = reqSpec.Index
@@ -397,7 +426,7 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 		// Ensure the request is pointing to the next chunk before receiving the current one. If
 		// webseed requests are triggered, we want to ensure our existing request is up to date.
 		wr.next++
-		err = receiveChunk(ws, &msg)
+		err = ws.receiveChunk(&msg)
 		stop := err != nil || wr.next >= wr.end
 		if !stop {
 			if !ws.wantedChunksInDiscardWindow(wr) {
@@ -419,10 +448,6 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 
 func (me *webseedPeer) peerPieces() *roaring.Bitmap {
 	return &me.client.Pieces
-}
-
-func (*webseedPeer) peerMinPieces() pieceIndex {
-	return 0
 }
 
 func (cn *webseedPeer) peerHasAllPieces() (all, known bool) {

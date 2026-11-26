@@ -800,8 +800,8 @@ func (t *Torrent) updateMetadataSize() {
 	}
 	counts := make(map[int]int)
 	for c := range t.conns {
-		if c.peerMetadataSize != 0 {
-			counts[c.peerMetadataSize]++
+		if size := c.wireState.PeerMetadataSize(); size != 0 {
+			counts[size]++
 		}
 	}
 	best := len(t.metadataBytes)
@@ -1124,6 +1124,14 @@ func (t *Torrent) haveInfo() bool {
 	return t.info != nil
 }
 
+// The number of pieces, if the info is known.
+func (t *Torrent) numPiecesOption() g.Option[pieceIndex] {
+	if !t.haveInfo() {
+		return g.None[pieceIndex]()
+	}
+	return g.Some(t.numPieces())
+}
+
 // isPrivate reports whether the torrent's metainfo carries BEP 27's
 // `private=1` flag. Private torrents must not be announced via DHT, must
 // not participate in PEX, and must not be discovered or announced via
@@ -1394,11 +1402,28 @@ func (t *Torrent) countBytesHashed(n int64) {
 	t.cl.counters.BytesHashed.Add(n)
 }
 
+func (t *Torrent) countPieceHashed(passed, short bool, ioErr error) {
+	for _, c := range [...]*TorrentStatCounters{&t.counters, &t.cl.counters} {
+		switch {
+		case passed:
+			c.PiecesHashedGood.Add(1)
+		case ioErr != nil:
+			c.PiecesHashedErrors.Add(1)
+		case short:
+			c.PiecesHashedMissing.Add(1)
+		default:
+			c.PiecesHashedBad.Add(1)
+		}
+	}
+}
+
 func (t *Torrent) hashPiece(piece pieceIndex) (
 	correct bool,
 	// These are peers that sent us blocks that differ from what we hash here. TODO: Track Peer not
 	// bannable addr for peer types that are rebuked differently.
 	differingPeers map[bannableAddr]struct{},
+	// Storage had less data for the piece than its length, such as when a file is missing.
+	short bool,
 	err error,
 ) {
 	p := t.piece(piece)
@@ -1421,7 +1446,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 			return
 		}
 		hw := hashWriter{hashCache: sha1HashCache}
-		differingPeers, err = t.hashPieceWithSpecificHash(piece, &hw)
+		differingPeers, short, err = t.hashPieceWithSpecificHash(piece, &hw)
 		// For a hybrid torrent, we work with the v2 files, but if we use a v1 hash, we can assume
 		// that the pieces are padded with zeroes.
 		if t.info.FilesArePieceAligned() {
@@ -1435,7 +1460,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 		correct = sum == v1Hash.Value
 	} else if hashV2 := p.state().hashV2; hashV2 != nil {
 		hw := hashWriter{hashCache: v2HashCache}
-		differingPeers, err = t.hashPieceWithSpecificHash(piece, &hw)
+		differingPeers, short, err = t.hashPieceWithSpecificHash(piece, &hw)
 		var sum [32]byte
 		// What about the final piece in a torrent? From BEP 52: "The layer is chosen so that one
 		// hash covers piece length bytes". Note that if a piece doesn't have a hash in piece layers
@@ -1448,7 +1473,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 	} else {
 		expected := p.mustGetOnlyFile().piecesRoot.Unwrap()
 		hw := &hashWriter{hashCache: v2HashCache}
-		differingPeers, err = t.hashPieceWithSpecificHash(piece, hw)
+		differingPeers, short, err = t.hashPieceWithSpecificHash(piece, hw)
 		var sum [32]byte
 		// This is *not* padded to piece length.
 		sumExactly(sum[:], hw.materialize().Sum)
@@ -1467,6 +1492,7 @@ func sumExactly(dst []byte, sum func(b []byte) []byte) {
 func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, hw *hashWriter) (
 	// These are peers that sent us blocks that differ from what we hash here.
 	differingPeers map[bannableAddr]struct{},
+	short bool,
 	err error,
 ) {
 	var w io.Writer = hw
@@ -1496,6 +1522,7 @@ func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, hw *hashWriter) (
 	maxWritten := p.Info().Length()
 	panicif.GreaterThan(written, maxWritten)
 	t.countBytesHashed(written)
+	short = written < maxWritten
 	return
 }
 
@@ -1697,7 +1724,7 @@ func (t *Torrent) updatePeerRequestsForPiece(piece pieceIndex, reason updateRequ
 			if !c.peerHasPiece(piece) {
 				return
 			}
-			if c.requestState.Interested && c.peerChoking && !c.peerAllowedFast.Contains(piece) {
+			if c.wireState.Interested() && c.wireState.PeerChoking() && !c.wireState.PeerAllowedFast().Contains(piece) {
 				return
 			}
 			c.onNeedUpdateRequests(reason)
@@ -2139,7 +2166,7 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 	}
 	_, ret = t.conns[c]
 	delete(t.conns, c)
-	if ret && c.peerMetadataSize != 0 {
+	if ret && c.wireState.PeerMetadataSize() != 0 {
 		// The conn no longer counts towards the metadata size.
 		t.updateMetadataSize()
 	}
@@ -2150,8 +2177,10 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 			t.pex.Drop(c)
 		}
 	}
-	torrent.Add("deleted connections", 1)
-	c.deleteAllRequests("Torrent.deletePeerConn")
+	if ret {
+		torrent.Add("deleted connections", 1)
+	}
+	c.onWireClosed("Torrent.deletePeerConn")
 	if len(t.conns) == 0 {
 		panicif.NotZero(len(t.requestState))
 	}
@@ -2207,9 +2236,9 @@ func (t *Torrent) dropConnection(c *PeerConn) {
 	}
 	t.logger.WithDefaultLevel(log.Debug).Printf("dropping connection to %+q, sent peerconn update", c.PeerID)
 
-	if t.deletePeerConn(c) {
-		t.openNewConns()
-	}
+	// Closing removed it from the Torrent (see PeerConn.onClose), perhaps earlier, so there may be
+	// room for another.
+	t.openNewConns()
 }
 
 // Peers as in contact information for dialing out. We should try to get some peers, even if we
@@ -2571,6 +2600,8 @@ func (t *Torrent) gauges() (ret TorrentGauges) {
 		}
 	}
 	ret.PiecesComplete = t.numPiecesCompleted()
+	ret.PiecesQueuedForHash = int(t.piecesQueuedForHash.GetCardinality())
+	ret.PiecesHashing = t.activePieceHashes
 	return
 }
 
@@ -2997,7 +3028,7 @@ func (t *Torrent) finishHash(index pieceIndex) {
 	p := t.piece(index)
 	// Do we really need to spell out that it's a copy error? If it's a failure to hash the hash
 	// will just be wrong.
-	correct, failedPeers, copyErr := t.hashPiece(index)
+	correct, failedPeers, short, copyErr := t.hashPiece(index)
 	t.storageLock.RUnlock()
 	level := slog.LevelDebug
 	switch copyErr {
@@ -3022,6 +3053,7 @@ func (t *Torrent) finishHash(index pieceIndex) {
 		t.smartBanCache.ForgetBlockSeq(iterRange(t.pieceRequestIndexBegin(index), t.pieceRequestIndexBegin(index+1)))
 	}
 	p.state().check = pieceCheckIdle
+	t.countPieceHashed(correct, short, copyErr)
 	t.pieceHashed(index, correct, copyErr)
 	t.updatePiecePriority(index, "Torrent.finishHash")
 	t.activePieceHashes--
@@ -3476,6 +3508,7 @@ func (t *Torrent) cancelRequest(r RequestIndex) *PeerConn {
 	return p
 }
 
+// The conn r is requested from, or nil. Conns undo their requests here when they close.
 func (t *Torrent) requestingPeer(r RequestIndex) (ret *PeerConn) {
 	state, ok := t.requestState[r]
 	if !ok {
@@ -3665,7 +3698,10 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 		return nil
 	case utHolepunch.Connect:
 		holepunchAddr := msg.AddrPort
-		t.logger.Printf("got holepunch connect request for %v from %p", holepunchAddr, sender)
+		initiated := sender.wireState.RecvHolepunchConnect(holepunchAddr)
+		t.logger.Printf(
+			"got holepunch connect request for %v from %p (initiated by us: %v)",
+			holepunchAddr, sender, initiated)
 		// Connects skip the dial rate limiter so the punch is timely, and any peer can send them
 		// for any address. Respect the half-open limits so a peer can't make us dial without bound.
 		if len(t.halfOpen) >= t.cl.config.HalfOpenConnsPerTorrent ||
@@ -3683,11 +3719,12 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 				setAdd(&t.cl.probablyOnlyConnectedDueToHolepunch, holepunchAddr)
 			}
 		}
+		pexFlags, _ := sender.wireState.PeerPexLiveConn(msg.AddrPort)
 		opts := outgoingConnOpts{
 			peerInfo: PeerInfo{
 				Addr:         msg.AddrPort,
 				Source:       PeerSourceUtHolepunch,
-				PexPeerFlags: sender.pex.remoteLiveConns[msg.AddrPort].UnwrapOrZeroValue(),
+				PexPeerFlags: pexFlags,
 			},
 			t: t,
 			// Don't attempt to start our own rendezvous if we fail to connect.
@@ -3701,6 +3738,10 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 		return nil
 	case utHolepunch.Error:
 		torrent.Add("holepunch error messages received", 1)
+		if !sender.wireState.RecvHolepunchError(msg.AddrPort) {
+			// Only a relay answering our rendezvous sends Error.
+			torrent.Add("holepunch unsolicited error messages received", 1)
+		}
 		t.logger.Levelf(log.Debug, "received ut_holepunch error message from %v: %v", sender, msg.ErrCode)
 		return nil
 	default:
@@ -3727,9 +3768,13 @@ func (t *Torrent) trySendHolepunchRendezvous(addrPort netip.AddrPort) error {
 			continue
 		}
 		if pc.supportsExtension(pp.ExtensionNamePex) {
-			if !g.MapContains(pc.pex.remoteLiveConns, addrPort) {
+			if _, ok := pc.wireState.PeerPexLiveConn(addrPort); !ok {
 				continue
 			}
+		}
+		if !pc.wireState.SentRendezvous(addrPort) {
+			torrent.Add("holepunch rendezvous skipped for relay awaiting too many replies", 1)
+			continue
 		}
 		t.logger.Levelf(log.Debug, "sent ut_holepunch rendezvous message to %v for %v", pc, addrPort)
 		sendUtHolepunchMsg(pc, utHolepunch.Rendezvous, addrPort, 0)

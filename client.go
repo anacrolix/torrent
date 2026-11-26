@@ -736,7 +736,7 @@ func (cl *Client) incomingConnection(nc net.Conn, releaseHandshake func()) {
 	cl.runReceivedConn(c, releaseHandshake)
 
 	cl.lock()
-	c.close()
+	closePeer(c)
 	cl.unlock()
 }
 
@@ -1018,7 +1018,7 @@ func (cl *Client) outgoingConnection(
 		}
 		return
 	}
-	defer c.close()
+	defer closePeer(c)
 	c.Discovery = opts.peerInfo.Source
 	c.trusted = opts.peerInfo.Trusted
 	opts.t.runHandshookConnLoggingErr(c)
@@ -1431,7 +1431,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 	}
 	switch d.Type {
 	case pp.DataMetadataExtensionMsgType:
-		c.modifyRelevantConnStats(add(1, func(cs *ConnStats) *Count { return &cs.MetadataChunksRead }))
+		modifyRelevantConnStats(c, add(1, func(cs *ConnStats) *Count { return &cs.MetadataChunksRead }))
 		if !c.wireState.RecvMetadataPiece(piece) {
 			return fmt.Errorf("got unexpected piece %d", piece)
 		}
@@ -1863,7 +1863,7 @@ func (cl *Client) banPeerIP(ip net.IP) {
 	g.MakeMapIfNil(&cl.badPeerIPs)
 	cl.badPeerIPs[ipAddr] = struct{}{}
 	for t := range cl.torrents {
-		t.iterPeers(func(p *Peer) {
+		t.iterPeers(func(p Peer) {
 			if p.remoteIp().Equal(ip) {
 				t.slogger().Debug("dropping peer with banned ip", "peer", p, "ip", ip)
 				// Should this be a close?
@@ -1886,7 +1886,7 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 		panic(opts.remoteAddr)
 	}
 	c = &PeerConn{
-		Peer: Peer{
+		commonPeer: commonPeer{
 			cl:        cl,
 			outgoing:  opts.outgoing,
 			peerExtendedHandshake: peerWire.ExtendedHandshake{
@@ -1909,8 +1909,6 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 			c.bannableAddr = g.Some(netipAddrPort.Addr())
 		}
 	}
-	c.legacyPeerImpl = c
-	c.peerImpl = c
 	c.setPeerLoggers(cl.logger, cl.slogger)
 	c.setRW(connStatsReadWriter{nc, c})
 	c.r = cl.newDownloadRateLimitedReader(c.r)
@@ -1920,7 +1918,7 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 		opts.remoteAddr, opts.network, opts.outgoing,
 	)
 	for _, f := range cl.config.Callbacks.NewPeer {
-		f(&c.Peer)
+		f(c)
 	}
 	return
 }

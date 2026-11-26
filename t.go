@@ -300,12 +300,12 @@ func (t *Torrent) PeerConns() []*PeerConn {
 }
 
 // TODO: Misleading method name. Webseed peers are not PeerConns.
-func (t *Torrent) WebseedPeerConns() []*Peer {
+func (t *Torrent) WebseedPeerConns() []Peer {
 	t.cl.rLock()
 	defer t.cl.rUnlock()
-	ret := make([]*Peer, 0, len(t.conns))
+	ret := make([]Peer, 0, len(t.conns))
 	for _, c := range t.webSeeds {
-		ret = append(ret, &c.peer)
+		ret = append(ret, c)
 	}
 	return ret
 }

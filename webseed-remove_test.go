@@ -177,7 +177,7 @@ func TestAWebseedAddedAgainWhileItsRequestsCloseIsScheduledCleanly(t *testing.T)
 	// cancellation and leave Client.activeWebseedRequests.
 	cl.lock()
 	for key, ws := range tt.webSeeds {
-		ws.peer.close()
+		closePeer(ws)
 		delete(tt.webSeeds, key)
 	}
 	tt.addWebSeed(url)

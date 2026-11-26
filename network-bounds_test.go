@@ -79,7 +79,7 @@ func TestReceiveChunkMustMatchRequest(t *testing.T) {
 			qt.Assert(t, qt.Equals(tt.pieceLength(0), pp.Integer(5)))
 			ri := tt.requestIndexFromRequest(Request{Index: 0})
 			c.wireState.ExpectChunk(tt.requestIndexToRequest(ri))
-			err := c.receiveChunk(&pp.Message{
+			err := receiveChunk(c, &pp.Message{
 				Type:  pp.Piece,
 				Index: 0,
 				Begin: tc.begin,

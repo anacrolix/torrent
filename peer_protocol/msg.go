@@ -95,6 +95,7 @@ func writeInteger(w io.ByteWriter, i Integer) error {
 	return nil
 }
 
+// A change to what this writes needs the same change in getPayloadLength.
 func (msg *Message) writePayloadTo(buf MessageWriter) (err error) {
 	if !msg.Keepalive {
 		err = buf.WriteByte(byte(msg.Type))

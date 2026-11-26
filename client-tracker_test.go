@@ -366,3 +366,51 @@ func TestRetainedWebsocketTrackerIsNotReleased(t *testing.T) {
 	qt.Check(t, qt.Equals(client, originalClient))
 	qt.Check(t, qt.Equals(refs, originalRefs))
 }
+
+// ModifyTrackers sends Stopped to the regular trackers it removes and then leaves them alone, leaves
+// the kept ones as they are, and starts the new ones. A removed tracker that is added back starts
+// again.
+func TestModifyTrackersStopsRemovedRegularTrackers(t *testing.T) {
+	cfg := TestingConfig(t)
+	cfg.DisableTrackers = false
+	cl, err := NewClient(cfg)
+	qt.Assert(t, qt.IsNil(err))
+	defer cl.Close()
+	removedURL, removed := newEventTracker(t)
+	keptURL, kept := newEventTracker(t)
+	addedURL, added := newEventTracker(t)
+	tor, _ := cl.AddTorrentInfoHash(metainfo.Hash{1, 2, 3})
+	tor.AddTrackers([][]string{{removedURL, keptURL}})
+	requireAnnounceEvent(t, removed, "started")
+	requireAnnounceEvent(t, kept, "started")
+	// Stopped is only announced after a successful announce.
+	announcedTo := func(url string) bool {
+		cl.lock()
+		defer cl.unlock()
+		for key, state := range tor.regularTrackerAnnounceState {
+			if string(key.url) == url && !state.lastOk.Completed.IsZero() {
+				return true
+			}
+		}
+		return false
+	}
+	for deadline := time.Now().Add(10 * time.Second); !announcedTo(removedURL); time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("started announce never completed")
+		}
+	}
+
+	tor.ModifyTrackers([][]string{{keptURL, addedURL}})
+	requireAnnounceEvent(t, added, "started")
+	requireAnnounceEvent(t, removed, "stopped")
+	select {
+	case ev := <-removed:
+		t.Fatalf("removed tracker announced to again: %q", ev)
+	case ev := <-kept:
+		t.Fatalf("kept tracker announced to again: %q", ev)
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	tor.ModifyTrackers([][]string{{keptURL, addedURL, removedURL}})
+	requireAnnounceEvent(t, removed, "started")
+}

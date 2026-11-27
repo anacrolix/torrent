@@ -260,7 +260,12 @@ func (cn *PeerConn) peerHasAllPieces() (all, known bool) {
 	if cn.wireState == nil {
 		return false, false
 	}
-	return cn.wireState.PeerHasAllPieces(cn.t.numPiecesOption())
+	// The Torrent isn't known until the handshake names it.
+	var numPieces g.Option[pieceIndex]
+	if cn.t != nil {
+		numPieces = cn.t.numPiecesOption()
+	}
+	return cn.wireState.PeerHasAllPieces(numPieces)
 }
 
 func (cn *PeerConn) onGotInfo(info *metainfo.Info) {

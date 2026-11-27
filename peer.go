@@ -60,12 +60,16 @@ func (p *PeerConn) Torrent() *Torrent {
 }
 
 func (cn *PeerConn) locker() *lockWithDeferreds {
-	return cn.t.cl.locker()
+	// The Torrent isn't known until the handshake names it. Tests build conns with only a Torrent.
+	if cn.t != nil {
+		return cn.t.cl.locker()
+	}
+	return cn.cl.locker()
 }
 
 // The best guess at number of pieces in the torrent for this peer.
 func (cn *PeerConn) bestPeerNumPieces() pieceIndex {
-	if cn.t.haveInfo() {
+	if cn.t != nil && cn.t.haveInfo() {
 		return cn.t.numPieces()
 	}
 	return cn.peerMinPieces()

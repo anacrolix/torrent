@@ -11,11 +11,22 @@ import (
 	"github.com/anacrolix/missinggo/v2/panicif"
 )
 
-// Something a Torrent receives chunks from: a PeerConn or a WebSeed. This is what Torrent asks of
-// either without knowing which it is, to credit or blame it for the pieces its chunks went into.
+// Something a Torrent receives chunks from: a *PeerConn or a *WebSeed.
+type ChunkSource interface {
+	// The Torrent it's a source for.
+	Torrent() *Torrent
+	Stats() PeerStats
+	String() string
+	// Returns the PeerConn if this is one. Equivalent to a type assertion.
+	TryAsPeerConn() (*PeerConn, bool)
+}
+
+// What Torrent asks of a ChunkSource without knowing which type it is, to credit or blame it for
+// the pieces its chunks went into.
 type chunkProvider interface {
+	ChunkSource
 	// The stats and download bookkeeping for the chunks received from it.
-	source() *chunkSource
+	source() *chunkSourceState
 	trust() connectionTrust
 	// Rebuke it for a piece that failed its hash.
 	providedBadData()
@@ -25,7 +36,7 @@ type chunkProvider interface {
 
 // The state kept for anything chunks are received from, embedded in PeerConn and WebSeed. It calls
 // nothing on the type that embeds it.
-type chunkSource struct {
+type chunkSourceState struct {
 	// First to ensure 64-bit alignment for atomics. See #262.
 	_stats ConnStats
 	// Which of a Torrent's and Client's per-type ConnStats this counts toward.
@@ -55,7 +66,7 @@ func (k chunkSourceKind) connStats(all *AllConnStats) *ConnStats {
 }
 
 // The stats every chunk source has. Requires the Client lock.
-func (cs *chunkSource) baseStats() (ret PeerStats) {
+func (cs *chunkSourceState) baseStats() (ret PeerStats) {
 	ret.ConnStats = cs._stats.Copy()
 	ret.DownloadRate = cs.downloadRate()
 	return
@@ -63,7 +74,7 @@ func (cs *chunkSource) baseStats() (ret PeerStats) {
 
 // Records whether we're owed chunks, to time how long the source is expected to be sending. Each
 // type calls this when what it's waiting for changes.
-func (cs *chunkSource) setExpectingChunks(expecting bool) {
+func (cs *chunkSourceState) setExpectingChunks(expecting bool) {
 	if expecting {
 		if cs.lastStartedExpectingToReceiveChunks.IsZero() {
 			cs.lastStartedExpectingToReceiveChunks = time.Now()
@@ -76,7 +87,7 @@ func (cs *chunkSource) setExpectingChunks(expecting bool) {
 	}
 }
 
-func (cs *chunkSource) totalExpectingTime() (ret time.Duration) {
+func (cs *chunkSourceState) totalExpectingTime() (ret time.Duration) {
 	ret = cs.cumulativeExpectedToReceiveChunks
 	if !cs.lastStartedExpectingToReceiveChunks.IsZero() {
 		ret += time.Since(cs.lastStartedExpectingToReceiveChunks)
@@ -84,7 +95,7 @@ func (cs *chunkSource) totalExpectingTime() (ret time.Duration) {
 	return
 }
 
-func (cs *chunkSource) downloadRate() float64 {
+func (cs *chunkSourceState) downloadRate() float64 {
 	num := cs._stats.BytesReadUsefulData.Int64()
 	if num == 0 {
 		return 0
@@ -92,12 +103,12 @@ func (cs *chunkSource) downloadRate() float64 {
 	return float64(num) / cs.totalExpectingTime().Seconds()
 }
 
-func (cs *chunkSource) netGoodPiecesDirtied() int64 {
+func (cs *chunkSourceState) netGoodPiecesDirtied() int64 {
 	return cs._stats.PiecesDirtiedGood.Int64() - cs._stats.PiecesDirtiedBad.Int64()
 }
 
 // The status lines every chunk source ends with.
-func (cs *chunkSource) writeStatus(w io.Writer) {
+func (cs *chunkSourceState) writeStatus(w io.Writer) {
 	fmt.Fprintf(w,
 		"%d pieces touched, good chunks: %v/%v, dr: %.1f KiB/s\n",
 		len(cs.peerTouchedPieces),
@@ -111,7 +122,7 @@ func (cs *chunkSource) writeStatus(w io.Writer) {
 // Applies f to all ConnStats that include this source: its own, and those of the Torrent and
 // Client it belongs to. t is nil for a PeerConn that hasn't completed its handshake, after which
 // it's expected to reconcile the differences.
-func (cs *chunkSource) modifyConnStats(t *Torrent, cl *Client, f func(*ConnStats)) {
+func (cs *chunkSourceState) modifyConnStats(t *Torrent, cl *Client, f func(*ConnStats)) {
 	f(&cs._stats)
 	for stats := range cs.upstreamConnStats(t, cl) {
 		f(stats)
@@ -119,7 +130,7 @@ func (cs *chunkSource) modifyConnStats(t *Torrent, cl *Client, f func(*ConnStats
 }
 
 // Yields relevant upstream ConnStats. Skips Torrent if it isn't set.
-func (cs *chunkSource) upstreamConnStats(t *Torrent, cl *Client) iter.Seq[*ConnStats] {
+func (cs *chunkSourceState) upstreamConnStats(t *Torrent, cl *Client) iter.Seq[*ConnStats] {
 	return func(yield func(*ConnStats) bool) {
 		if t != nil {
 			for s := range cs.relevantConnStats(&t.connStats) {
@@ -133,7 +144,7 @@ func (cs *chunkSource) upstreamConnStats(t *Torrent, cl *Client) iter.Seq[*ConnS
 }
 
 // Iterates base and per-type ConnStats from all.
-func (cs *chunkSource) relevantConnStats(all *AllConnStats) iter.Seq[*ConnStats] {
+func (cs *chunkSourceState) relevantConnStats(all *AllConnStats) iter.Seq[*ConnStats] {
 	return func(yield func(*ConnStats) bool) {
 		if !yield(&all.ConnStats) {
 			return

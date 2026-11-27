@@ -47,7 +47,7 @@ type PeerStatus struct {
 // Maintains the state of a BitTorrent-protocol based connection with a peer.
 type PeerConn struct {
 	// First for the alignment of its stats.
-	chunkSource
+	chunkSourceState
 	closedState
 
 	cl *Client
@@ -175,11 +175,11 @@ func (cn *PeerConn) writeStatus(w io.Writer) {
 	}
 	fmt.Fprintln(w, strings.Join(cn.statusLines(), "\n"))
 	cn.writeConnStatus(w)
-	cn.chunkSource.writeStatus(w)
+	cn.chunkSourceState.writeStatus(w)
 }
 
-func (cn *PeerConn) source() *chunkSource {
-	return &cn.chunkSource
+func (cn *PeerConn) source() *chunkSourceState {
+	return &cn.chunkSourceState
 }
 
 func (cn *PeerConn) Stats() (ret PeerStats) {
@@ -198,7 +198,7 @@ func (cn *PeerConn) Close() error {
 	return nil
 }
 
-// Deprecated: Peer is PeerConn. Web seeds are no longer peers, see Torrent.WebSeeds.
+// Returns the PeerConn from a ChunkSource if it is one. Always succeeds on a PeerConn.
 func (cn *PeerConn) TryAsPeerConn() (*PeerConn, bool) { return cn, true }
 
 func (cn *PeerConn) statusLines() []string {
@@ -2114,9 +2114,6 @@ func (c *PeerConn) receiveChunkPrologue(msg *pp.Message) (_ *pendingChunkWrite, 
 	w.recordBlockForSmartBan = sync.OnceFunc(func() {
 		c.recordBlockForSmartBan(req, data)
 	})
-	for _, f := range c.t.cl.config.Callbacks.ReceivedUsefulData {
-		f(ReceivedUsefulDataEvent{c, msg})
-	}
 	return w, nil
 }
 

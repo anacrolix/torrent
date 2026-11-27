@@ -25,10 +25,10 @@ import (
 
 // A web seed (BEP 19) of a Torrent. It isn't a peer: it has no connection, choking or interest, and
 // its requests are planned across the Client (see webseed-requesting.go). What it has in common
-// with a PeerConn is that chunks are received from it, which is chunkSource.
+// with a PeerConn is that chunks are received from it, which is chunkSourceState.
 type WebSeed struct {
 	// First field for stats alignment.
-	chunkSource
+	chunkSourceState
 	closedState
 	cl             *Client
 	t              *Torrent
@@ -120,6 +120,9 @@ func (ws *WebSeed) Close() error {
 	return nil
 }
 
+// A web seed isn't a PeerConn. See ChunkSource.
+func (ws *WebSeed) TryAsPeerConn() (*PeerConn, bool) { return nil, false }
+
 // The Torrent the web seed belongs to.
 func (ws *WebSeed) Torrent() *Torrent {
 	return ws.t
@@ -130,11 +133,11 @@ func (ws *WebSeed) writeStatus(w io.Writer) {
 		fmt.Fprint(w, "CLOSED: ")
 	}
 	fmt.Fprintln(w, strings.Join(ws.statusLines(), "\n"))
-	ws.chunkSource.writeStatus(w)
+	ws.chunkSourceState.writeStatus(w)
 }
 
-func (ws *WebSeed) source() *chunkSource {
-	return &ws.chunkSource
+func (ws *WebSeed) source() *chunkSourceState {
+	return &ws.chunkSourceState
 }
 
 // Web seeds are never implicitly trusted.

@@ -40,7 +40,11 @@ type Callbacks struct {
 	StatusUpdated []func(StatusUpdatedEvent)
 }
 
-type ReceivedUsefulDataEvent = PeerMessageEvent
+type ReceivedUsefulDataEvent struct {
+	// Where the data came from: a *PeerConn or a *WebSeed.
+	Peer    ChunkSource
+	Message *pp.Message
+}
 
 type PeerMessageEvent struct {
 	Peer    *Peer

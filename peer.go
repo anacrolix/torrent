@@ -254,6 +254,9 @@ func (t *Torrent) acceptChunk(from chunkProvider, msg *pp.Message, intended bool
 	if intended {
 		modify(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulIntendedData }))
 	}
+	for _, f := range t.cl.config.Callbacks.ReceivedUsefulData {
+		f(ReceivedUsefulDataEvent{from, msg})
+	}
 	cs.lastUsefulChunkReceived = time.Now()
 
 	// Record that the chunk hasn't been written yet before we do anything with it.

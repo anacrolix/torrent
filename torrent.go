@@ -3437,9 +3437,9 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	// anything.
 	const defaultMaxRequests = 2
 	ws := WebSeed{
-		chunkSource: chunkSource{kind: chunkSourceWebSeed},
-		cl:          t.cl,
-		t:           t,
+		chunkSourceState: chunkSourceState{kind: chunkSourceWebSeed},
+		cl:               t.cl,
+		t:                t,
 		client: webseed.Client{
 			HttpClient:              t.cl.httpClient,
 			Url:                     url,

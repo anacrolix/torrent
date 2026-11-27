@@ -320,13 +320,14 @@ type (
 // Locks a Torrent's state in domain mode, or the whole Client in exclusive mode. Returned by
 // Peer.locker.
 type torrentLocker struct {
+	cl        *Client
 	t         *Torrent
 	exclusive bool
 }
 
 func (me torrentLocker) Lock() {
 	if me.exclusive {
-		me.t.cl.lock()
+		me.cl.lock()
 	} else {
 		me.t.lockDomain()
 	}
@@ -334,7 +335,7 @@ func (me torrentLocker) Lock() {
 
 func (me torrentLocker) Unlock() {
 	if me.exclusive {
-		me.t.cl.unlock()
+		me.cl.unlock()
 	} else {
 		me.t.unlockDomain()
 	}
@@ -344,7 +345,7 @@ func (me torrentLocker) Unlock() {
 // lock would race with domain-mode writers.
 func (me torrentLocker) RLock() {
 	if me.exclusive {
-		me.t.cl.lock()
+		me.cl.lock()
 	} else {
 		me.t.rLockDomain()
 	}
@@ -352,17 +353,25 @@ func (me torrentLocker) RLock() {
 
 func (me torrentLocker) RUnlock() {
 	if me.exclusive {
-		me.t.cl.unlock()
+		me.cl.unlock()
 	} else {
 		me.t.rUnlockDomain()
 	}
 }
 
 func (me torrentLocker) Defer(action func()) {
+	if me.t == nil {
+		me.cl.locker().Defer(action)
+		return
+	}
 	me.t.activeLock().Defer(action)
 }
 
 func (me torrentLocker) DeferUniqueUnaryFunc(arg any, action func()) {
+	if me.t == nil {
+		me.cl.locker().DeferUniqueUnaryFunc(arg, action)
+		return
+	}
 	me.t.activeLock().DeferUniqueUnaryFunc(arg, action)
 }
 

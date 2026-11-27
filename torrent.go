@@ -2132,31 +2132,70 @@ func (t *Torrent) addTrackers(announceList [][]string) {
 	t.updateWantPeersEvent()
 }
 
+// modifyTrackers replaces the torrent's trackers with announceList. Trackers that are kept carry on
+// as they were; removed ones are stopped (regular trackers are sent a stopped event, then
+// forgotten); new ones are started.
 func (t *Torrent) modifyTrackers(announceList [][]string) {
-	remaining := make(map[trackerAnnouncerKey]bool)
+	wanted := make(map[torrentTrackerAnnouncerKey]bool)
 	for _, tier := range announceList {
 		for _, trackerURL := range tier {
-			remaining[trackerAnnouncerKey(trackerURL)] = true
+			for _, key := range t.trackerAnnouncerKeys(trackerURL) {
+				wanted[key] = true
+			}
 		}
 	}
+	d := &t.cl.regularTrackerAnnounceDispatcher
 	var workers errgroup.Group
 	for key, v := range t.trackerAnnouncers {
+		if wanted[key] {
+			continue
+		}
+		delete(t.trackerAnnouncers, key)
 		if isWebsocketTrackerAnnouncer(v) {
-			if remaining[key.url] {
-				continue
-			}
 			v.Stop()
-			delete(t.trackerAnnouncers, key)
 			continue
 		}
 		workers.Go(func() error {
 			v.Stop()
 			return nil
 		})
+		if state, ok := t.regularTrackerAnnounceState[key]; ok {
+			state.trackerRemoved = true
+			delete(t.regularTrackerAnnounceState, key)
+			// The dispatcher now sees that the torrent no longer uses this tracker, and sends it
+			// stopped (nextAnnounceEvent). An announce under way syncs the key itself when it
+			// finishes; syncing now could forget the key's state while that announce still needs
+			// it.
+			if cur, ok := d.announceData.Get(key); !ok || !cur.active {
+				d.syncAnnounceState(key)
+			}
+		}
 	}
 	workers.Wait()
+	d.updateTimer()
 	t.announceList = nil
 	t.addTrackers(announceList)
+}
+
+// trackerAnnouncerKeys are the announcer keys startScrapingTracker makes for a tracker URL.
+func (t *Torrent) trackerAnnouncerKeys(_url string) (keys []torrentTrackerAnnouncerKey) {
+	if _url == "" {
+		return nil
+	}
+	u, err := url.Parse(_url)
+	if err != nil {
+		return nil
+	}
+	if u.Scheme == "udp" {
+		u.Scheme = "udp4"
+		keys = append(keys, t.trackerAnnouncerKeys(u.String())...)
+		u.Scheme = "udp6"
+		return append(keys, t.trackerAnnouncerKeys(u.String())...)
+	}
+	for ih := range t.iterShortInfohashes() {
+		keys = append(keys, torrentTrackerAnnouncerKey{ShortInfohash: ih, url: trackerAnnouncerKey(u.String())})
+	}
+	return keys
 }
 
 // Don't call this before the info is available.

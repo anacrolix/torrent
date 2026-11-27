@@ -122,8 +122,9 @@ func (p *Peer) Torrent() *Torrent {
 }
 
 func (p *Peer) Stats() (ret PeerStats) {
-	p.locker().RLock()
-	defer p.locker().RUnlock()
+	l := p.locker()
+	l.RLock()
+	defer l.RUnlock()
 	ret.ConnStats = p._stats.Copy()
 	ret.DownloadRate = p.downloadRate()
 	ret.LastWriteUploadRate = p.peerImpl.lastWriteUploadRate()
@@ -145,15 +146,22 @@ func (cn *Peer) updateExpectingChunks() {
 }
 
 // Locks the Peer's Torrent in domain mode. Webseed peers use exclusive mode, since webseed
-// requests are planned Client-wide. See lockDomain.
+// requests are planned Client-wide. See lockDomain. Before the handshake names a Torrent, this is
+// exclusive mode on the Client. Callers that might span the Torrent being set should keep the
+// returned locker for the Unlock.
 func (cn *Peer) locker() torrentLocker {
 	_, webseed := cn.peerImpl.(*webseedPeer)
-	return torrentLocker{t: cn.t, exclusive: webseed}
+	// Tests build conns with only a Torrent.
+	cl := cn.cl
+	if cn.t != nil {
+		cl = cn.t.cl
+	}
+	return torrentLocker{cl: cl, t: cn.t, exclusive: webseed || cn.t == nil}
 }
 
 // The best guess at number of pieces in the torrent for this peer.
 func (cn *Peer) bestPeerNumPieces() pieceIndex {
-	if cn.t.haveInfo() {
+	if cn.t != nil && cn.t.haveInfo() {
 		return cn.t.numPieces()
 	}
 	return cn.peerMinPieces()
@@ -231,8 +239,9 @@ func (p *Peer) close() {
 }
 
 func (p *Peer) Close() error {
-	p.locker().Lock()
-	defer p.locker().Unlock()
+	l := p.locker()
+	l.Lock()
+	defer l.Unlock()
 	p.close()
 	return nil
 }

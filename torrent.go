@@ -2877,7 +2877,12 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 			if len(bannableTouchers) >= 1 {
 				c := bannableTouchers[0]
 				if len(bannableTouchers) != 1 {
-					t.logger.Levelf(log.Debug, "would have banned %v for touching piece %v after failed piece check", c, piece)
+					// A conn would be banned by its address. A web seed has none of its own.
+					var culprit any = c
+					if pc, ok := c.TryAsPeerConn(); ok {
+						culprit = pc.remoteIp()
+					}
+					t.logger.Levelf(log.Debug, "would have banned %v for touching piece %v after failed piece check", culprit, piece)
 				} else {
 					// Turns out it's still useful to ban peers like this because if there's only a
 					// single peer for a piece, and we never progress that piece to completion, we

@@ -23,12 +23,18 @@ type Callbacks struct {
 	// Provides secret keys to be tried against incoming encrypted connections.
 	ReceiveEncryptedHandshakeSkeys mse.SecretKeyIter
 
+	// Called for each chunk received that we wanted, from a peer connection or a web seed. This is
+	// the only callback that reports web seeds: NewPeer and PeerClosed are not called for them, so
+	// the event's Source may be a *WebSeed that no other callback has mentioned. Torrent.WebSeeds
+	// lists a Torrent's web seeds.
 	ReceivedUsefulData []func(ReceivedUsefulDataEvent)
 	ReceivedRequested  []func(PeerMessageEvent)
 	DeletedRequest     []func(PeerRequestEvent)
 	SentRequest        []func(PeerRequestEvent)
-	PeerClosed         []func(*Peer)
-	NewPeer            []func(*Peer)
+	// Called when a peer connection is closed. Not called for web seeds.
+	PeerClosed []func(*Peer)
+	// Called when a peer connection is created, before its handshakes. Not called for web seeds.
+	NewPeer []func(*Peer)
 	// Called when a PeerConn has been added to a Torrent. It's finished all BitTorrent protocol
 	// handshakes, and is about to start sending and receiving BitTorrent messages. The extended
 	// handshake has not yet occurred. This is a good time to alter the supported extension

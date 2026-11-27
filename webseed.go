@@ -172,7 +172,7 @@ func (me *WebSeed) statusLines() []string {
 }
 
 func (ws *WebSeed) String() string {
-	return fmt.Sprintf("webseed peer for %q", ws.client.Url)
+	return fmt.Sprintf("webseed %q", ws.client.Url)
 }
 
 func (ws *WebSeed) onGotInfo(info *metainfo.Info) {
@@ -286,7 +286,7 @@ func (ws *WebSeed) sliceProcessor(webseedRequest *webseedRequest) {
 	locker := ws.locker
 	err := ws.readChunks(webseedRequest)
 	if webseed.PrintDebug && webseedRequest.next < webseedRequest.end {
-		fmt.Printf("webseed peer request %v in %v stopped reading chunks early: %v\n", webseedRequest, ws.t.name(), err)
+		fmt.Printf("webseed request %v in %v stopped reading chunks early: %v\n", webseedRequest, ws.t.name(), err)
 		if err == nil {
 			ws.t.cl.dumpCurrentWebseedRequests()
 		}

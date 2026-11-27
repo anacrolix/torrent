@@ -42,6 +42,10 @@ type Callbacks struct {
 
 type ReceivedUsefulDataEvent struct {
 	// Where the data came from: a *PeerConn or a *WebSeed.
+	Source ChunkSource
+	// The same value as Source.
+	//
+	// Deprecated: Use Source.
 	Peer    ChunkSource
 	Message *pp.Message
 }

@@ -95,9 +95,10 @@ func TestWebseedDownloadsV2TorrentWithShortPiecesBetweenFiles(t *testing.T) {
 	cfg := TestingConfig(t)
 	cfg.Callbacks.ReceivedUsefulData = append(cfg.Callbacks.ReceivedUsefulData, func(event ReceivedUsefulDataEvent) {
 		usefulBytes.Add(int64(len(event.Message.Piece)))
-		_, isWebSeed := event.Peer.(*WebSeed)
-		_, isPeerConn := event.Peer.TryAsPeerConn()
-		if !isWebSeed || isPeerConn || event.Peer.Torrent() == nil {
+		_, isWebSeed := event.Source.(*WebSeed)
+		_, isPeerConn := event.Source.TryAsPeerConn()
+		// The deprecated field carries the same value.
+		if !isWebSeed || isPeerConn || event.Source.Torrent() == nil || event.Peer != event.Source {
 			notFromWebSeed.Add(1)
 		}
 	})

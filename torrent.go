@@ -1407,11 +1407,28 @@ func (t *Torrent) countBytesHashed(n int64) {
 	t.cl.counters.BytesHashed.Add(n)
 }
 
+func (t *Torrent) countPieceHashed(passed, short bool, ioErr error) {
+	for _, c := range [...]*TorrentStatCounters{&t.counters, &t.cl.counters} {
+		switch {
+		case passed:
+			c.PiecesHashedGood.Add(1)
+		case ioErr != nil:
+			c.PiecesHashedErrors.Add(1)
+		case short:
+			c.PiecesHashedMissing.Add(1)
+		default:
+			c.PiecesHashedBad.Add(1)
+		}
+	}
+}
+
 func (t *Torrent) hashPiece(piece pieceIndex) (
 	correct bool,
 	// These are peers that sent us blocks that differ from what we hash here. TODO: Track Peer not
 	// bannable addr for peer types that are rebuked differently.
 	differingPeers map[bannableAddr]struct{},
+	// Storage had less data for the piece than its length, such as when a file is missing.
+	short bool,
 	err error,
 ) {
 	p := t.piece(piece)
@@ -1434,7 +1451,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 			return
 		}
 		hw := hashWriter{hashCache: sha1HashCache}
-		differingPeers, err = t.hashPieceWithSpecificHash(piece, &hw)
+		differingPeers, short, err = t.hashPieceWithSpecificHash(piece, &hw)
 		// For a hybrid torrent, we work with the v2 files, but if we use a v1 hash, we can assume
 		// that the pieces are padded with zeroes.
 		if t.info.FilesArePieceAligned() {
@@ -1448,7 +1465,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 		correct = sum == v1Hash.Value
 	} else if hashV2 := p.state().hashV2; hashV2 != nil {
 		hw := hashWriter{hashCache: v2HashCache}
-		differingPeers, err = t.hashPieceWithSpecificHash(piece, &hw)
+		differingPeers, short, err = t.hashPieceWithSpecificHash(piece, &hw)
 		var sum [32]byte
 		// What about the final piece in a torrent? From BEP 52: "The layer is chosen so that one
 		// hash covers piece length bytes". Note that if a piece doesn't have a hash in piece layers
@@ -1461,7 +1478,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 	} else {
 		expected := p.mustGetOnlyFile().piecesRoot.Unwrap()
 		hw := &hashWriter{hashCache: v2HashCache}
-		differingPeers, err = t.hashPieceWithSpecificHash(piece, hw)
+		differingPeers, short, err = t.hashPieceWithSpecificHash(piece, hw)
 		var sum [32]byte
 		// This is *not* padded to piece length.
 		sumExactly(sum[:], hw.materialize().Sum)
@@ -1480,6 +1497,7 @@ func sumExactly(dst []byte, sum func(b []byte) []byte) {
 func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, hw *hashWriter) (
 	// These are peers that sent us blocks that differ from what we hash here.
 	differingPeers map[bannableAddr]struct{},
+	short bool,
 	err error,
 ) {
 	var w io.Writer = hw
@@ -1509,6 +1527,7 @@ func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, hw *hashWriter) (
 	maxWritten := p.Info().Length()
 	panicif.GreaterThan(written, maxWritten)
 	t.countBytesHashed(written)
+	short = written < maxWritten
 	return
 }
 
@@ -2098,31 +2117,70 @@ func (t *Torrent) addTrackers(announceList [][]string) {
 	t.updateWantPeersEvent()
 }
 
+// modifyTrackers replaces the torrent's trackers with announceList. Trackers that are kept carry on
+// as they were; removed ones are stopped (regular trackers are sent a stopped event, then
+// forgotten); new ones are started.
 func (t *Torrent) modifyTrackers(announceList [][]string) {
-	remaining := make(map[trackerAnnouncerKey]bool)
+	wanted := make(map[torrentTrackerAnnouncerKey]bool)
 	for _, tier := range announceList {
 		for _, trackerURL := range tier {
-			remaining[trackerAnnouncerKey(trackerURL)] = true
+			for _, key := range t.trackerAnnouncerKeys(trackerURL) {
+				wanted[key] = true
+			}
 		}
 	}
+	d := &t.cl.regularTrackerAnnounceDispatcher
 	var workers errgroup.Group
 	for key, v := range t.trackerAnnouncers {
+		if wanted[key] {
+			continue
+		}
+		delete(t.trackerAnnouncers, key)
 		if isWebsocketTrackerAnnouncer(v) {
-			if remaining[key.url] {
-				continue
-			}
 			v.Stop()
-			delete(t.trackerAnnouncers, key)
 			continue
 		}
 		workers.Go(func() error {
 			v.Stop()
 			return nil
 		})
+		if state, ok := t.regularTrackerAnnounceState[key]; ok {
+			state.trackerRemoved = true
+			delete(t.regularTrackerAnnounceState, key)
+			// The dispatcher now sees that the torrent no longer uses this tracker, and sends it
+			// stopped (nextAnnounceEvent). An announce under way syncs the key itself when it
+			// finishes; syncing now could forget the key's state while that announce still needs
+			// it.
+			if cur, ok := d.announceData.Get(key); !ok || !cur.active {
+				d.syncAnnounceState(key)
+			}
+		}
 	}
 	workers.Wait()
+	d.updateTimer()
 	t.announceList = nil
 	t.addTrackers(announceList)
+}
+
+// trackerAnnouncerKeys are the announcer keys startScrapingTracker makes for a tracker URL.
+func (t *Torrent) trackerAnnouncerKeys(_url string) (keys []torrentTrackerAnnouncerKey) {
+	if _url == "" {
+		return nil
+	}
+	u, err := url.Parse(_url)
+	if err != nil {
+		return nil
+	}
+	if u.Scheme == "udp" {
+		u.Scheme = "udp4"
+		keys = append(keys, t.trackerAnnouncerKeys(u.String())...)
+		u.Scheme = "udp6"
+		return append(keys, t.trackerAnnouncerKeys(u.String())...)
+	}
+	for ih := range t.iterShortInfohashes() {
+		keys = append(keys, torrentTrackerAnnouncerKey{ShortInfohash: ih, url: trackerAnnouncerKey(u.String())})
+	}
+	return keys
 }
 
 // Don't call this before the info is available.
@@ -2586,6 +2644,8 @@ func (t *Torrent) gauges() (ret TorrentGauges) {
 		}
 	}
 	ret.PiecesComplete = t.numPiecesCompleted()
+	ret.PiecesQueuedForHash = int(t.piecesQueuedForHash.GetCardinality())
+	ret.PiecesHashing = t.activePieceHashes
 	return
 }
 
@@ -3013,7 +3073,7 @@ func (t *Torrent) finishHash(index pieceIndex) {
 	p := t.piece(index)
 	// Do we really need to spell out that it's a copy error? If it's a failure to hash the hash
 	// will just be wrong.
-	correct, failedPeers, copyErr := t.hashPiece(index)
+	correct, failedPeers, short, copyErr := t.hashPiece(index)
 	t.storageLock.RUnlock()
 	level := slog.LevelDebug
 	switch copyErr {
@@ -3038,6 +3098,7 @@ func (t *Torrent) finishHash(index pieceIndex) {
 		t.smartBanCache.ForgetBlockSeq(iterRange(t.pieceRequestIndexBegin(index), t.pieceRequestIndexBegin(index+1)))
 	}
 	p.state().check = pieceCheckIdle
+	t.countPieceHashed(correct, short, copyErr)
 	t.pieceHashed(index, correct, copyErr)
 	t.updatePiecePriority(index, "Torrent.finishHash")
 	t.activePieceHashes--

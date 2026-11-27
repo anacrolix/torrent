@@ -32,11 +32,12 @@ import (
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
-	"github.com/anacrolix/torrent/internal/amortize"
-	"github.com/anacrolix/torrent/internal/extracmp"
 	"github.com/cespare/xxhash/v2"
 	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
+
+	"github.com/anacrolix/torrent/internal/amortize"
+	"github.com/anacrolix/torrent/internal/extracmp"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/check"
@@ -1886,12 +1887,10 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 		panic(opts.remoteAddr)
 	}
 	c = &PeerConn{
-		commonPeer: commonPeer{
-			cl:         cl,
-			RemoteAddr: opts.remoteAddr,
-			callbacks:  &cl.config.Callbacks,
-		},
-		outgoing: opts.outgoing,
+		cl:         cl,
+		RemoteAddr: opts.remoteAddr,
+		callbacks:  &cl.config.Callbacks,
+		outgoing:   opts.outgoing,
 		peerExtendedHandshake: peerWire.ExtendedHandshake{
 			PeerMaxRequests: 250,
 		},

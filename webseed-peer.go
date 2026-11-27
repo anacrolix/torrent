@@ -14,7 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/RoaringBitmap/roaring/v2"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"golang.org/x/net/http2"
@@ -24,9 +23,16 @@ import (
 	"github.com/anacrolix/torrent/webseed"
 )
 
-type webseedPeer struct {
+// A web seed (BEP 19) of a Torrent. It isn't a peer: it has no connection, choking or interest, and
+// its requests are planned across the Client (see webseed-requesting.go). What it has in common
+// with a PeerConn is that chunks are received from it, which is chunkSource.
+type WebSeed struct {
 	// First field for stats alignment.
-	commonPeer
+	chunkSource
+	closedState
+	cl             *Client
+	t              *Torrent
+	_slogger       *slog.Logger
 	client         webseed.Client
 	activeRequests map[*webseedRequest]struct{}
 	locker         sync.Locker
@@ -39,11 +45,11 @@ type webseedPeer struct {
 	lastCrime       error
 }
 
-func (me *webseedPeer) suspended() bool {
+func (me *WebSeed) suspended() bool {
 	return me.lastCrime != nil && time.Now().Before(me.penanceComplete)
 }
 
-func (me *webseedPeer) convict(err error, term time.Duration) {
+func (me *WebSeed) convict(err error, term time.Duration) {
 	if me.suspended() {
 		return
 	}
@@ -68,7 +74,7 @@ func webseedFileUnavailable(statusCode int) bool {
 // removeFilePieces removes pieces for the given file index from this webseed's bitmap.
 // Must be called with the client lock held.
 // TODO: Re-add pieces after an interval in case the file becomes available later.
-func (ws *webseedPeer) removeFilePieces(fi int) {
+func (ws *WebSeed) removeFilePieces(fi int) {
 	for pi := range ws.t.Files()[fi].PieceIndices() {
 		if ws.client.Pieces.CheckedRemove(uint32(pi)) {
 			ws.t.decPieceAvailability(pieceIndex(pi))
@@ -77,7 +83,7 @@ func (ws *webseedPeer) removeFilePieces(fi int) {
 	ws.cl.updateWebseedRequestsWithReason("file unavailable on webseed")
 }
 
-func (me *webseedPeer) cancelAllRequests() {
+func (me *WebSeed) cancelAllRequests() {
 	// Is there any point to this? Won't we fail to receive a chunk and cancel anyway? Should we
 	// Close requests instead?
 	for req := range me.activeRequests {
@@ -86,19 +92,19 @@ func (me *webseedPeer) cancelAllRequests() {
 }
 
 // Trigger the webseed request scheduler if this webseed's URL is under-utilized.
-func (me *webseedPeer) onNeedUpdateRequests(reason updateRequestReason) {
+func (me *WebSeed) onNeedUpdateRequests(reason updateRequestReason) {
 	if me.cl.webseedHostLowOnRequests(me.hostKey) {
 		me.cl.updateWebseedRequestsWithReason(reason)
 	}
 }
 
-func (me *webseedPeer) updateExpectingChunks() {
+func (me *WebSeed) updateExpectingChunks() {
 	me.setExpectingChunks(len(me.activeRequests) > 0)
 }
 
-func (ws *webseedPeer) Stats() (ret PeerStats) {
-	ws.commonPeer.locker().RLock()
-	defer ws.commonPeer.locker().RUnlock()
+func (ws *WebSeed) Stats() (ret PeerStats) {
+	ws.cl.locker().RLock()
+	defer ws.cl.locker().RUnlock()
 	ret = ws.baseStats()
 	// Without the info, how many pieces there are isn't known.
 	if ws.t.haveInfo() {
@@ -107,22 +113,42 @@ func (ws *webseedPeer) Stats() (ret PeerStats) {
 	return
 }
 
-func (ws *webseedPeer) Close() error {
-	ws.commonPeer.locker().Lock()
-	defer ws.commonPeer.locker().Unlock()
+func (ws *WebSeed) Close() error {
+	ws.cl.locker().Lock()
+	defer ws.cl.locker().Unlock()
 	ws.close()
 	return nil
 }
 
-func (ws *webseedPeer) TryAsPeerConn() (*PeerConn, bool) { return nil, false }
-
-func (ws *webseedPeer) writeStatus(w io.Writer) {
-	ws.commonPeer.writeStatus(w, ws.statusLines(), nil)
+// The Torrent the web seed belongs to.
+func (ws *WebSeed) Torrent() *Torrent {
+	return ws.t
 }
 
-var _ Peer = (*webseedPeer)(nil)
+func (ws *WebSeed) writeStatus(w io.Writer) {
+	if ws.closed.IsSet() {
+		fmt.Fprint(w, "CLOSED: ")
+	}
+	fmt.Fprintln(w, strings.Join(ws.statusLines(), "\n"))
+	ws.chunkSource.writeStatus(w)
+}
 
-func (me *webseedPeer) statusLines() []string {
+func (ws *WebSeed) source() *chunkSource {
+	return &ws.chunkSource
+}
+
+// Web seeds are never implicitly trusted.
+func (ws *WebSeed) trust() connectionTrust {
+	return connectionTrust{NetGoodPiecesDirted: ws.netGoodPiecesDirtied()}
+}
+
+func (ws *WebSeed) modifyRelevantConnStats(f func(*ConnStats)) {
+	ws.modifyConnStats(ws.t, ws.cl, f)
+}
+
+var _ chunkProvider = (*WebSeed)(nil)
+
+func (me *WebSeed) statusLines() []string {
 	lines := []string{
 		me.client.Url,
 	}
@@ -142,11 +168,11 @@ func (me *webseedPeer) statusLines() []string {
 	return lines
 }
 
-func (ws *webseedPeer) String() string {
+func (ws *WebSeed) String() string {
 	return fmt.Sprintf("webseed peer for %q", ws.client.Url)
 }
 
-func (ws *webseedPeer) onGotInfo(info *metainfo.Info) {
+func (ws *WebSeed) onGotInfo(info *metainfo.Info) {
 	ws.client.SetInfo(info, ws.t.fileSegmentsIndex.UnwrapPtr())
 	// There should be probably be a callback in Client instead, so it can remove pieces at its whim
 	// too.
@@ -156,14 +182,14 @@ func (ws *webseedPeer) onGotInfo(info *metainfo.Info) {
 	})
 }
 
-func (ws *webseedPeer) intoSpec(begin, end RequestIndex) webseed.RequestSpec {
+func (ws *WebSeed) intoSpec(begin, end RequestIndex) webseed.RequestSpec {
 	t := ws.t
 	start := t.requestIndexBegin(begin)
 	endOff := t.requestIndexEnd(end - 1)
 	return webseed.RequestSpec{Start: start, Length: endOff - start}
 }
 
-func (ws *webseedPeer) spawnRequest(begin, end RequestIndex, logger *slog.Logger) {
+func (ws *WebSeed) spawnRequest(begin, end RequestIndex, logger *slog.Logger) {
 	extWsReq := ws.client.StartNewRequest(ws.closedCtx, ws.intoSpec(begin, end), logger)
 	wsReq := webseedRequest{
 		logger:  logger,
@@ -175,7 +201,7 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex, logger *slog.Logger
 	if ws.hasOverlappingRequests(begin, end) {
 		if webseed.PrintDebug {
 			logger.Warn(
-				"webseedPeer.spawnRequest: request overlaps existing",
+				"WebSeed.spawnRequest: request overlaps existing",
 				"new", &wsReq,
 				"torrent", ws.t)
 		}
@@ -199,7 +225,7 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex, logger *slog.Logger
 	go ws.sliceProcessor(&wsReq)
 }
 
-func (me *webseedPeer) getRequestKey(wr *webseedRequest) webseedUniqueRequestKey {
+func (me *WebSeed) getRequestKey(wr *webseedRequest) webseedUniqueRequestKey {
 	// This is used to find the request in the Client's active requests map.
 	return webseedUniqueRequestKey{
 		url:        me.url,
@@ -208,7 +234,7 @@ func (me *webseedPeer) getRequestKey(wr *webseedRequest) webseedUniqueRequestKey
 	}
 }
 
-func (me *webseedPeer) hasOverlappingRequests(begin, end RequestIndex) bool {
+func (me *WebSeed) hasOverlappingRequests(begin, end RequestIndex) bool {
 	for req := range me.activeRequests {
 		if req.cancelled.Load() {
 			continue
@@ -220,7 +246,7 @@ func (me *webseedPeer) hasOverlappingRequests(begin, end RequestIndex) bool {
 	return false
 }
 
-func (ws *webseedPeer) readChunksErrorLevel(err error, req *webseedRequest) slog.Level {
+func (ws *WebSeed) readChunksErrorLevel(err error, req *webseedRequest) slog.Level {
 	if req.cancelled.Load() {
 		return slog.LevelDebug
 	}
@@ -251,7 +277,7 @@ func (ws *webseedPeer) readChunksErrorLevel(err error, req *webseedRequest) slog
 }
 
 // Reads chunks from the responses for the webseed slice.
-func (ws *webseedPeer) sliceProcessor(webseedRequest *webseedRequest) {
+func (ws *WebSeed) sliceProcessor(webseedRequest *webseedRequest) {
 	// Detach cost association from webseed update requests routine.
 	pprof.SetGoroutineLabels(context.Background())
 	locker := ws.locker
@@ -288,12 +314,12 @@ func (ws *webseedPeer) sliceProcessor(webseedRequest *webseedRequest) {
 	ws.deleteActiveRequest(webseedRequest)
 	cl := ws.cl
 	if cl.webseedHostLowOnRequests(ws.hostKey) {
-		cl.updateWebseedRequestsWithReason("webseedPeer.runRequest low on requests")
+		cl.updateWebseedRequestsWithReason("WebSeed.runRequest low on requests")
 	}
 	locker.Unlock()
 }
 
-func (ws *webseedPeer) deleteActiveRequest(wr *webseedRequest) {
+func (ws *WebSeed) deleteActiveRequest(wr *webseedRequest) {
 	g.MustDelete(ws.activeRequests, wr)
 	if len(ws.activeRequests) == 0 {
 		ws.t.deferUpdateRegularTrackerAnnouncing()
@@ -304,11 +330,11 @@ func (ws *webseedPeer) deleteActiveRequest(wr *webseedRequest) {
 	ws.updateExpectingChunks()
 }
 
-func (cn *webseedPeer) providedBadData() {
+func (cn *WebSeed) providedBadData() {
 	cn.convict(errors.New("provided bad data"), time.Minute)
 }
 
-func (ws *webseedPeer) close() {
+func (ws *WebSeed) close() {
 	if !ws.beginClose() {
 		return
 	}
@@ -319,15 +345,12 @@ func (ws *webseedPeer) close() {
 			return true
 		})
 	}
-	ws.t.updateRequestsOfConnsLowOnRequests("webseedPeer.onClose")
-	for _, f := range ws.callbacks.PeerClosed {
-		f(ws)
-	}
+	ws.t.updateRequestsOfConnsLowOnRequests("WebSeed.onClose")
 }
 
 // Handle a chunk read from a response. Called with the Client lock held, which is released while
 // the chunk is written to storage.
-func (ws *webseedPeer) receiveChunk(msg *pp.Message) error {
+func (ws *WebSeed) receiveChunk(msg *pp.Message) error {
 	t := ws.t
 	if _, _, err := t.validateReceivedChunk(msg); err != nil {
 		return err
@@ -345,15 +368,15 @@ func (ws *webseedPeer) receiveChunk(msg *pp.Message) error {
 }
 
 // Do we want a chunk, assuming it's valid etc.
-func (ws *webseedPeer) wantChunk(ri RequestIndex) bool {
+func (ws *WebSeed) wantChunk(ri RequestIndex) bool {
 	return ws.t.wantReceiveChunk(ri)
 }
 
-func (ws *webseedPeer) maxChunkDiscard() RequestIndex {
+func (ws *WebSeed) maxChunkDiscard() RequestIndex {
 	return RequestIndex(int(intCeilDiv(webseed.MaxDiscardBytes, ws.t.chunkSize)))
 }
 
-func (ws *webseedPeer) wantedChunksInDiscardWindow(wr *webseedRequest) bool {
+func (ws *WebSeed) wantedChunksInDiscardWindow(wr *webseedRequest) bool {
 	// Shouldn't call this if request is at the end already.
 	panicif.GreaterThanOrEqual(wr.next, wr.end)
 	windowEnd := wr.next + ws.maxChunkDiscard()
@@ -366,7 +389,7 @@ func (ws *webseedPeer) wantedChunksInDiscardWindow(wr *webseedRequest) bool {
 	return false
 }
 
-func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
+func (ws *WebSeed) readChunks(wr *webseedRequest) (err error) {
 	t := ws.t
 	bufPtr := t.chunkPool.Get()
 	defer t.chunkPool.Put(bufPtr)
@@ -380,7 +403,7 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 		buf = buf[:chunkLen]
 		var n int
 		n, err = io.ReadFull(wr.request.Body, buf)
-		ws.readBytes(int64(n))
+		ws.modifyRelevantConnStats(add(int64(n), func(cs *ConnStats) *Count { return &cs.BytesRead }))
 		reqCtxErr := context.Cause(wr.request.Context())
 		if errors.Is(err, reqCtxErr) {
 			err = reqCtxErr
@@ -389,7 +412,7 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 			fmt.Printf("webseed read %v after cancellation: %v\n", n, err)
 		}
 		// We need this early for the convict call.
-		ws.commonPeer.locker().Lock()
+		ws.cl.locker().Lock()
 		if err != nil {
 			if !wr.cancelled.Load() {
 				var rpe webseed.ReadRequestPartError
@@ -402,7 +425,7 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 							"status", badResp.Response.StatusCode,
 						)
 						ws.removeFilePieces(rpe.FileIndex)
-						ws.commonPeer.locker().Unlock()
+						ws.cl.locker().Unlock()
 						err = nil
 						return
 					}
@@ -411,13 +434,13 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 					ws.convict(err, time.Minute)
 				}
 			}
-			ws.commonPeer.locker().Unlock()
+			ws.cl.locker().Unlock()
 			err = fmt.Errorf("reading chunk: %w", err)
 			return
 		}
 		// TODO: This happens outside Client lock, and stats can be written out of sync with each
 		// other. Why even bother with atomics? This needs to happen after the err check above.
-		ws.doChunkReadStats(int64(n))
+		ws.modifyRelevantConnStats(func(cs *ConnStats) { cs.receivedChunk(int64(n)) })
 		// TODO: Clean up the parameters for receiveChunk.
 		msg.Piece = buf
 		msg.Index = reqSpec.Index
@@ -435,7 +458,7 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 				wr.Cancel("no wanted chunks in discard window", ws.t)
 			}
 		}
-		ws.commonPeer.locker().Unlock()
+		ws.cl.locker().Unlock()
 
 		if err != nil {
 			err = fmt.Errorf("processing chunk: %w", err)
@@ -446,19 +469,13 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 	}
 }
 
-func (me *webseedPeer) peerPieces() *roaring.Bitmap {
-	return &me.client.Pieces
+// Whether the web seed can serve a piece.
+func (ws *WebSeed) hasPiece(piece pieceIndex) bool {
+	return ws.client.Pieces.ContainsInt(piece)
 }
 
-func (cn *webseedPeer) peerHasAllPieces() (all, known bool) {
-	if !cn.t.haveInfo() {
-		return true, false
-	}
-	return cn.client.Pieces.GetCardinality() == uint64(cn.t.numPieces()), true
-}
-
-func (me *webseedPeer) slogger() *slog.Logger {
-	return me.commonPeer.slogger
+func (me *WebSeed) slogger() *slog.Logger {
+	return me._slogger
 }
 
 // ourOwnDoing reports whether a request failed because we cancelled it, rather than because of

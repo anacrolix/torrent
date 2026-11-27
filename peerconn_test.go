@@ -246,12 +246,10 @@ func TestPeerConnRejectsUnsolicitedHashes(t *testing.T) {
 	qt.Assert(t, qt.IsNil(msg.WriteTo(&msgBuf)))
 	cn := &PeerConn{
 		wireState: new(peerWire.NewState()),
-		commonPeer: commonPeer{
-			cl:        cl,
-			t:         tor,
-			callbacks: &Callbacks{},
-		},
-		r: bytes.NewReader(msgBuf.Bytes()),
+		cl:        cl,
+		t:         tor,
+		callbacks: &Callbacks{},
+		r:         bytes.NewReader(msgBuf.Bytes()),
 	}
 
 	cl.lock()
@@ -290,10 +288,8 @@ func TestPeerConnAcceptsSolicitedHashes(t *testing.T) {
 	}
 	cn := &PeerConn{
 		wireState: new(peerWire.NewState()),
-		commonPeer: commonPeer{
-			cl: cl,
-			t:  tor,
-		},
+		cl:        cl,
+		t:         tor,
 	}
 	cn.wireState.SentHashRequest(peerWire.HashRequestFromMessage(&msg))
 
@@ -327,10 +323,8 @@ func TestPeerConnRejectsHashesForMissingRoot(t *testing.T) {
 	}
 	cn := &PeerConn{
 		wireState: new(peerWire.NewState()),
-		commonPeer: commonPeer{
-			cl: cl,
-			t:  tor,
-		},
+		cl:        cl,
+		t:         tor,
 	}
 	cn.wireState.SentHashRequest(peerWire.HashRequestFromMessage(&msg))
 
@@ -369,10 +363,8 @@ func TestRequestMissingHashesTrailingSingleHash(t *testing.T) {
 	tor.initFiles()
 	c := &PeerConn{
 		wireState: new(peerWire.NewState()),
-		commonPeer: commonPeer{
-			cl: cl,
-			t:  tor,
-		},
+		cl:        cl,
+		t:         tor,
 	}
 	c.v2 = true
 	c.wireState.RecvHaveAll()
@@ -420,10 +412,8 @@ func TestRequestMissingHashesAfterSinglePieceFile(t *testing.T) {
 	tor.initFiles()
 	c := &PeerConn{
 		wireState: new(peerWire.NewState()),
-		commonPeer: commonPeer{
-			cl: cl,
-			t:  tor,
-		},
+		cl:        cl,
+		t:         tor,
 	}
 	c.v2 = true
 	c.wireState.RecvHaveAll()
@@ -453,10 +443,10 @@ func TestConnPexPeerFlags(t *testing.T) {
 		{&PeerConn{outgoing: false, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: true}}, pp.PexPrefersEncryption},
 		{&PeerConn{outgoing: true, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: false}}, pp.PexOutgoingConn},
 		{&PeerConn{outgoing: true, peerExtendedHandshake: peerExtendedHandshake{PeerPrefersEncryption: true}}, pp.PexOutgoingConn | pp.PexPrefersEncryption},
-		{&PeerConn{commonPeer: commonPeer{RemoteAddr: udpAddr}, Network: udpAddr.Network()}, pp.PexSupportsUtp},
-		{&PeerConn{commonPeer: commonPeer{RemoteAddr: udpAddr}, Network: udpAddr.Network(), outgoing: true}, pp.PexOutgoingConn | pp.PexSupportsUtp},
-		{&PeerConn{commonPeer: commonPeer{RemoteAddr: tcpAddr}, Network: tcpAddr.Network(), outgoing: true}, pp.PexOutgoingConn},
-		{&PeerConn{commonPeer: commonPeer{RemoteAddr: tcpAddr}, Network: tcpAddr.Network()}, 0},
+		{&PeerConn{RemoteAddr: udpAddr, Network: udpAddr.Network()}, pp.PexSupportsUtp},
+		{&PeerConn{RemoteAddr: udpAddr, Network: udpAddr.Network(), outgoing: true}, pp.PexOutgoingConn | pp.PexSupportsUtp},
+		{&PeerConn{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), outgoing: true}, pp.PexOutgoingConn},
+		{&PeerConn{RemoteAddr: tcpAddr, Network: tcpAddr.Network()}, 0},
 	}
 	for i, tc := range testcases {
 		f := tc.conn.pexPeerFlags()
@@ -478,27 +468,27 @@ func TestConnPexEvent(t *testing.T) {
 	}{
 		{
 			pexAdd,
-			&PeerConn{commonPeer: commonPeer{RemoteAddr: udpAddr}, Network: udpAddr.Network()},
+			&PeerConn{RemoteAddr: udpAddr, Network: udpAddr.Network()},
 			pexEvent{pexAdd, udpAddr.AddrPort(), pp.PexSupportsUtp, nil},
 		},
 		{
 			pexDrop,
 			&PeerConn{
-				commonPeer: commonPeer{RemoteAddr: tcpAddr}, Network: tcpAddr.Network(), outgoing: true, peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialTcpAddr.Port},
+				RemoteAddr: tcpAddr, Network: tcpAddr.Network(), outgoing: true, peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialTcpAddr.Port},
 			},
 			pexEvent{pexDrop, tcpAddr.AddrPort(), pp.PexOutgoingConn, nil},
 		},
 		{
 			pexAdd,
 			&PeerConn{
-				commonPeer: commonPeer{RemoteAddr: tcpAddr}, Network: tcpAddr.Network(), peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialTcpAddr.Port},
+				RemoteAddr: tcpAddr, Network: tcpAddr.Network(), peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialTcpAddr.Port},
 			},
 			pexEvent{pexAdd, dialTcpAddr.AddrPort(), 0, nil},
 		},
 		{
 			pexDrop,
 			&PeerConn{
-				commonPeer: commonPeer{RemoteAddr: udpAddr}, Network: udpAddr.Network(), peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialUdpAddr.Port},
+				RemoteAddr: udpAddr, Network: udpAddr.Network(), peerExtendedHandshake: peerExtendedHandshake{PeerListenPort: dialUdpAddr.Port},
 			},
 			pexEvent{pexDrop, dialUdpAddr.AddrPort(), pp.PexSupportsUtp, nil},
 		},
@@ -517,8 +507,8 @@ func TestHaveAllThenBitfield(t *testing.T) {
 	tt := cl.newTorrentForTesting()
 	//pc := cl.newConnection(nil, newConnectionOpts{})
 	pc := PeerConn{
-		wireState:  new(peerWire.NewState()),
-		commonPeer: commonPeer{t: tt},
+		wireState: new(peerWire.NewState()),
+		t:         tt,
 	}
 	tt.conns[&pc] = struct{}{}
 	g.InitNew(&pc.callbacks)
@@ -862,10 +852,8 @@ func newV2HashesTestConn(pieceHashes [][32]byte, reqs ...pp.Message) *PeerConn {
 	(*tor.files)[0].t = tor
 	cn := &PeerConn{
 		wireState: new(peerWire.NewState()),
-		commonPeer: commonPeer{
-			cl: cl,
-			t:  tor,
-		},
+		cl:        cl,
+		t:         tor,
 	}
 	for _, r := range reqs {
 		r.PiecesRoot = piecesRoot

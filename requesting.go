@@ -226,7 +226,7 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 			if ih != *t.canonicalShortInfohash() {
 				return true
 			}
-			if !peerHasPiece(p, pieceIndex) {
+			if !p.peerHasPiece(pieceIndex) {
 				return true
 			}
 			requestHeap.pieceStates.Set(pieceIndex, pieceExtra)

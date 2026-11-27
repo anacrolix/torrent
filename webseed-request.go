@@ -8,7 +8,7 @@ import (
 	"github.com/anacrolix/torrent/webseed"
 )
 
-// A wrapper around webseed.Request with extra state for webseedPeer.
+// A wrapper around webseed.Request with extra state for WebSeed.
 type webseedRequest struct {
 	// Fingers out.
 	request webseed.Request

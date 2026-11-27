@@ -687,10 +687,8 @@ func TestPeerInvalidHave(t *testing.T) {
 	})
 	qt.Check(t, qt.IsTrue(_new))
 	defer tt.Drop()
-	cn := &PeerConn{wireState: new(peerWire.NewState()), commonPeer: commonPeer{
-		t:         tt,
-		callbacks: &cfg.Callbacks,
-	}}
+	cn := &PeerConn{wireState: new(peerWire.NewState()), t: tt,
+		callbacks: &cfg.Callbacks}
 	tt.conns[cn] = struct{}{}
 	cl.lock()
 	defer cl.unlock()

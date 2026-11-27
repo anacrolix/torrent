@@ -13,6 +13,7 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"weak"
 
@@ -45,7 +46,24 @@ type PeerStatus struct {
 
 // Maintains the state of a BitTorrent-protocol based connection with a peer.
 type PeerConn struct {
-	commonPeer
+	// First for the alignment of its stats.
+	chunkSource
+	closedState
+
+	cl *Client
+	t  *Torrent
+
+	callbacks *Callbacks
+
+	RemoteAddr PeerRemoteAddr
+	Discovery  PeerSource
+	trusted    bool
+
+	logger  log.Logger
+	slogger *slog.Logger
+
+	// Set for peers that can be banned by address.
+	bannableAddr g.Option[bannableAddr]
 
 	outgoing bool
 	Network  string
@@ -151,7 +169,17 @@ func (cn *PeerConn) pexStatus() string {
 }
 
 func (cn *PeerConn) writeStatus(w io.Writer) {
-	cn.commonPeer.writeStatus(w, cn.statusLines(), cn.writeConnStatus)
+	// \t isn't preserved in <pre> blocks?
+	if cn.closed.IsSet() {
+		fmt.Fprint(w, "CLOSED: ")
+	}
+	fmt.Fprintln(w, strings.Join(cn.statusLines(), "\n"))
+	cn.writeConnStatus(w)
+	cn.chunkSource.writeStatus(w)
+}
+
+func (cn *PeerConn) source() *chunkSource {
+	return &cn.chunkSource
 }
 
 func (cn *PeerConn) Stats() (ret PeerStats) {
@@ -170,6 +198,7 @@ func (cn *PeerConn) Close() error {
 	return nil
 }
 
+// Deprecated: Peer is PeerConn. Web seeds are no longer peers, see Torrent.WebSeeds.
 func (cn *PeerConn) TryAsPeerConn() (*PeerConn, bool) { return cn, true }
 
 func (cn *PeerConn) statusLines() []string {
@@ -1403,7 +1432,7 @@ func (c *PeerConn) sendChunk(r Request, msg func(pp.Message) bool) (more bool) {
 func (c *PeerConn) setTorrent(t *Torrent) {
 	panicif.NotNil(c.t)
 	c.t = t
-	c.initClosedCtx()
+	c.initClosedCtx(c.t.closedCtx)
 	c.setPeerLoggers(t.logger, t.slogger())
 	c.reconcileHandshakeStats()
 }
@@ -1559,7 +1588,7 @@ file:
 		haveAllHashes := true
 		for i := range fileNumPieces {
 			torrentPieceIndex := curFileBeginPiece + i
-			if !peerHasPiece(pc, torrentPieceIndex) {
+			if !pc.peerHasPiece(torrentPieceIndex) {
 				continue file
 			}
 			if pc.t.pieces[torrentPieceIndex].hashV2 == nil {
@@ -1723,8 +1752,8 @@ func (cn *PeerConn) nominalMaxRequests() maxRequests {
 // Set the Peer loggers. This is given Client loggers, and later Torrent loggers when the Torrent is
 // set.
 func (me *PeerConn) setPeerLoggers(a log.Logger, s *slog.Logger) {
-	me.commonPeer.logger = a.WithDefaultLevel(log.Warning).WithContextText(fmt.Sprintf("%T %p", me, me))
-	me.commonPeer.slogger = s.With(fmt.Sprintf("%T", me), fmt.Sprintf("%p", me))
+	me.logger = a.WithDefaultLevel(log.Warning).WithContextText(fmt.Sprintf("%T %p", me, me))
+	me.slogger = s.With(fmt.Sprintf("%T", me), fmt.Sprintf("%p", me))
 	me.protocolLogger = me.logger.WithNames(protocolLoggingName)
 }
 
@@ -1864,7 +1893,7 @@ func (cn *PeerConn) shouldRequest(r RequestIndex) error {
 	if cn.requestIndexes().Cancelled.Contains(r) {
 		return errors.New("request is cancelled and waiting acknowledgement")
 	}
-	if !peerHasPiece(cn, pi) {
+	if !cn.peerHasPiece(pi) {
 		return errors.New("requesting piece peer doesn't have")
 	}
 	if !cn.t.peerIsActive(cn) {
@@ -2076,7 +2105,19 @@ func (c *PeerConn) receiveChunkPrologue(msg *pp.Message) (_ *pendingChunkWrite, 
 		c.recordBlockForSmartBan(req, msg.Piece)
 		return
 	}
-	return c.t.acceptChunk(c, msg, intended), nil
+	w := c.t.acceptChunk(c, msg, intended)
+	if w == nil {
+		c.recordBlockForSmartBan(req, msg.Piece)
+		return nil, nil
+	}
+	data := msg.Piece
+	w.recordBlockForSmartBan = sync.OnceFunc(func() {
+		c.recordBlockForSmartBan(req, data)
+	})
+	for _, f := range c.t.cl.config.Callbacks.ReceivedUsefulData {
+		f(ReceivedUsefulDataEvent{c, msg})
+	}
+	return w, nil
 }
 
 // Handle a received chunk. Called with the Client lock held, which is released while the chunk is

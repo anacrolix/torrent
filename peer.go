@@ -145,12 +145,12 @@ func (cn *Peer) updateExpectingChunks() {
 }
 
 func (cn *Peer) locker() *lockWithDeferreds {
-	return cn.t.cl.locker()
+	return cn.cl.locker()
 }
 
 // The best guess at number of pieces in the torrent for this peer.
 func (cn *Peer) bestPeerNumPieces() pieceIndex {
-	if cn.t.haveInfo() {
+	if cn.t != nil && cn.t.haveInfo() {
 		return cn.t.numPieces()
 	}
 	return cn.peerMinPieces()

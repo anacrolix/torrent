@@ -1123,6 +1123,7 @@ func (me *regularTrackerAnnounceDispatcher) getTorrentForAnnounceRequest(ih shor
 }
 
 func (me *regularTrackerAnnounceDispatcher) pendTorrentInputUpdate(t *Torrent) {
+	t.cl.assertExclusive()
 	// With trackers disabled there is nothing to announce, and the dispatcher timer can never
 	// run again, so a pending update would retain the torrent indefinitely.
 	if t.cl.config.DisableTrackers {

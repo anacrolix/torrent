@@ -19,20 +19,36 @@ type lockWithDeferreds struct {
 	// Currently unlocking, defers should not occur?
 	allowDefers bool
 	client      *Client
+	// The unlock handlers run on Unlock. The Client's own, or a lockDomain's.
+	unlockHandlers *clientUnlockHandlers
+	// Write locked, including while unlock actions run. Reads are race-free for anyone holding the
+	// lock in any mode.
+	held bool
 }
 
 func (me *lockWithDeferreds) Lock() {
 	me.internal.Lock()
 	panicif.True(me.allowDefers)
 	me.allowDefers = true
+	me.held = true
 }
 
 func (me *lockWithDeferreds) Unlock() {
 	// If this doesn't happen other clean up handlers will block on the lock.
-	defer me.internal.Unlock()
+	defer me.releaseInternal()
+	me.runUnlockActions()
+}
+
+func (me *lockWithDeferreds) releaseInternal() {
+	me.held = false
+	me.internal.Unlock()
+}
+
+// Runs the unlock handlers and deferred actions, without releasing the lock.
+func (me *lockWithDeferreds) runUnlockActions() {
 	panicif.False(me.allowDefers)
 	me.allowDefers = false
-	me.client.unlockHandlers.run(me.client.slogger)
+	me.unlockHandlers.run(me.client.slogger)
 	startLen := len(me.unlockActions)
 	var i int
 	for i = 0; i < len(me.unlockActions); i++ {

@@ -97,14 +97,14 @@ func TestStatsCountPiecesQueuedForHash(t *testing.T) {
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		cl.lock()
-		if cl.activePieceHashers == 0 || time.Now().After(deadline) {
+		if cl.activePieceHashers.Load() == 0 || time.Now().After(deadline) {
 			break
 		}
 		cl.unlock()
 		time.Sleep(time.Millisecond)
 	}
 	defer cl.unlock()
-	qt.Assert(t, qt.Equals(cl.activePieceHashers, 0), qt.Commentf("checks from adding the torrent still running"))
+	qt.Assert(t, qt.Equals(cl.activePieceHashers.Load(), 0), qt.Commentf("checks from adding the torrent still running"))
 	for i := range tt.NumPieces() {
 		_, err := tt.queuePieceCheck(i)
 		qt.Assert(t, qt.IsNil(err))

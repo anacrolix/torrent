@@ -33,17 +33,18 @@ func TestDownloadedPiecesAreHashedFirst(t *testing.T) {
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		cl.lock()
-		if cl.activePieceHashers == 0 || time.Now().After(deadline) {
+		if cl.activePieceHashers.Load() == 0 || time.Now().After(deadline) {
 			break
 		}
 		cl.unlock()
 		time.Sleep(time.Millisecond)
 	}
 	defer cl.unlock()
-	qt.Assert(t, qt.Equals(cl.activePieceHashers, 0))
+	qt.Assert(t, qt.Equals(cl.activePieceHashers.Load(), int64(0)))
 	checking.piecesQueuedForHash.AddRange(0, 3)
 	downloaded.piecesQueuedForHash.AddRange(0, 3)
 	downloaded.piecesDownloadedForHash.Add(2)
+	downloaded.updateHasDownloadedForHash()
 
 	qt.Check(t, qt.Equals(downloaded.getPieceToHash(), g.Some(2)))
 	qt.Check(t, qt.IsTrue(cl.downloadedPiecesWaitForHash(checking)))
@@ -54,5 +55,6 @@ func TestDownloadedPiecesAreHashedFirst(t *testing.T) {
 	qt.Check(t, qt.IsFalse(hashFirst(checking, downloaded)))
 	// Without downloaded pieces, the larger torrent goes first as before.
 	downloaded.piecesDownloadedForHash.Clear()
+	downloaded.updateHasDownloadedForHash()
 	qt.Check(t, qt.IsTrue(hashFirst(checking, downloaded)))
 }

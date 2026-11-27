@@ -122,8 +122,9 @@ func (p *Peer) Torrent() *Torrent {
 }
 
 func (p *Peer) Stats() (ret PeerStats) {
-	p.locker().RLock()
-	defer p.locker().RUnlock()
+	l := p.locker()
+	l.RLock()
+	defer l.RUnlock()
 	ret.ConnStats = p._stats.Copy()
 	ret.DownloadRate = p.downloadRate()
 	ret.LastWriteUploadRate = p.peerImpl.lastWriteUploadRate()
@@ -144,12 +145,18 @@ func (cn *Peer) updateExpectingChunks() {
 	}
 }
 
-func (cn *Peer) locker() *lockWithDeferreds {
-	// The Torrent isn't known until the handshake names it. Tests build conns with only a Torrent.
+// Locks the Peer's Torrent in domain mode. Webseed peers use exclusive mode, since webseed
+// requests are planned Client-wide. See lockDomain. Before the handshake names a Torrent, this is
+// exclusive mode on the Client. Callers that might span the Torrent being set should keep the
+// returned locker for the Unlock.
+func (cn *Peer) locker() torrentLocker {
+	_, webseed := cn.peerImpl.(*webseedPeer)
+	// Tests build conns with only a Torrent.
+	cl := cn.cl
 	if cn.t != nil {
-		return cn.t.cl.locker()
+		cl = cn.t.cl
 	}
-	return cn.cl.locker()
+	return torrentLocker{cl: cl, t: cn.t, exclusive: webseed || cn.t == nil}
 }
 
 // The best guess at number of pieces in the torrent for this peer.
@@ -232,8 +239,9 @@ func (p *Peer) close() {
 }
 
 func (p *Peer) Close() error {
-	p.locker().Lock()
-	defer p.locker().Unlock()
+	l := p.locker()
+	l.Lock()
+	defer l.Unlock()
 	p.close()
 	return nil
 }
@@ -338,17 +346,16 @@ func (c *Peer) doChunkReadStats(size int64) {
 }
 
 // Handle a received chunk from a peer. TODO: Break this out into non-wire protocol specific
-// handling. Avoid shoehorning into a pp.Message. Called with the Client lock held, which is released
+// handling. Avoid shoehorning into a pp.Message. Called with the Peer's locker held, which is released
 // while the chunk is written to storage.
 func (c *Peer) receiveChunk(msg *pp.Message) error {
 	w, err := c.receiveChunkPrologue(msg)
 	if err != nil || w == nil {
 		return err
 	}
-	cl := c.t.cl
-	cl.unlock()
+	c.locker().Unlock()
 	writeErr := w.write()
-	cl.lock()
+	c.locker().Lock()
 	c.receiveChunkEpilogue(w, writeErr)
 	return nil
 }

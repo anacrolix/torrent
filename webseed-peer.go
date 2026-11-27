@@ -103,9 +103,12 @@ func (me *webseedPeer) isLowOnRequests() bool {
 
 // Trigger the webseed request scheduler if this webseed's URL is under-utilized.
 func (me *webseedPeer) onNeedUpdateRequests(reason updateRequestReason) {
-	if me.peer.cl.webseedHostLowOnRequests(me.hostKey) {
-		me.peer.cl.updateWebseedRequestsWithReason(reason)
-	}
+	// Webseed requests are planned Client-wide, so this can't run in domain mode.
+	me.peer.t.deferExclusiveOnce(webseedNeedUpdateRequestsKey{me}, func() {
+		if me.peer.cl.webseedHostLowOnRequests(me.hostKey) {
+			me.peer.cl.updateWebseedRequestsWithReason(reason)
+		}
+	})
 }
 
 func (me *webseedPeer) expectingChunks() bool {
@@ -168,6 +171,7 @@ func (ws *webseedPeer) intoSpec(begin, end RequestIndex) webseed.RequestSpec {
 }
 
 func (ws *webseedPeer) spawnRequest(begin, end RequestIndex, logger *slog.Logger) {
+	ws.peer.t.cl.assertExclusive()
 	extWsReq := ws.client.StartNewRequest(ws.peer.closedCtx, ws.intoSpec(begin, end), logger)
 	wsReq := webseedRequest{
 		logger:  logger,

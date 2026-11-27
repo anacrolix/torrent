@@ -284,7 +284,7 @@ func (p Piece) iterCleanChunks(it *roaring.IntIterator) iter.Seq[chunkIndexType]
 }
 
 func (p Piece) firstCleanChunk() (_ g.Option[chunkIndexType]) {
-	for some := range p.iterCleanChunks(&p.t.cl.roaringIntIterator) {
+	for some := range p.iterCleanChunks(p.t.roaringIntIterator()) {
 		return g.Some(some)
 	}
 	return
@@ -350,11 +350,12 @@ func (p Piece) VerifyDataContext(ctx context.Context) error {
 	}
 	//log.Printf("target: %d", target)
 	for {
-		locker.RLock()
+		// Hashing finishes in domain mode, so the Client read lock isn't enough here.
+		p.t.rLockDomain()
 		done := p.state().numVerifies >= target
 		//log.Printf("got %d verifies", p.state().numVerifies)
 		numVerifiesChanged := p.state().numVerifiesCond.Signaled()
-		locker.RUnlock()
+		p.t.rUnlockDomain()
 		if done {
 			//log.Print("done")
 			return nil

@@ -914,222 +914,331 @@ func (c *PeerConn) mainReadLoop() (err error) {
 	}()
 	t := c.t
 	cl := t.cl
-
+	st := readLoopState{c: c}
+	// Called with the Torrent's domain held. Everything here runs without it: state is only
+	// touched from st.turn, which runs with the domain held (see Torrent.callDomainTurn), or in
+	// exclusive mode.
+	t.unlockDomain()
+	defer func() {
+		// The caller expects the domain back. Don't leave chunks half received.
+		st.writeChunks()
+		t.lockDomain()
+		st.finishChunkWrites()
+	}()
 	decoder := pp.Decoder{
 		R:         bufio.NewReaderSize(c.r, 1<<17),
 		MaxLength: 4 * pp.Integer(max(int64(t.chunkSize), defaultChunkSize)),
 		Pool:      &t.chunkPool,
 	}
-	lockedDecodes := 0
-	// Chunks from consecutive buffered Piece messages, written to storage together so the client
-	// lock is released once per batch rather than once per chunk.
-	var chunkWrites []bufferedChunkWrite
-	flushChunkWrites := func() {
-		if len(chunkWrites) == 0 {
+	for {
+		// Chunks that have been written need their results applied before anything can block.
+		writesPending := len(st.chunkWrites) != 0
+		if !writesPending {
+			// Replies to the peer are buffered by turns. Stop reading until the writer catches up.
+			if wait, taken := c.messageWriter.readLoopShouldWait(); wait {
+				select {
+				case <-taken:
+				case <-c.closed.Done():
+				}
+				if t.closed.IsSet() || c.closed.IsSet() {
+					return nil
+				}
+				continue
+			}
+		}
+		if st.next == len(st.msgs) && (!writesPending || fullMessageBuffered(decoder.R)) {
+			st.decode(&decoder)
+		}
+		t.callDomainTurn(st.turn)
+		if st.exclusivePending {
+			// The next message may touch Client-wide state.
+			st.exclusivePending = false
+			cl.lock()
+			st.handleNext()
+			cl.unlock()
+		}
+		if st.done {
+			return st.err
+		}
+		st.writeChunks()
+	}
+}
+
+// What a conn's read loop hands to its turns. The read loop decodes messages and writes chunks to
+// storage without the client lock. Turns handle the messages and apply the results of the writes.
+type readLoopState struct {
+	c *PeerConn
+	// Decoded messages. Those before next have been handled.
+	msgs []pp.Message
+	next int
+	// An error from decoding the message that would follow msgs.
+	decodeErr error
+	// Chunks from Piece messages that have been handled. The read loop writes them to storage
+	// after the turn that added them, and the next turn applies the results. They are batched so
+	// that the write costs one turn rather than one per chunk.
+	chunkWrites []bufferedChunkWrite
+	// The next message must be handled in exclusive mode. See needsExclusive.
+	exclusivePending bool
+	// The read loop should return err, which may be nil.
+	done bool
+	err  error
+}
+
+// Messages that may touch Client-wide state, such as extension messages that add peers or
+// metadata, are handled in exclusive mode rather than in a domain turn.
+func needsExclusive(msg *pp.Message) bool {
+	if msg.Keepalive {
+		return false
+	}
+	switch msg.Type {
+	case pp.Extended, pp.Port, pp.Hashes, pp.HashRequest:
+		return true
+	}
+	return false
+}
+
+// Handles the next message. Reports false if the read loop is done.
+func (st *readLoopState) handleNext() bool {
+	c := st.c
+	t := c.t
+	msg := &st.msgs[st.next]
+	st.next++
+	// Do this before checking closed.
+	if cb := c.callbacks.ReadMessage; cb != nil {
+		cb(c, msg)
+	}
+	if t.closed.IsSet() || c.closed.IsSet() {
+		st.done = true
+		return false
+	}
+	err := c.handleMessage(msg, st)
+	if err != nil {
+		st.done = true
+		st.err = err
+		return false
+	}
+	return true
+}
+
+// Decodes a message, then any more that are already buffered and so can't block on the network.
+func (st *readLoopState) decode(decoder *pp.Decoder) {
+	clear(st.msgs)
+	st.msgs = st.msgs[:0]
+	st.next = 0
+	for {
+		st.msgs = append(st.msgs, pp.Message{})
+		err := decoder.Decode(&st.msgs[len(st.msgs)-1])
+		if err != nil {
+			st.msgs = st.msgs[:len(st.msgs)-1]
+			st.decodeErr = fmt.Errorf("decoding message: %w", err)
 			return
 		}
-		if t.closed.IsSet() {
-			// The storage may be closed. Drop the writes; the Torrent state no longer matters.
-			for _, cw := range chunkWrites {
-				cw.w.pw.decrementPendingWrites()
-				t.chunkPool.Put(cw.piecePtr)
-			}
-		} else {
-			cl.unlock()
-			for i := range chunkWrites {
-				chunkWrites[i].err = chunkWrites[i].w.write()
-			}
-			cl.lock()
-			for _, cw := range chunkWrites {
-				c.receiveChunkEpilogue(cw.w, cw.err)
-				t.chunkPool.Put(cw.piecePtr)
-			}
+		if len(st.msgs) >= maxReadLoopBatch || !fullMessageBuffered(decoder.R) {
+			return
 		}
-		clear(chunkWrites)
-		chunkWrites = chunkWrites[:0]
 	}
-	defer flushChunkWrites()
-	for {
-		// Replies to the peer are buffered from here. Stop reading until the writer catches up.
-		if wait, taken := c.messageWriter.readLoopShouldWait(); wait {
-			flushChunkWrites()
-			lockedDecodes = 0
-			cl.unlock()
-			select {
-			case <-taken:
-			case <-c.closed.Done():
-			}
-			cl.lock()
-			if t.closed.IsSet() || c.closed.IsSet() {
-				return nil
-			}
-			continue
-		}
-		// Keep batching only while the next message is a Piece that will be decoded without
-		// releasing the lock. Anything else must see the batch's effects first.
-		if len(chunkWrites) != 0 && (len(chunkWrites) >= maxChunkWriteBatch ||
-			lockedDecodes >= maxLockedDecodes ||
-			!bufferedMessageIsPiece(decoder.R)) {
-			flushChunkWrites()
-		}
-		var msg pp.Message
-		// Messages already in the buffer can be decoded without blocking, so keep the lock rather
-		// than handing it off per message. Cap the run so other conns get a turn.
-		if lockedDecodes < maxLockedDecodes && fullMessageBuffered(decoder.R) {
-			lockedDecodes++
-			err = decoder.Decode(&msg)
-			if err != nil {
-				err = fmt.Errorf("decoding message: %w", err)
-			}
-		} else {
-			lockedDecodes = 0
-			func() {
-				cl.unlock()
-				defer cl.lock()
-				err = decoder.Decode(&msg)
-				if err != nil {
-					err = fmt.Errorf("decoding message: %w", err)
-				}
-			}()
-		}
-		// Do this before checking closed.
-		if cb := c.callbacks.ReadMessage; cb != nil && err == nil {
-			cb(c, &msg)
-		}
-		if t.closed.IsSet() || c.closed.IsSet() {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		c.lastMessageReceived = time.Now()
-		if msg.Keepalive {
-			receivedKeepalives.Add(1)
-			continue
-		}
-		messageTypesReceived.Add(msg.Type.String(), 1)
-		if msg.Type.FastExtension() && !c.fastEnabled() {
-			runSafeExtraneous(func() { torrent.Add("fast messages received when extension is disabled", 1) })
-			return fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
-		}
-		switch msg.Type {
-		case pp.Choke:
-			changed, dropped := c.wireState.RecvChoke()
-			if !changed {
-				break
-			}
-			// With the fast extension, wireState keeps our requests outstanding: we wait for the
-			// peer to either reject or satisfy them. Additionally, some peers may unchoke us and
-			// resume where they left off, we don't want to have piled on to those chunks in the
-			// meanwhile. I think a peer's ability to abuse this should be limited: they could let
-			// us request a lot of stuff, then choke us and never reject, but they're only a single
-			// peer, our chunk balancing should smooth over this abuse.
-			c.onDroppedRequests(dropped, "choked by non-fast PeerConn")
-			c.updateExpectingChunks()
-		case pp.Unchoke:
-			if !c.wireState.RecvUnchoke() {
-				// Some clients do this for some reason. Transmission doesn't error on this, so we
-				// won't for consistency.
-				c.logProtocolBehaviour(log.Debug, "received unchoke when already unchoked")
-				break
-			}
-			preservedCount := 0
-			c.requestIndexes().Requests.Iterate(func(x RequestIndex) bool {
-				if !c.wireState.PeerAllowedFast().Contains(c.t.pieceIndexOfRequestIndex(x)) {
-					preservedCount++
-				}
-				return true
-			})
-			if preservedCount != 0 {
-				// TODO: Yes this is a debug log but I'm not happy with the state of the logging lib
-				// right now.
-				c.protocolLogger.Levelf(log.Debug,
-					"%v requests were preserved while being choked (fast=%v)",
-					preservedCount,
-					c.fastEnabled())
+}
 
-				torrent.Add("requestsPreservedThroughChoking", int64(preservedCount))
-			}
-			if !c.t._pendingPieces.IsEmpty() {
-				c.onNeedUpdateRequests("unchoked")
-			}
-			c.updateExpectingChunks()
-		case pp.Interested:
-			c.wireState.RecvInterested(true)
-			c.tickleWriter()
-		case pp.NotInterested:
-			c.wireState.RecvInterested(false)
-			// We don't clear their requests since it isn't clear in the spec.
-			// We'll probably choke them for this, which will clear them if
-			// appropriate, and is clearly specified.
-		case pp.Have:
-			err = c.peerSentHave(pieceIndex(msg.Index))
-		case pp.Bitfield:
-			err = c.peerSentBitfield(msg.Bitfield)
-		case pp.Request:
-			r := newRequestFromMessage(&msg)
-			err = c.onReadRequest(r, true)
-			if err != nil {
-				err = fmt.Errorf("on reading request %v: %w", r, err)
-			}
-		case pp.Piece:
-			c.doChunkReadStats(int64(len(msg.Piece)))
-			var w *pendingChunkWrite
-			w, err = c.receiveChunkPrologue(&msg)
-			if w != nil {
-				// The batch owns the buffer until the chunk is written.
-				chunkWrites = append(chunkWrites, bufferedChunkWrite{w: w, piecePtr: msg.PiecePtr})
-			} else {
-				t.chunkPool.Put(msg.PiecePtr)
-			}
-			msg.Piece = nil
-			if err != nil {
-				err = fmt.Errorf("receiving chunk: %w", err)
-			}
-		case pp.Cancel:
-			req := newRequestFromMessage(&msg)
-			c.onPeerSentCancel(req)
-		case pp.Port:
-			c.onPeerSentPort(msg.Port)
-		case pp.Suggest:
-			torrent.Add("suggests received", 1)
-			log.Fmsg("peer suggested piece %d", msg.Index).AddValues(c, msg.Index).LogLevel(log.Debug, c.t.logger)
-			c.onNeedUpdateRequests("suggested")
-		case pp.HaveAll:
-			err = c.onPeerSentHaveAll()
-		case pp.HaveNone:
-			err = c.peerSentHaveNone()
-		case pp.Reject:
-			req := newRequestFromMessage(&msg)
-			if !c.remoteRejectedRequest(req) {
-				err = fmt.Errorf("received invalid reject for request %v", req)
-				c.protocolLogger.Levelf(log.Debug, "%v", err)
-			}
-		case pp.AllowedFast:
-			torrent.Add("allowed fasts received", 1)
-			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).LogLevel(log.Debug, c.t.logger)
-			// Record the allowed-fast piece so requesting.go and shouldRequestWithoutBias
-			// can serve requests for it while we are choked.
-			if !c.wireState.RecvAllowedFast(pieceIndex(msg.Index), c.t.numPiecesOption()) {
-				torrent.Add("allowed fasts ignored", 1)
-				break
-			}
-			c.onNeedUpdateRequests("PeerConn.mainReadLoop allowed fast")
-		case pp.Extended:
-			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
-		case pp.Hashes:
-			err = c.onReadHashes(&msg)
-		case pp.HashRequest:
-			err = c.onHashRequest(&msg)
-		case pp.HashReject:
-			err = c.onReadHashReject(&msg)
-		default:
-			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
-		}
-		if err != nil {
-			return err
+// Writes handled chunks to storage. Called without the client lock.
+func (st *readLoopState) writeChunks() {
+	// The storage may be closed. Skip the writes; the Torrent state no longer matters.
+	if st.c.t.closed.IsSet() {
+		return
+	}
+	for i := range st.chunkWrites {
+		cw := &st.chunkWrites[i]
+		if !cw.written {
+			cw.err = cw.w.write()
+			cw.written = true
 		}
 	}
+}
+
+// Applies the results of chunk writes. Called with the client lock.
+func (st *readLoopState) finishChunkWrites() {
+	t := st.c.t
+	for _, cw := range st.chunkWrites {
+		if cw.written {
+			st.c.receiveChunkEpilogue(cw.w, cw.err)
+		} else {
+			// The Torrent closed before the chunk could be written.
+			cw.w.pw.decrementPendingWrites()
+		}
+		t.chunkPool.Put(cw.piecePtr)
+	}
+	clear(st.chunkWrites)
+	st.chunkWrites = st.chunkWrites[:0]
+}
+
+// Handles decoded messages until they run out, or the read loop has to do something first: write
+// chunks to storage, or wait for the writer. Runs with the domain held, through
+// Torrent.callDomainTurn.
+func (st *readLoopState) turn() {
+	c := st.c
+	t := c.t
+	st.finishChunkWrites()
+	for st.next < len(st.msgs) {
+		if t.closed.IsSet() || c.closed.IsSet() {
+			break
+		}
+		msg := &st.msgs[st.next]
+		// Keep batching chunk writes only while the next message is a Piece. Anything else must
+		// see the batch's effects first.
+		if len(st.chunkWrites) != 0 &&
+			(len(st.chunkWrites) >= maxChunkWriteBatch || msg.Keepalive || msg.Type != pp.Piece) {
+			return
+		}
+		// Replies to the peer are buffered from here. Let the read loop wait for the writer.
+		if wait, _ := c.messageWriter.readLoopShouldWait(); wait {
+			return
+		}
+		if needsExclusive(msg) {
+			st.exclusivePending = true
+			return
+		}
+		if !st.handleNext() {
+			return
+		}
+	}
+	if t.closed.IsSet() || c.closed.IsSet() {
+		st.done = true
+		return
+	}
+	if st.decodeErr != nil {
+		st.done = true
+		st.err = st.decodeErr
+	}
+}
+
+// Handles a message from the peer. Called with the client lock. Chunks to be written to storage
+// are added to st.
+func (c *PeerConn) handleMessage(msg *pp.Message, st *readLoopState) (err error) {
+	t := c.t
+	c.lastMessageReceived = time.Now()
+	if msg.Keepalive {
+		receivedKeepalives.Add(1)
+		return nil
+	}
+	messageTypesReceived.Add(msg.Type.String(), 1)
+	if msg.Type.FastExtension() && !c.fastEnabled() {
+		runSafeExtraneous(func() { torrent.Add("fast messages received when extension is disabled", 1) })
+		return fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
+	}
+	switch msg.Type {
+	case pp.Choke:
+		changed, dropped := c.wireState.RecvChoke()
+		if !changed {
+			break
+		}
+		// With the fast extension, wireState keeps our requests outstanding: we wait for the
+		// peer to either reject or satisfy them. Additionally, some peers may unchoke us and
+		// resume where they left off, we don't want to have piled on to those chunks in the
+		// meanwhile. I think a peer's ability to abuse this should be limited: they could let
+		// us request a lot of stuff, then choke us and never reject, but they're only a single
+		// peer, our chunk balancing should smooth over this abuse.
+		c.onDroppedRequests(dropped, "choked by non-fast PeerConn")
+		c.updateExpectingChunks()
+	case pp.Unchoke:
+		if !c.wireState.RecvUnchoke() {
+			// Some clients do this for some reason. Transmission doesn't error on this, so we
+			// won't for consistency.
+			c.logProtocolBehaviour(log.Debug, "received unchoke when already unchoked")
+			break
+		}
+		preservedCount := 0
+		c.requestIndexes().Requests.Iterate(func(x RequestIndex) bool {
+			if !c.wireState.PeerAllowedFast().Contains(c.t.pieceIndexOfRequestIndex(x)) {
+				preservedCount++
+			}
+			return true
+		})
+		if preservedCount != 0 {
+			// TODO: Yes this is a debug log but I'm not happy with the state of the logging lib
+			// right now.
+			c.protocolLogger.Levelf(log.Debug,
+				"%v requests were preserved while being choked (fast=%v)",
+				preservedCount,
+				c.fastEnabled())
+
+			torrent.Add("requestsPreservedThroughChoking", int64(preservedCount))
+		}
+		if !c.t._pendingPieces.IsEmpty() {
+			c.onNeedUpdateRequests("unchoked")
+		}
+		c.updateExpectingChunks()
+	case pp.Interested:
+		c.wireState.RecvInterested(true)
+		c.tickleWriter()
+	case pp.NotInterested:
+		c.wireState.RecvInterested(false)
+		// We don't clear their requests since it isn't clear in the spec.
+		// We'll probably choke them for this, which will clear them if
+		// appropriate, and is clearly specified.
+	case pp.Have:
+		err = c.peerSentHave(pieceIndex(msg.Index))
+	case pp.Bitfield:
+		err = c.peerSentBitfield(msg.Bitfield)
+	case pp.Request:
+		r := newRequestFromMessage(msg)
+		err = c.onReadRequest(r, true)
+		if err != nil {
+			err = fmt.Errorf("on reading request %v: %w", r, err)
+		}
+	case pp.Piece:
+		c.doChunkReadStats(int64(len(msg.Piece)))
+		var w *pendingChunkWrite
+		w, err = c.receiveChunkPrologue(msg)
+		if w != nil {
+			// The batch owns the buffer until the chunk is written.
+			st.chunkWrites = append(st.chunkWrites, bufferedChunkWrite{w: w, piecePtr: msg.PiecePtr})
+		} else {
+			t.chunkPool.Put(msg.PiecePtr)
+		}
+		msg.Piece = nil
+		if err != nil {
+			err = fmt.Errorf("receiving chunk: %w", err)
+		}
+	case pp.Cancel:
+		req := newRequestFromMessage(msg)
+		c.onPeerSentCancel(req)
+	case pp.Port:
+		c.onPeerSentPort(msg.Port)
+	case pp.Suggest:
+		torrent.Add("suggests received", 1)
+		log.Fmsg("peer suggested piece %d", msg.Index).AddValues(c, msg.Index).LogLevel(log.Debug, c.t.logger)
+		c.onNeedUpdateRequests("suggested")
+	case pp.HaveAll:
+		err = c.onPeerSentHaveAll()
+	case pp.HaveNone:
+		err = c.peerSentHaveNone()
+	case pp.Reject:
+		req := newRequestFromMessage(msg)
+		if !c.remoteRejectedRequest(req) {
+			err = fmt.Errorf("received invalid reject for request %v", req)
+			c.protocolLogger.Levelf(log.Debug, "%v", err)
+		}
+	case pp.AllowedFast:
+		torrent.Add("allowed fasts received", 1)
+		log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).LogLevel(log.Debug, c.t.logger)
+		// Record the allowed-fast piece so requesting.go and shouldRequestWithoutBias
+		// can serve requests for it while we are choked.
+		if !c.wireState.RecvAllowedFast(pieceIndex(msg.Index), c.t.numPiecesOption()) {
+			torrent.Add("allowed fasts ignored", 1)
+			break
+		}
+		c.onNeedUpdateRequests("PeerConn.mainReadLoop allowed fast")
+	case pp.Extended:
+		err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
+	case pp.Hashes:
+		err = c.onReadHashes(msg)
+	case pp.HashRequest:
+		err = c.onHashRequest(msg)
+	case pp.HashReject:
+		err = c.onReadHashReject(msg)
+	default:
+		err = fmt.Errorf("received unknown message type: %#v", msg.Type)
+	}
+	return err
 }
 
 func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err error) {
@@ -1321,7 +1430,7 @@ func (cn *PeerConn) providedBadData() {
 		cn.drop()
 		return
 	}
-	cn.t.cl.banPeerIP(ip)
+	cn.t.deferExclusive(func() { cn.t.cl.banPeerIP(ip) })
 }
 
 // This is called when something has changed that should wake the writer, such as putting stuff into
@@ -2083,8 +2192,8 @@ func (c *PeerConn) reconcileHandshakeStats() {
 	c.reconciledHandshakeStats = true
 }
 
-// Maximum consecutive messages decoded under the client lock before it is released.
-var maxLockedDecodes = 64
+// Maximum messages a read loop decodes before handing them to a turn.
+var maxReadLoopBatch = 64
 
 // Maximum received chunks written to storage per release of the client lock.
 var maxChunkWriteBatch = 16
@@ -2092,7 +2201,9 @@ var maxChunkWriteBatch = 16
 type bufferedChunkWrite struct {
 	w        *pendingChunkWrite
 	piecePtr *[]byte
-	err      error
+	// The write was attempted, and err is its result.
+	written bool
+	err     error
 }
 
 // Reports whether a whole length-prefixed message is already in the buffer, so decoding it can't
@@ -2104,19 +2215,4 @@ func fullMessageBuffered(r *bufio.Reader) bool {
 	b, _ := r.Peek(4)
 	// Compare as uint64: on 32-bit platforms int(length) can be negative.
 	return uint64(r.Buffered()) >= 4+uint64(binary.BigEndian.Uint32(b))
-}
-
-// Reports whether the next message is a Piece that's wholly in the buffer.
-func bufferedMessageIsPiece(r *bufio.Reader) bool {
-	if !fullMessageBuffered(r) {
-		return false
-	}
-	b, _ := r.Peek(4)
-	if binary.BigEndian.Uint32(b) == 0 {
-		// Keepalive.
-		return false
-	}
-	// The whole message is buffered, so this can't block.
-	b, _ = r.Peek(5)
-	return pp.MessageType(b[4]) == pp.Piece
 }

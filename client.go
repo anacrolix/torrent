@@ -18,6 +18,7 @@ import (
 	"runtime"
 	"slices"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/RoaringBitmap/roaring/v2"
@@ -64,10 +65,16 @@ type Client struct {
 	_mu            lockWithDeferreds
 	unlockHandlers clientUnlockHandlers
 	check          amortize.Value
-	// Used in constrained situations when the lock is held.
+	// Used in constrained situations when the lock is held exclusively. See
+	// Torrent.roaringIntIterator.
 	roaringIntIterator roaring.IntIterator
-	event              sync.Cond
-	closed             chansync.SetOnce
+	// Lock domains shared by Torrents with the same storage capacity. See lockDomain.
+	capacityDomains map[storage.TorrentCapacity]*lockDomain
+	// Every lock domain whose actor hasn't been closed.
+	lockDomainsMu sync.Mutex
+	lockDomains   map[*lockDomain]struct{}
+	event         sync.Cond
+	closed        chansync.SetOnce
 
 	config  *ClientConfig
 	logger  log.Logger
@@ -119,7 +126,12 @@ type Client struct {
 
 	clientWebseedState
 
-	activePieceHashers int
+	// Piece hashers running across all Torrents. Atomic since hashers start and finish in domain
+	// mode.
+	activePieceHashers atomic.Int64
+	// Set when a Torrent couldn't start a hasher because of the Client-wide limit, so the next
+	// hasher to finish runs Client.startPieceHashers.
+	pieceHashersWanted atomic.Bool
 
 	lpd *lpdServer
 }
@@ -222,8 +234,9 @@ func (cl *Client) TorrentInfohashesAndPort() (port int, infohashes []string) {
 
 // Writes out a human-readable status of the client, such as for writing to an HTTP status page.
 func (cl *Client) WriteStatus(_w io.Writer) {
-	cl.rLock()
-	defer cl.rUnlock()
+	// Reads every Torrent's state, so excludes domain mode too.
+	cl.lock()
+	defer cl.unlock()
 	w := bufio.NewWriter(_w)
 	defer w.Flush()
 	fmt.Fprintf(w, "Listen port: %d\n", cl.LocalPort())
@@ -325,6 +338,7 @@ func (cl *Client) init(cfg *ClientConfig) {
 	cl.unlockHandlers.init()
 	cl.config = cfg
 	cl._mu.client = cl
+	cl._mu.unlockHandlers = &cl.unlockHandlers
 	cl.initLogger()
 	cl.regularTrackerAnnounceDispatcher.init(cl)
 	cfg.setRateLimiterBursts()
@@ -500,9 +514,10 @@ func (cl *Client) AddListener(l Listener) {
 }
 
 func (cl *Client) firewallCallback(net.Addr) bool {
-	cl.rLock()
+	// wantConns reads Torrent state, so this excludes domain mode.
+	cl.lock()
 	block := !cl.wantConns() || !cl.config.AcceptPeerConnections
-	cl.rUnlock()
+	cl.unlock()
 	if block {
 		torrent.Add("connections firewalled", 1)
 	} else {
@@ -663,13 +678,14 @@ func (cl *Client) acceptConnections(l Listener) {
 			}
 		}
 		conn = pproffd.WrapNetConn(conn)
-		cl.rLock()
+		// rejectAccepted reads Torrent state, so this excludes domain mode.
+		cl.lock()
 		closed := cl.closed.IsSet()
 		var reject error
 		if !closed && conn != nil {
 			reject = cl.rejectAccepted(conn)
 		}
-		cl.rUnlock()
+		cl.unlock()
 		if closed {
 			if conn != nil {
 				conn.Close()
@@ -803,6 +819,7 @@ func dialFromSocket(ctx context.Context, s Dialer, addr string) net.Conn {
 }
 
 func (cl *Client) noLongerHalfOpen(t *Torrent, addr string, attemptKey outgoingConnAttemptKey) {
+	cl.assertExclusive()
 	path := t.getHalfOpenPath(addr, attemptKey)
 	if !path.Exists() {
 		panic("should exist")
@@ -1302,7 +1319,12 @@ func (t *Torrent) runHandshookConn(pc *PeerConn) error {
 		})
 	}
 
+	// The read loop runs in domain mode, so conns on Torrents in other domains don't contend.
+	cl.unlock()
+	t.lockDomain()
 	err := pc.mainReadLoop()
+	t.unlockDomain()
+	cl.lock()
 	if err != nil {
 		for _, cb := range pc.callbacks.StatusUpdated {
 			cb(StatusUpdatedEvent{
@@ -1526,6 +1548,7 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 
 	t = &Torrent{
 		cl:         cl,
+		domain:     cl.newLockDomain(),
 		infoHash:   v1InfoHash,
 		infoHashV2: opts.InfoHashV2,
 		peers: prioritizedPeers{
@@ -1853,6 +1876,7 @@ func (cl *Client) AddDhtNodes(nodes []string) {
 }
 
 func (cl *Client) banPeerIP(ip net.IP) {
+	cl.assertExclusive()
 	// We can't take this from string, because it will lose netip's v4on6. net.ParseIP parses v4
 	// addresses directly to v4on6, which doesn't compare equal with v4.
 	ipAddr, ok := netip.AddrFromSlice(ip)
@@ -1887,8 +1911,8 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 	}
 	c = &PeerConn{
 		Peer: Peer{
-			cl:        cl,
-			outgoing:  opts.outgoing,
+			cl:       cl,
+			outgoing: opts.outgoing,
 			peerExtendedHandshake: peerWire.ExtendedHandshake{
 				PeerMaxRequests: 250,
 			},
@@ -2064,6 +2088,9 @@ func (cl *Client) rateLimitAccept(ip net.IP) bool {
 	return cl.acceptLimiter[ipStr(maskIpForAcceptLimiting(ip).String())] > 0
 }
 
+// Takes the Client lock for read. This excludes exclusive mode but not domain mode, so it only
+// protects Client-wide state, and Torrent state that changes only in exclusive mode (such as
+// infohashes and the info). See lockDomain.
 func (cl *Client) rLock() {
 	cl._mu.RLock()
 }
@@ -2132,10 +2159,42 @@ func (cl *Client) maxActivePieceHashers() int {
 }
 
 func (cl *Client) belowMaxActivePieceHashers() bool {
-	return cl.activePieceHashers < cl.maxActivePieceHashers()
+	return cl.activePieceHashers.Load() < int64(cl.maxActivePieceHashers())
 }
 
-func (cl *Client) canStartPieceHashers() bool {
+// Takes a slot under the Client-wide piece hasher limit.
+func (cl *Client) tryAcquirePieceHasher() bool {
+	for {
+		n := cl.activePieceHashers.Load()
+		if n >= int64(cl.maxActivePieceHashers()) {
+			cl.pieceHashersWanted.Store(true)
+			// A hasher may have released its slot and checked pieceHashersWanted between the load
+			// and the store, and then nothing would restart us. Either the load below sees the
+			// release, or that hasher sees the flag.
+			if cl.activePieceHashers.Load() >= int64(cl.maxActivePieceHashers()) {
+				return false
+			}
+			continue
+		}
+		if cl.activePieceHashers.CompareAndSwap(n, n+1) {
+			return true
+		}
+	}
+}
+
+// Releases a slot taken with tryAcquirePieceHasher.
+func (cl *Client) releasePieceHasher() {
+	cl.activePieceHashers.Add(-1)
+}
+
+// Reports whether a hasher slot is free. If not, flags that hashers are wanted, so the next hasher to
+// finish restarts them.
+func (cl *Client) pieceHasherSlotFreeOrWanted() bool {
+	if cl.belowMaxActivePieceHashers() {
+		return true
+	}
+	cl.pieceHashersWanted.Store(true)
+	// Either this sees a slot released since the check above, or that hasher sees the flag.
 	return cl.belowMaxActivePieceHashers()
 }
 
@@ -2150,9 +2209,11 @@ func hashFirst(a, b *Torrent) bool {
 }
 
 // Reports whether a torrent other than except has just downloaded pieces waiting for a hasher.
+// Called in domain mode by hashers, so it reads only each Torrent's hasDownloadedForHash, not state
+// guarded by other domains.
 func (cl *Client) downloadedPiecesWaitForHash(except *Torrent) bool {
 	for t := range cl.torrents {
-		if t != except && t.considerStartingHashers() && !t.piecesDownloadedForHash.IsEmpty() {
+		if t != except && t.hasDownloadedForHash.Load() {
 			return true
 		}
 	}
@@ -2160,7 +2221,10 @@ func (cl *Client) downloadedPiecesWaitForHash(except *Torrent) bool {
 }
 
 func (cl *Client) startPieceHashers() {
-	if !cl.canStartPieceHashers() {
+	cl.assertExclusive()
+	// Called when hashers were wanted, and that flag has been consumed, so keep it set if there's
+	// still no room.
+	if !cl.pieceHasherSlotFreeOrWanted() {
 		return
 	}
 	var ts []*Torrent
@@ -2181,7 +2245,8 @@ func (cl *Client) startPieceHashers() {
 	for h.Len() > 0 {
 		t := heap.Pop(h)
 		_ = t.startPieceHashers()
-		if !cl.canStartPieceHashers() {
+		// Torrents left in the heap still want hashers.
+		if h.Len() > 0 && !cl.pieceHasherSlotFreeOrWanted() {
 			break
 		}
 	}

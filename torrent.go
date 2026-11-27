@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"text/tabwriter"
 	"time"
 	"unique"
@@ -68,6 +69,10 @@ type Torrent struct {
 	// alignment. See #262.
 	connStats AllConnStats
 	counters  TorrentStatCounters
+
+	// Guards this Torrent's state in domain mode. Shared with Torrents that have the same storage
+	// capacity. Only changes in exclusive mode. See lockDomain.
+	domain *lockDomain
 
 	cl     *Client
 	logger log.Logger
@@ -186,7 +191,10 @@ type Torrent struct {
 	// The queued pieces that were just downloaded, as opposed to data already in storage being
 	// checked. They are hashed first.
 	piecesDownloadedForHash typedRoaring.Bitmap[pieceIndex]
-	activePieceHashes       int
+	// Whether piecesDownloadedForHash is non-empty, for hashers of Torrents in other domains. See
+	// updateHasDownloadedForHash.
+	hasDownloadedForHash atomic.Bool
+	activePieceHashes    int
 
 	connsWithAllPieces map[*Peer]struct{}
 
@@ -311,8 +319,8 @@ func (t *Torrent) KnownSwarm() (ks []PeerInfo) {
 	}
 
 	// Add active peers to the list
-	t.cl.rLock()
-	defer t.cl.rUnlock()
+	t.rLockDomain()
+	defer t.rUnlockDomain()
 	for conn := range t.conns {
 		ks = append(ks, PeerInfo{
 			Id:     conn.PeerID,
@@ -369,6 +377,7 @@ func (t *Torrent) appendConns(ret []*PeerConn, f func(*PeerConn) bool) []*PeerCo
 
 // Don't call this directly, call Torrent.addPeers* to handle events.
 func (t *Torrent) addPeer(p PeerInfo) (added bool) {
+	t.cl.assertExclusive()
 	cl := t.cl
 	torrent.Add(fmt.Sprintf("peers added by source %q", p.Source), 1)
 	if t.closed.IsSet() {
@@ -680,6 +689,7 @@ func (t *Torrent) checkCanOpenStorage() error {
 // Checks the info bytes hash to expected values. Fills in any missing infohashes. TODO: Add a test
 // checking what happens if you try to apply the wrong info bytes.
 func (t *Torrent) hashInfoBytes(b []byte, info *metainfo.Info) error {
+	t.cl.assertExclusive()
 	v1Hash := infohash.HashBytes(b)
 	v2Hash := infohash_v2.HashBytes(b)
 	cl := t.cl
@@ -1176,9 +1186,9 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 // actual state in storage. If you want read data synchronously you should use a Reader. See
 // https://github.com/anacrolix/torrent/issues/828.
 func (t *Torrent) BytesMissing() (n int64) {
-	t.cl.rLock()
+	t.rLockDomain()
 	n = t.bytesMissingLocked()
-	t.cl.rUnlock()
+	t.rUnlockDomain()
 	return
 }
 
@@ -1268,6 +1278,10 @@ func (t *Torrent) close(wg *sync.WaitGroup) {
 	t.pieceStateChanges.Close()
 	t.updateWantPeersEvent()
 	g.MustDelete(t.cl.torrents, t)
+	if !t.hasCapacityDomain() {
+		// Nothing else uses the Torrent's own domain.
+		t.cl.removeLockDomain(t.domain)
+	}
 	// This doesn't work yet because requests remove themselves after they close, and we don't
 	// remove them synchronously.
 	if false {
@@ -1663,7 +1677,7 @@ func (t *Torrent) deferPublishPieceStateChange(piece pieceIndex) {
 	}
 	p := t.piece(piece)
 	if _, stale := p.stalePublicPieceState(); stale {
-		m := &t.cl.unlockHandlers.changedPieceStates
+		m := &t.unlockHandlers().changedPieceStates
 		g.MakeMapIfNil(m)
 		(*m)[p] = struct{}{}
 	}
@@ -1903,7 +1917,13 @@ func (t *Torrent) maxHalfOpen() int {
 	))
 }
 
+// Dialing is Client-wide, so in domain mode this is deferred until the domain is released.
 func (t *Torrent) openNewConns() (initiated int) {
+	if t.inDomainMode() {
+		t.deferExclusiveOnce(openNewConnsKey{t}, func() { t.openNewConns() })
+		return
+	}
+	t.cl.assertExclusive()
 	if len(t.cl.dialers) == 0 {
 		return
 	}
@@ -2298,7 +2318,9 @@ func (t *Torrent) updateWantPeersEvent() {
 // Regular tracker announcing is dispatched as a single "actor". Probably needs to incorporate all
 // tracker types at some point.
 func (t *Torrent) deferUpdateRegularTrackerAnnouncing() {
-	t.cl.regularTrackerAnnounceDispatcher.pendTorrentInputUpdate(t)
+	t.deferExclusiveOnce(updateRegularTrackerAnnouncingKey{t}, func() {
+		t.cl.regularTrackerAnnounceDispatcher.pendTorrentInputUpdate(t)
+	})
 }
 
 // Returns whether the client should make effort to seed the torrent.
@@ -2622,8 +2644,8 @@ func (t *Torrent) addPeersIter(peers iter.Seq[PeerInfo]) (added int) {
 // The returned TorrentStats may require alignment in memory. See
 // https://github.com/anacrolix/torrent/issues/383.
 func (t *Torrent) Stats() TorrentStats {
-	t.cl.rLock()
-	defer t.cl.rUnlock()
+	t.rLockDomain()
+	defer t.rUnlockDomain()
 	return t.statsLocked()
 }
 
@@ -2834,15 +2856,15 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		t.incrementPiecesDirtiedStats(p, (*ConnStats).incrementPiecesDirtiedGood)
 		t.clearPieceTouchers(piece)
 		// Piece.Storage reads piece state (notably the v2 hash, which Piece.setV2Hash can write
-		// while we don't hold the Client lock), so obtain it before unlocking.
+		// while we don't hold the domain lock), so obtain it before unlocking.
 		storagePiece := p.Storage()
-		t.cl.unlock()
+		t.unlockDomain()
 		s.race++
 		err := storagePiece.MarkComplete()
 		if err != nil {
 			t.slogger().Error("error marking piece complete", "piece", piece, "err", err)
 		}
-		t.cl.lock()
+		t.lockDomain()
 
 		if t.closed.IsSet() {
 			return
@@ -2898,13 +2920,13 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 
 		// This pattern is copied from MarkComplete above. Note the pattern.
 		storagePiece := p.Storage()
-		t.cl.unlock()
+		t.unlockDomain()
 		s.race++
 		err := storagePiece.MarkNotComplete()
 		if err != nil {
 			t.slogger().Error("error marking piece not complete", "piece", piece, "err", err)
 		}
-		t.cl.lock()
+		t.lockDomain()
 		if t.closed.IsSet() {
 			return
 		}
@@ -2980,7 +3002,11 @@ func (t *Torrent) startSinglePieceHasher() bool {
 	if !pi.Ok {
 		return false
 	}
+	if !t.cl.tryAcquirePieceHasher() {
+		return false
+	}
 	t.startHash(pi.Value)
+	t.storageLock.RLock()
 	go t.pieceHasher(pi.Value)
 	return true
 }
@@ -2988,6 +3014,7 @@ func (t *Torrent) startSinglePieceHasher() bool {
 // Sticky to a Torrent. Might as well since that keeps the storage hot.
 func (t *Torrent) pieceHasher(initial pieceIndex) {
 	t.finishHash(initial)
+	yielded := false
 	for {
 		if t.closed.IsSet() {
 			break
@@ -2999,25 +3026,35 @@ func (t *Torrent) pieceHasher(initial pieceIndex) {
 		pi := piOpt.Value
 		// Checking data already in storage gives way to pieces just downloaded elsewhere.
 		if !t.piecesDownloadedForHash.Contains(pi) && t.cl.downloadedPiecesWaitForHash(t) {
+			yielded = true
+			break
+		}
+		if !t.cl.tryAcquirePieceHasher() {
 			break
 		}
 		t.startHash(pi)
-		t.cl.unlock()
+		// Unlocking may run exclusive actions, so the storage lock is taken after, or this could
+		// deadlock with exclusive mode waiting on the storage lock (see Piece.setV2Hash).
+		t.unlockDomain()
+		t.storageLock.RLock()
 		t.finishHash(pi)
 	}
-	t.cl.startPieceHashers()
-	t.cl.unlock()
+	// Hashers for other Torrents may have been held back by the Client-wide limit, or this one
+	// gave way to them.
+	if t.cl.pieceHashersWanted.Swap(false) || yielded {
+		t.deferExclusive(t.cl.startPieceHashers)
+	}
+	t.unlockDomain()
 }
 
 func (t *Torrent) startHash(pi pieceIndex) {
 	t.piecesQueuedForHash.Remove(pi)
 	t.piecesDownloadedForHash.Remove(pi)
+	t.updateHasDownloadedForHash()
 	t.pieces[pi].check = pieceCheckHashing
 	t.deferPublishPieceStateChange(pi)
 	t.updatePiecePriority(pi, "Torrent.startHash")
-	t.storageLock.RLock()
 	t.activePieceHashes++
-	t.cl.activePieceHashers++
 }
 
 func (t *Torrent) getPieceToHash() (_ g.Option[pieceIndex]) {
@@ -3061,21 +3098,32 @@ func (t *Torrent) dropBannedPeers() {
 	})
 }
 
-// Storage lock is held. Release storage lock after we're done reading and relock Client. Return
-// with Client lock still held.
+// Storage lock is held, and a slot from Client.tryAcquirePieceHasher. Release storage lock after
+// we're done reading and lock the Torrent's domain. Returns with the domain still held.
 func (t *Torrent) finishHash(index pieceIndex) {
 	p := t.piece(index)
 	// Do we really need to spell out that it's a copy error? If it's a failure to hash the hash
 	// will just be wrong.
-	correct, failedPeers, short, copyErr := t.hashPiece(index)
+	var (
+		correct     bool
+		failedPeers map[bannableAddr]struct{}
+		short       bool
+		copyErr     error
+	)
+	// The storage lock may be taken after the Torrent is closed, so its storage could be closed.
+	if t.closed.IsSet() {
+		copyErr = errTorrentClosed
+	} else {
+		correct, failedPeers, short, copyErr = t.hashPiece(index)
+	}
 	t.storageLock.RUnlock()
 	level := slog.LevelDebug
 	switch copyErr {
-	case nil, io.EOF:
+	case nil, io.EOF, errTorrentClosed:
 	default:
 		level = slog.LevelWarn
 	}
-	t.cl.lock()
+	t.lockDomain()
 	t.slogger().Log(context.Background(), level, "finished hashing piece",
 		"piece", index,
 		"correct", correct,
@@ -3083,11 +3131,13 @@ func (t *Torrent) finishHash(index pieceIndex) {
 		"err", copyErr)
 	if correct {
 		if len(failedPeers) > 0 {
-			for peer := range failedPeers {
-				t.cl.banPeerIP(peer.AsSlice())
-				t.slogger().Info("smart banned peer", "peer", peer, "piece", index)
-			}
-			t.dropBannedPeers()
+			t.deferExclusive(func() {
+				for peer := range failedPeers {
+					t.cl.banPeerIP(peer.AsSlice())
+					t.slogger().Info("smart banned peer", "peer", peer, "piece", index)
+				}
+				t.dropBannedPeers()
+			})
 		}
 		t.smartBanCache.ForgetBlockSeq(iterRange(t.pieceRequestIndexBegin(index), t.pieceRequestIndexBegin(index+1)))
 	}
@@ -3099,7 +3149,7 @@ func (t *Torrent) finishHash(index pieceIndex) {
 	if t.activePieceHashes == 0 {
 		t.deferUpdateComplete()
 	}
-	t.cl.activePieceHashers--
+	t.cl.releasePieceHasher()
 }
 
 // Forget the connections that touched a piece, on both the piece and the peers.
@@ -3140,8 +3190,13 @@ func (t *Torrent) queueInitialPieceCheck(i pieceIndex) {
 func (t *Torrent) queueDownloadedPieceCheck(i pieceIndex) {
 	if t.piece(i).haveHash() {
 		t.piecesDownloadedForHash.Add(i)
+		t.updateHasDownloadedForHash()
 	}
 	_, _ = t.queuePieceCheck(i)
+}
+
+func (t *Torrent) updateHasDownloadedForHash() {
+	t.hasDownloadedForHash.Store(!t.piecesDownloadedForHash.IsEmpty())
 }
 
 func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) (targetVerifies pieceVerifyCount, err error) {
@@ -3159,7 +3214,14 @@ func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) (targetVerifies pieceVe
 	t.deferUpdateComplete()
 	t.deferPublishPieceStateChange(pieceIndex)
 	t.updatePiecePriority(pieceIndex, "Torrent.queuePieceCheck")
-	err = t.startPieceHashers()
+	if t.closed.IsSet() {
+		err = errTorrentClosed
+		return
+	}
+	// Starting this Torrent's hashers only touches its own state and the atomic Client-wide limit,
+	// so it doesn't need exclusive mode. Deferring it there took the Client write lock once per
+	// downloaded piece, which stalled every other domain.
+	_ = t.startPieceHashers()
 	return
 }
 
@@ -3205,6 +3267,7 @@ func (t *Torrent) getHalfOpenPath(
 }
 
 func (t *Torrent) addHalfOpen(addrStr string, attemptKey *PeerInfo) {
+	t.cl.assertExclusive()
 	path := t.getHalfOpenPath(addrStr, attemptKey)
 	if path.Exists() {
 		panic("should be unique")
@@ -3511,7 +3574,7 @@ func (t *Torrent) pieceRequestIndexBegin(piece pieceIndex) RequestIndex {
 
 // Run complete validation when lock is released.
 func (t *Torrent) deferUpdateComplete() {
-	t.cl.unlockHandlers.addUpdateComplete(t)
+	t.unlockHandlers().addUpdateComplete(t)
 }
 
 func (t *Torrent) updateComplete() {
@@ -3998,13 +4061,10 @@ func (t *Torrent) considerStartingHashers() bool {
 	if t.activePieceHashes >= t.cl.config.PieceHashersPerTorrent {
 		return false
 	}
-	if !t.cl.canStartPieceHashers() {
-		return false
-	}
 	if t.piecesQueuedForHash.IsEmpty() {
 		return false
 	}
-	return true
+	return t.cl.pieceHasherSlotFreeOrWanted()
 }
 
 func (t *Torrent) getFile(fileIndex int) *File {

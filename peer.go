@@ -145,6 +145,10 @@ func (cn *Peer) updateExpectingChunks() {
 }
 
 func (cn *Peer) locker() *lockWithDeferreds {
+	// The Torrent isn't known until the handshake names it. Tests build conns with only a Torrent.
+	if cn.t != nil {
+		return cn.t.cl.locker()
+	}
 	return cn.cl.locker()
 }
 

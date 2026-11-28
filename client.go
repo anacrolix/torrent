@@ -1914,6 +1914,8 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 	c.setPeerLoggers(cl.logger, cl.slogger)
 	c.setRW(connStatsReadWriter{nc, c})
 	c.r = cl.newDownloadRateLimitedReader(c.r)
+	// And the torrent's own download limiter, once the connection knows its torrent.
+	c.r = torrentLimitedReader{c: c, r: c.r}
 	c.logger.Levelf(
 		log.Debug,
 		"inited with remoteAddr %v network %v outgoing %t",

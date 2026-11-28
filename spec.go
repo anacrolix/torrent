@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"errors"
 	"fmt"
 
 	g "github.com/anacrolix/generics"
@@ -44,6 +45,9 @@ func TorrentSpecFromMagnetUri(uri string) (spec *TorrentSpec, err error) {
 	}
 	spec.InfoHash = m.InfoHash.UnwrapOrZeroValue()
 	spec.InfoHashV2 = m.V2InfoHash
+	if spec.InfoHash.IsZero() && !spec.InfoHashV2.Ok {
+		return nil, errors.New("missing infohash")
+	}
 	return
 }
 

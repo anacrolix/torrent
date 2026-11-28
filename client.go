@@ -1702,6 +1702,12 @@ type AddTorrentOpts struct {
 // Add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also
 // Torrent.MergeSpec.
 func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
+	if spec == nil {
+		return nil, false, errors.New("nil torrent spec")
+	}
+	if spec.InfoHash.IsZero() && !spec.InfoHashV2.Ok {
+		return nil, false, errors.New("missing infohash")
+	}
 	opts := spec.AddTorrentOpts
 	opts.PieceLayers = spec.PieceLayers
 	t, new = cl.AddTorrentOpt(opts)

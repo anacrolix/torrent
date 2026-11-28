@@ -299,15 +299,20 @@ func (t *Torrent) PeerConns() []*PeerConn {
 	return ret
 }
 
-// TODO: Misleading method name. Webseed peers are not PeerConns.
-func (t *Torrent) WebseedPeerConns() []*Peer {
+// The Torrent's web seeds.
+func (t *Torrent) WebSeeds() []*WebSeed {
 	t.cl.rLock()
 	defer t.cl.rUnlock()
-	ret := make([]*Peer, 0, len(t.conns))
-	for _, c := range t.webSeeds {
-		ret = append(ret, &c.peer)
+	ret := make([]*WebSeed, 0, len(t.webSeeds))
+	for _, ws := range t.webSeeds {
+		ret = append(ret, ws)
 	}
 	return ret
+}
+
+// Deprecated: Use WebSeeds. Web seeds aren't peers or PeerConns.
+func (t *Torrent) WebseedPeerConns() []*WebSeed {
+	return t.WebSeeds()
 }
 
 // Was dropped from the Client.

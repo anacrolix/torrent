@@ -37,15 +37,15 @@ func addTorrentWithWebseedForCloseTest(t *testing.T) (*Client, *Torrent) {
 	return cl, tt
 }
 
-// Closing a web seed through the handle Torrent.WebseedPeerConns gives out removes it from the
+// Closing a web seed through the handle Torrent.WebSeeds gives out removes it from the
 // Torrent, like Torrent.RemoveWebSeeds does. It used to stay, so requests were still planned for
 // it, and each failed at once on its cancelled context.
 func TestClosingWebseedRemovesItFromTorrent(t *testing.T) {
 	cl, tt := addTorrentWithWebseedForCloseTest(t)
-	peers := tt.WebseedPeerConns()
-	qt.Assert(t, qt.HasLen(peers, 1))
-	qt.Assert(t, qt.IsNil(peers[0].Close()))
-	qt.Check(t, qt.HasLen(tt.WebseedPeerConns(), 0))
+	webSeeds := tt.WebSeeds()
+	qt.Assert(t, qt.HasLen(webSeeds, 1))
+	qt.Assert(t, qt.IsNil(webSeeds[0].Close()))
+	qt.Check(t, qt.HasLen(tt.WebSeeds(), 0))
 	cl.lock()
 	defer cl.unlock()
 	for i := range tt.pieces {
@@ -61,7 +61,7 @@ func TestWebseedFileUnavailableAfterClose(t *testing.T) {
 	defer cl.unlock()
 	qt.Assert(t, qt.HasLen(tt.webSeeds, 1))
 	for _, ws := range tt.webSeeds {
-		ws.peer.close()
+		ws.close()
 		ws.removeFilePieces(0)
 	}
 	for i := range tt.pieces {

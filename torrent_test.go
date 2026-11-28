@@ -231,7 +231,6 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	g.MakeMapIfNil(&tt.conns)
 	pc := PeerConn{wireState: new(peerWire.NewState())}
 	pc.t = tt
-	pc.legacyPeerImpl = &pc
 	g.InitNew(&pc.callbacks)
 	tt.cl.lock()
 	tt.conns[&pc] = struct{}{}
@@ -259,7 +258,6 @@ func TestRelativeAvailabilityHaveAllHaveNoneHave(t *testing.T) {
 	qt.Assert(t, qt.IsNil(tt.SetInfoBytes(mi.InfoBytes)))
 	pc := PeerConn{wireState: new(peerWire.NewState())}
 	pc.t = tt
-	pc.legacyPeerImpl = &pc
 	g.InitNew(&pc.callbacks)
 	tt.cl.lock()
 	tt.conns[&pc] = struct{}{}

@@ -32,11 +32,12 @@ import (
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
-	"github.com/anacrolix/torrent/internal/amortize"
-	"github.com/anacrolix/torrent/internal/extracmp"
 	"github.com/cespare/xxhash/v2"
 	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
+
+	"github.com/anacrolix/torrent/internal/amortize"
+	"github.com/anacrolix/torrent/internal/extracmp"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/check"
@@ -1863,13 +1864,13 @@ func (cl *Client) banPeerIP(ip net.IP) {
 	g.MakeMapIfNil(&cl.badPeerIPs)
 	cl.badPeerIPs[ipAddr] = struct{}{}
 	for t := range cl.torrents {
-		t.iterPeers(func(p *Peer) {
+		for p := range t.conns {
 			if p.remoteIp().Equal(ip) {
 				t.slogger().Debug("dropping peer with banned ip", "peer", p, "ip", ip)
 				// Should this be a close?
 				p.drop()
 			}
-		})
+		}
 	}
 }
 
@@ -1886,21 +1887,18 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 		panic(opts.remoteAddr)
 	}
 	c = &PeerConn{
-		Peer: Peer{
-			cl:        cl,
-			outgoing:  opts.outgoing,
-			peerExtendedHandshake: peerWire.ExtendedHandshake{
-				PeerMaxRequests: 250,
-			},
-
-			RemoteAddr:      opts.remoteAddr,
-			localPublicAddr: opts.localPublicAddr,
-			Network:         opts.network,
-			callbacks:       &cl.config.Callbacks,
+		cl:         cl,
+		RemoteAddr: opts.remoteAddr,
+		callbacks:  &cl.config.Callbacks,
+		outgoing:   opts.outgoing,
+		peerExtendedHandshake: peerWire.ExtendedHandshake{
+			PeerMaxRequests: 250,
 		},
-		wireState:  new(peerWire.NewState()),
-		connString: opts.connString,
-		conn:       nc,
+		localPublicAddr: opts.localPublicAddr,
+		Network:         opts.network,
+		wireState:       new(peerWire.NewState()),
+		connString:      opts.connString,
+		conn:            nc,
 	}
 	// TODO: Need to be much more explicit about this, including allowing non-IP bannable addresses.
 	if opts.remoteAddr != nil {
@@ -1909,8 +1907,6 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 			c.bannableAddr = g.Some(netipAddrPort.Addr())
 		}
 	}
-	c.legacyPeerImpl = c
-	c.peerImpl = c
 	c.setPeerLoggers(cl.logger, cl.slogger)
 	c.setRW(connStatsReadWriter{nc, c})
 	c.r = cl.newDownloadRateLimitedReader(c.r)
@@ -1920,7 +1916,7 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 		opts.remoteAddr, opts.network, opts.outgoing,
 	)
 	for _, f := range cl.config.Callbacks.NewPeer {
-		f(&c.Peer)
+		f(c)
 	}
 	return
 }

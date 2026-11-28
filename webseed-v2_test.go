@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -88,7 +89,20 @@ func TestWebseedDownloadsV2TorrentWithShortPiecesBetweenFiles(t *testing.T) {
 		UrlList:     []string{srv.URL + "/"},
 	}
 
-	cl, err := NewClient(TestingConfig(t))
+	// The useful data callback reports web seeds as the source of what they send.
+	var usefulBytes atomic.Int64
+	var notFromWebSeed atomic.Int64
+	cfg := TestingConfig(t)
+	cfg.Callbacks.ReceivedUsefulData = append(cfg.Callbacks.ReceivedUsefulData, func(event ReceivedUsefulDataEvent) {
+		usefulBytes.Add(int64(len(event.Message.Piece)))
+		_, isWebSeed := event.Source.(*WebSeed)
+		_, isPeerConn := event.Source.TryAsPeerConn()
+		// The deprecated field carries the same value.
+		if !isWebSeed || isPeerConn || event.Source.Torrent() == nil || event.Peer != event.Source {
+			notFromWebSeed.Add(1)
+		}
+	})
+	cl, err := NewClient(cfg)
 	qt.Assert(t, qt.IsNil(err))
 	defer cl.Close()
 	tt, err := cl.AddTorrent(mi)
@@ -104,6 +118,10 @@ func TestWebseedDownloadsV2TorrentWithShortPiecesBetweenFiles(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatalf("download stalled at %v of %v bytes", tt.BytesCompleted(), tt.Length())
 	}
+
+	qt.Check(t, qt.Equals(notFromWebSeed.Load(), int64(0)))
+	qt.Check(t, qt.IsTrue(usefulBytes.Load() >= tt.Length()),
+		qt.Commentf("%v useful bytes reported of %v", usefulBytes.Load(), tt.Length()))
 
 	qt.Assert(t, qt.HasLen(tt.Files(), len(files)))
 	for i, tf := range tt.Files() {

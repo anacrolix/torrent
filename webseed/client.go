@@ -81,7 +81,7 @@ type Client struct {
 	// given that's how requests are mapped to webseeds, but the torrent.Client works at the piece
 	// level. We can map our file-level adjustments to the pieces here. This probably need to be
 	// private in the future, if Client ever starts removing pieces. TODO: This belongs in
-	// webseedPeer. TODO: Unused.
+	// WebSeed. TODO: Unused.
 	Pieces roaring.Bitmap
 	// This wraps http.Response bodies, for example to limit the download rate.
 	ResponseBodyWrapper     ResponseBodyWrapper

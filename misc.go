@@ -195,7 +195,7 @@ func chunkIndexSpec(index, pieceLength, chunkSize pp.Integer) ChunkSpec {
 	}
 }
 
-func comparePeerTrust(l, r *Peer) int {
+func comparePeerTrust(l, r chunkProvider) int {
 	return l.trust().Cmp(r.trust())
 }
 

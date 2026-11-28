@@ -442,7 +442,7 @@ func (cl *Client) iterPossibleWebseedRequests() iter.Seq2[webseedUniqueRequestKe
 						if ws.suspended() {
 							continue
 						}
-						if !ws.peer.peerHasPiece(pieceIndex) {
+						if !ws.hasPiece(pieceIndex) {
 							continue
 						}
 						// Return value from this function (RequestPieceFunc) doesn't terminate

@@ -67,7 +67,7 @@ type pieceState struct {
 
 	// Connections that have written data to this piece since its last check.
 	// This can include connections that have closed.
-	dirtiers map[*Peer]struct{}
+	dirtiers map[chunkProvider]struct{}
 }
 
 // Fields are ordered for compactness rather than logical grouping: see the layout asserted by

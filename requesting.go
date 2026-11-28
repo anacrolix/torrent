@@ -3,13 +3,10 @@ package torrent
 import (
 	"cmp"
 	"context"
-	"encoding/gob"
 	"fmt"
-	"log/slog"
 	"runtime/pprof"
 	"time"
 	"unique"
-	"unsafe"
 
 	"github.com/RoaringBitmap/roaring/v2"
 	g "github.com/anacrolix/generics"
@@ -33,36 +30,6 @@ func (t *Torrent) requestStrategyPieceOrderState(i int) requestStrategy.PieceReq
 		Partial:      t.piecePartiallyDownloaded(i),
 		Availability: t.piece(i).availability(),
 	}
-}
-
-func init() {
-	gob.Register(peerId{})
-}
-
-type peerId struct {
-	*Peer
-	ptr uintptr
-}
-
-func (p peerId) Uintptr() uintptr {
-	return p.ptr
-}
-
-func (p peerId) GobEncode() (b []byte, _ error) {
-	b = unsafe.Slice((*byte)(unsafe.Pointer(&p.ptr)), unsafe.Sizeof(p.ptr))
-	return
-}
-
-func (p *peerId) GobDecode(b []byte) error {
-	if uintptr(len(b)) != unsafe.Sizeof(p.ptr) {
-		panic(len(b))
-	}
-	ptr := unsafe.Pointer(&b[0])
-	p.ptr = *(*uintptr)(ptr)
-	slog.Debug("decoded peerId", "ptr", fmt.Sprintf("%p", ptr))
-	dst := unsafe.Slice((*byte)(unsafe.Pointer(&p.Peer)), unsafe.Sizeof(p.Peer))
-	copy(dst, b)
-	return nil
 }
 
 type (
@@ -385,7 +352,7 @@ func (t *Torrent) cacheNextRequestIndexesForReuse(slice []RequestIndex) {
 // Whether we should allow sending not interested ("losing interest") to the peer. I noticed
 // qBitTorrent seems to punish us for sending not interested when we're streaming and don't
 // currently need anything.
-func (p *Peer) allowSendNotInterested() bool {
+func (p *PeerConn) allowSendNotInterested() bool {
 	// Except for caching, we're not likely to lose pieces very soon.
 	if p.t.haveAllPieces() {
 		return true

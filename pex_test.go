@@ -35,9 +35,9 @@ var (
 func TestPexReset(t *testing.T) {
 	s := &pexState{}
 	conns := []PeerConn{
-		{Peer: Peer{RemoteAddr: addrs[0]}},
-		{Peer: Peer{RemoteAddr: addrs[1]}},
-		{Peer: Peer{RemoteAddr: addrs[2]}},
+		{RemoteAddr: addrs[0]},
+		{RemoteAddr: addrs[1]},
+		{RemoteAddr: addrs[2]},
 	}
 	s.Add(&conns[0])
 	s.Add(&conns[1])
@@ -72,7 +72,7 @@ var testcases = []struct {
 		in: func() *pexState {
 			s := new(pexState)
 			nullAddr := &net.TCPAddr{}
-			s.Add(&PeerConn{Peer: Peer{RemoteAddr: nullAddr}})
+			s.Add(&PeerConn{RemoteAddr: nullAddr})
 			return s
 		}(),
 		targ: pp.PexMsg{},
@@ -82,7 +82,7 @@ var testcases = []struct {
 		in: func() *pexState {
 			nullAddr := &net.TCPAddr{}
 			s := new(pexState)
-			s.Drop(&PeerConn{Peer: Peer{RemoteAddr: nullAddr}, pex: pexConnState{Listed: true}})
+			s.Drop(&PeerConn{RemoteAddr: nullAddr, pex: pexConnState{Listed: true}})
 			return s
 		}(),
 		targ: pp.PexMsg{},
@@ -91,10 +91,10 @@ var testcases = []struct {
 		name: "add4",
 		in: func() *pexState {
 			s := new(pexState)
-			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}})
-			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[1], outgoing: true}})
-			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[2], outgoing: true}})
-			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[3]}})
+			s.Add(&PeerConn{RemoteAddr: addrs[0]})
+			s.Add(&PeerConn{RemoteAddr: addrs[1], outgoing: true})
+			s.Add(&PeerConn{RemoteAddr: addrs[2], outgoing: true})
+			s.Add(&PeerConn{RemoteAddr: addrs[3]})
 			return s
 		}(),
 		targ: pp.PexMsg{
@@ -114,8 +114,8 @@ var testcases = []struct {
 		name: "drop2",
 		in: func() *pexState {
 			s := &pexState{nc: pexTargAdded + 2}
-			s.Drop(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}, pex: pexConnState{Listed: true}})
-			s.Drop(&PeerConn{Peer: Peer{RemoteAddr: addrs[2]}, pex: pexConnState{Listed: true}})
+			s.Drop(&PeerConn{RemoteAddr: addrs[0], pex: pexConnState{Listed: true}})
+			s.Drop(&PeerConn{RemoteAddr: addrs[2], pex: pexConnState{Listed: true}})
 			return s
 		}(),
 		targ: pp.PexMsg{
@@ -131,9 +131,9 @@ var testcases = []struct {
 		name: "add2drop1",
 		in: func() *pexState {
 			conns := []PeerConn{
-				{Peer: Peer{RemoteAddr: addrs[0]}},
-				{Peer: Peer{RemoteAddr: addrs[1]}},
-				{Peer: Peer{RemoteAddr: addrs[2]}},
+				{RemoteAddr: addrs[0]},
+				{RemoteAddr: addrs[1]},
+				{RemoteAddr: addrs[2]},
 			}
 			s := &pexState{nc: pexTargAdded}
 			s.Add(&conns[0])
@@ -153,9 +153,9 @@ var testcases = []struct {
 		name: "delayed",
 		in: func() *pexState {
 			conns := []PeerConn{
-				{Peer: Peer{RemoteAddr: addrs[0]}},
-				{Peer: Peer{RemoteAddr: addrs[1]}},
-				{Peer: Peer{RemoteAddr: addrs[2]}},
+				{RemoteAddr: addrs[0]},
+				{RemoteAddr: addrs[1]},
+				{RemoteAddr: addrs[2]},
 			}
 			s := new(pexState)
 			s.Add(&conns[0])
@@ -182,8 +182,8 @@ var testcases = []struct {
 		name: "unheld",
 		in: func() *pexState {
 			conns := []PeerConn{
-				{Peer: Peer{RemoteAddr: addrs[0]}},
-				{Peer: Peer{RemoteAddr: addrs[1]}},
+				{RemoteAddr: addrs[0]},
+				{RemoteAddr: addrs[1]},
 			}
 			s := &pexState{nc: pexTargAdded - 1}
 			s.Add(&conns[0])
@@ -202,7 +202,7 @@ var testcases = []struct {
 		name: "followup",
 		in: func() *pexState {
 			s := new(pexState)
-			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}})
+			s.Add(&PeerConn{RemoteAddr: addrs[0]})
 			return s
 		}(),
 		targ: pp.PexMsg{
@@ -212,7 +212,7 @@ var testcases = []struct {
 			Added6Flags: []pp.PexPeerFlags{0},
 		},
 		update: func(s *pexState) {
-			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[1]}})
+			s.Add(&PeerConn{RemoteAddr: addrs[1]})
 		},
 		targ1: pp.PexMsg{
 			Added6: krpc.CompactIPv6NodeAddrs{
@@ -303,7 +303,7 @@ func TestPexInitialNoCutoff(t *testing.T) {
 
 	c := addrgen(n)
 	for addr := range c {
-		s.Add(&PeerConn{Peer: Peer{RemoteAddr: addr}})
+		s.Add(&PeerConn{RemoteAddr: addr})
 	}
 	m, _ := s.Genmsg(nil)
 
@@ -320,7 +320,7 @@ func benchmarkPexInitialN(b *testing.B, npeers int) {
 		var s pexState
 		c := addrgen(npeers)
 		for addr := range c {
-			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addr}})
+			s.Add(&PeerConn{RemoteAddr: addr})
 			s.Genmsg(nil)
 		}
 	}

@@ -27,7 +27,16 @@ func TestHolepunchConnect(t *testing.T) {
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
 
-	cfg := TestingConfig(t)
+	// The stats checked at the end are keyed by address, so every Client must know the others by
+	// one address. With both families, the leecher-leecher can find the seeder undialable at its
+	// IPv4 address and then accept the holepunched connection from its IPv6 one, depending on which
+	// family the leecher happened to connect to each of them with, and never count it.
+	oneFamily := func(cfg *ClientConfig) *ClientConfig {
+		cfg.DisableIPv6 = true
+		return cfg
+	}
+
+	cfg := oneFamily(TestingConfig(t))
 	cfg.Seed = true
 	cfg.MaxAllocPeerRequestDataPerConn = 4
 	cfg.DataDir = greetingTempDir
@@ -50,7 +59,7 @@ func TestHolepunchConnect(t *testing.T) {
 	qt.Check(t, qt.IsTrue(ok))
 	seederTorrent.VerifyData()
 
-	cfg = TestingConfig(t)
+	cfg = oneFamily(TestingConfig(t))
 	cfg.Seed = true
 	cfg.DataDir = t.TempDir()
 	cfg.AlwaysWantConns = true
@@ -64,7 +73,7 @@ func TestHolepunchConnect(t *testing.T) {
 	defer leecher.Close()
 	defer testutil.ExportStatusWriter(leecher, "l", t)()
 
-	cfg = TestingConfig(t)
+	cfg = oneFamily(TestingConfig(t))
 	cfg.Seed = false
 	cfg.DataDir = t.TempDir()
 	cfg.MaxAllocPeerRequestDataPerConn = 4

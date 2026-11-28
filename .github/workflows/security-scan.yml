@@ -1,0 +1,114 @@
+name: Security scan
+
+# Weekly vulnerability scan of Go dependencies. Opens or updates a tracking
+# issue when govulncheck finds reachable vulnerabilities, so the team has
+# visibility without checking CI runs manually.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  govulncheck:
+    name: govulncheck
+    if: github.repository == 'anacrolix/torrent' || github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        id: scan
+        run: |
+          set +e
+          govulncheck -format text ./... > "$RUNNER_TEMP/govulncheck.txt" 2>&1
+          EXIT_CODE=$?
+          set -e
+          cat "$RUNNER_TEMP/govulncheck.txt"
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Summarize
+        run: |
+          EXIT_CODE="${{ steps.scan.outputs.exit_code }}"
+          if [ "$EXIT_CODE" = "0" ]; then
+            echo "### govulncheck: clean" >> "$GITHUB_STEP_SUMMARY"
+            echo "No reachable vulnerabilities found." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$EXIT_CODE" = "3" ]; then
+            {
+              echo "### govulncheck: vulnerabilities found"
+              echo ""
+              echo '```'
+              head -c 60000 "$RUNNER_TEMP/govulncheck.txt"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### govulncheck: tool error (exit $EXIT_CODE)" >> "$GITHUB_STEP_SUMMARY"
+            echo "See the run log for details." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Open or update tracking issue
+        if: steps.scan.outputs.exit_code == '3'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create govulncheck --color B60205 \
+            --description "Reachable Go vulnerability found by weekly security scan" \
+            --force || true
+
+          TITLE="govulncheck: reachable vulnerabilities in dependencies"
+          {
+            echo "## Weekly security scan — $(date -u '+%Y-%m-%d')"
+            echo ""
+            echo "govulncheck found reachable vulnerabilities:"
+            echo ""
+            echo '```'
+            head -c 60000 "$RUNNER_TEMP/govulncheck.txt"
+            echo '```'
+            echo ""
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } > "$RUNNER_TEMP/issue-body.md"
+
+          NUM=$(gh issue list --label govulncheck --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$NUM" ]; then
+            gh issue comment "$NUM" --body-file "$RUNNER_TEMP/issue-body.md"
+          else
+            gh issue create --label govulncheck --title "$TITLE" --body-file "$RUNNER_TEMP/issue-body.md"
+          fi
+
+      - name: Close tracking issue if clean
+        if: steps.scan.outputs.exit_code == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NUM=$(gh issue list --label govulncheck --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$NUM" ]; then
+            gh issue close "$NUM" --comment "govulncheck is clean as of $(date -u '+%Y-%m-%d'). Closing."
+          fi
+
+      - name: Fail on vulnerabilities
+        if: steps.scan.outputs.exit_code == '3'
+        run: exit 1
+
+      - name: Fail on tool error
+        if: steps.scan.outputs.exit_code != '0' && steps.scan.outputs.exit_code != '3'
+        run: |
+          echo "::error::govulncheck failed with exit code ${{ steps.scan.outputs.exit_code }} (not a vulnerability finding)"
+          exit 1

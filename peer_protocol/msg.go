@@ -71,17 +71,31 @@ type MessageWriter interface {
 }
 
 func (msg *Message) writeHashCommon(buf MessageWriter) (err error) {
-	if _, err = buf.Write(msg.PiecesRoot[:]); err != nil {
+	// Slicing msg.PiecesRoot directly would make every Message written escape to the heap.
+	root := msg.PiecesRoot
+	if _, err = buf.Write(root[:]); err != nil {
 		return
 	}
 	for _, d := range []Integer{msg.BaseLayer, msg.Index, msg.Length, msg.ProofLayers} {
-		if err = binary.Write(buf, binary.BigEndian, d); err != nil {
+		if err = writeInteger(buf, d); err != nil {
 			return
 		}
 	}
 	return nil
 }
 
+// Writes i big-endian a byte at a time. binary.Write takes its reflection path for Integer and
+// allocates on every call, and this runs for every integer field of every message written.
+func writeInteger(w io.ByteWriter, i Integer) error {
+	for shift := 24; shift >= 0; shift -= 8 {
+		if err := w.WriteByte(byte(i >> shift)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// A change to what this writes needs the same change in getPayloadLength.
 func (msg *Message) writePayloadTo(buf MessageWriter) (err error) {
 	if !msg.Keepalive {
 		err = buf.WriteByte(byte(msg.Type))
@@ -91,10 +105,10 @@ func (msg *Message) writePayloadTo(buf MessageWriter) (err error) {
 		switch msg.Type {
 		case Choke, Unchoke, Interested, NotInterested, HaveAll, HaveNone:
 		case Have, AllowedFast, Suggest:
-			err = binary.Write(buf, binary.BigEndian, msg.Index)
+			err = writeInteger(buf, msg.Index)
 		case Request, Cancel, Reject:
 			for _, i := range []Integer{msg.Index, msg.Begin, msg.Length} {
-				err = binary.Write(buf, binary.BigEndian, i)
+				err = writeInteger(buf, i)
 				if err != nil {
 					break
 				}
@@ -103,7 +117,7 @@ func (msg *Message) writePayloadTo(buf MessageWriter) (err error) {
 			_, err = buf.Write(marshalBitfield(msg.Bitfield))
 		case Piece:
 			for _, i := range []Integer{msg.Index, msg.Begin} {
-				err = binary.Write(buf, binary.BigEndian, i)
+				err = writeInteger(buf, i)
 				if err != nil {
 					return
 				}
@@ -131,8 +145,8 @@ func (msg *Message) writePayloadTo(buf MessageWriter) (err error) {
 			if err != nil {
 				return
 			}
-			for _, h := range msg.Hashes {
-				if _, err = buf.Write(h[:]); err != nil {
+			for i := range msg.Hashes {
+				if _, err = buf.Write(msg.Hashes[i][:]); err != nil {
 					return
 				}
 			}
@@ -148,18 +162,43 @@ func (msg *Message) WriteTo(w MessageWriter) (err error) {
 	if err != nil {
 		return
 	}
-	err = binary.Write(w, binary.BigEndian, length)
+	err = writeInteger(w, length)
 	if err != nil {
 		return
 	}
 	return msg.writePayloadTo(w)
 }
 
+// Returns the length of what writePayloadTo writes. It's computed rather than counted by running
+// writePayloadTo into a counting writer, as that writer escapes to the heap for every message.
 func (msg *Message) getPayloadLength() (length Integer, err error) {
-	var lw lengthWriter
-	err = msg.writePayloadTo(&lw)
-	length = lw.n
-	return
+	if msg.Keepalive {
+		return 0, nil
+	}
+	// The type byte, followed by the fields for the type.
+	n := 1
+	switch msg.Type {
+	case Choke, Unchoke, Interested, NotInterested, HaveAll, HaveNone:
+	case Have, AllowedFast, Suggest:
+		n += 4
+	case Request, Cancel, Reject:
+		n += 3 * 4
+	case Bitfield:
+		n += (len(msg.Bitfield) + 7) / 8
+	case Piece:
+		n += 2*4 + len(msg.Piece)
+	case Extended:
+		n += 1 + len(msg.ExtendedPayload)
+	case Port:
+		n += 2
+	case HashRequest, HashReject:
+		n += len(msg.PiecesRoot) + 4*4
+	case Hashes:
+		n += len(msg.PiecesRoot) + 4*4 + len(msg.Hashes)*len(msg.PiecesRoot)
+	default:
+		return 0, fmt.Errorf("unknown message type: %v", msg.Type)
+	}
+	return Integer(n), nil
 }
 
 func (msg Message) MarshalBinary() (data []byte, err error) {
@@ -197,19 +236,4 @@ func (me *Message) UnmarshalBinary(b []byte) error {
 		return fmt.Errorf("%d trailing bytes", d.R.Buffered())
 	}
 	return nil
-}
-
-type lengthWriter struct {
-	n Integer
-}
-
-func (l *lengthWriter) WriteByte(c byte) error {
-	l.n++
-	return nil
-}
-
-func (l *lengthWriter) Write(p []byte) (n int, err error) {
-	n = len(p)
-	l.n += Integer(n)
-	return
 }

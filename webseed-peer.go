@@ -69,6 +69,11 @@ func webseedFileUnavailable(statusCode int) bool {
 // Must be called with the client lock held.
 // TODO: Re-add pieces after an interval in case the file becomes available later.
 func (ws *webseedPeer) removeFilePieces(fi int) {
+	// Closing already gave back the availability of every piece in the bitmap. A response that
+	// arrived just before the close can still get here.
+	if ws.peer.closed.IsSet() {
+		return
+	}
 	for pi := range ws.peer.t.Files()[fi].PieceIndices() {
 		if ws.client.Pieces.CheckedRemove(uint32(pi)) {
 			ws.peer.t.decPieceAvailability(pieceIndex(pi))
@@ -315,6 +320,12 @@ func (cn *webseedPeer) providedBadData() {
 }
 
 func (ws *webseedPeer) onClose() {
+	// Forget the web seed, so nothing plans requests for it or gives it the info after it's
+	// closed. The URL may have been added again since, as a different web seed.
+	t := ws.peer.t
+	if t.webSeeds[ws.url] == ws {
+		delete(t.webSeeds, ws.url)
+	}
 	ws.peer.t.iterPeers(func(p *Peer) {
 		if p.isLowOnRequests() {
 			p.onNeedUpdateRequests("webseedPeer.onClose")

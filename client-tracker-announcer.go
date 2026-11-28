@@ -752,6 +752,7 @@ func (me *regularTrackerAnnounceDispatcher) applyResult(res announceResult) {
 		me.updateAnnounceState(res.key, func(state *announceState) {
 			state.Err = errors.New("announce skipped: Torrent GCed")
 			state.lastAttemptCompleted = time.Now()
+			state.reannounce = false
 		})
 		me.updateTimer()
 		return
@@ -759,6 +760,7 @@ func (me *regularTrackerAnnounceDispatcher) applyResult(res announceResult) {
 	me.updateAnnounceState(res.key, func(state *announceState) {
 		state.Err = res.err
 		state.lastAttemptCompleted = res.completed
+		state.reannounce = false
 		if res.err != nil {
 			state.consecutiveFailures++
 		} else {
@@ -797,6 +799,7 @@ func (me *regularTrackerAnnounceDispatcher) resetAnnounceStateForReadd(key torre
 		state.Err = nil
 		state.lastAttemptCompleted = time.Time{}
 		state.sentCompleted = false
+		state.reannounce = false
 	})
 }
 
@@ -974,6 +977,10 @@ func (me *regularTrackerAnnounceDispatcher) nextAnnounceEvent(key torrentTracker
 		// Returning now should be fine as sorting should occur on "overdue" derived value.
 		return tracker.Started, time.Now()
 	}
+	if state.reannounce {
+		// Torrent.Reannounce asked for an announce now, whatever the interval.
+		return tracker.None, time.Now()
+	}
 	// TODO: Shorten and modify intervals here. Check for completion/stopped etc.
 	return tracker.None, lastOk.Completed.Add(lastOk.Interval)
 }
@@ -989,6 +996,9 @@ type lastAnnounceOk struct {
 }
 
 type announceState struct {
+	// An announce is wanted now, whatever the interval (Torrent.Reannounce). Cleared when one is
+	// attempted.
+	reannounce           bool
 	lastOk               lastAnnounceOk
 	Err                  error
 	lastAttemptCompleted time.Time

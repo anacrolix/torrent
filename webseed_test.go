@@ -85,8 +85,27 @@ func TestWebseedSliceIsNotRequestedFromEveryWebseed(t *testing.T) {
 	const pieceLen = 2 * defaultChunkSize // two chunks per piece
 
 	// Small slices, so a small torrent still has several of them.
-	defer func(v uint64) { webseedRequestChunkSize = v }(webseedRequestChunkSize)
+	origRequestChunkSize := webseedRequestChunkSize
 	webseedRequestChunkSize = 4 * pieceLen
+	var cl *Client
+	// Runs after the Client is closed. Request goroutines outlive that, and read the slice size
+	// under the Client lock when they remove themselves, so wait for them and restore it under the
+	// lock.
+	defer func() {
+		if cl == nil {
+			webseedRequestChunkSize = origRequestChunkSize
+			return
+		}
+		deadline := time.Now().Add(10 * time.Second)
+		cl.lock()
+		for len(cl.activeWebseedRequests) != 0 && time.Now().Before(deadline) {
+			cl.unlock()
+			time.Sleep(time.Millisecond)
+			cl.lock()
+		}
+		webseedRequestChunkSize = origRequestChunkSize
+		cl.unlock()
+	}()
 
 	data := make([]byte, 16*pieceLen)
 	rand.Read(data)
@@ -135,7 +154,8 @@ func TestWebseedSliceIsNotRequestedFromEveryWebseed(t *testing.T) {
 		urls = append(urls, srv.URL+"/")
 	}
 
-	cl, err := NewClient(TestingConfig(t))
+	var err error
+	cl, err = NewClient(TestingConfig(t))
 	qt.Assert(t, qt.IsNil(err))
 	defer cl.Close()
 	tt, _, err := cl.AddTorrentSpec(&TorrentSpec{

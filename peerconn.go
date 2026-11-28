@@ -13,6 +13,7 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 	"weak"
 
@@ -22,8 +23,6 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/multiless"
-
-	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/fast"
@@ -46,6 +45,10 @@ type PeerStatus struct {
 // Maintains the state of a BitTorrent-protocol based connection with a peer.
 type PeerConn struct {
 	Peer
+
+	// The torrent whose download limiter limits this connection's reads (torrent_rate.go). Set
+	// with t, and read by the reading goroutine, which can't take the client lock.
+	limitedBy atomic.Pointer[Torrent]
 
 	// Move to PeerConn?
 	protocolLogger log.Logger
@@ -591,11 +594,18 @@ func (c *PeerConn) reject(r Request) {
 }
 
 func (c *PeerConn) maximumPeerRequestChunkLength() (_ g.Option[int]) {
-	uploadRateLimiter := c.t.cl.config.UploadRateLimiter
-	if uploadRateLimiter.Limit() == rate.Inf {
+	burst := -1
+	if l := limiting(c.t.cl.config.UploadRateLimiter); l != nil {
+		burst = l.Burst()
+	}
+	// The torrent's own upload limiter too: the smaller burst of the two.
+	if l := limiting(c.t.rateLimiters.up.Load()); l != nil && (burst < 0 || l.Burst() < burst) {
+		burst = l.Burst()
+	}
+	if burst < 0 {
 		return
 	}
-	return g.Some(uploadRateLimiter.Burst())
+	return g.Some(burst)
 }
 
 func (me *PeerConn) numPeerRequests() int {
@@ -1287,7 +1297,8 @@ another:
 			return false
 		}
 		for r := range c.readyPeerRequests {
-			res := c.t.cl.config.UploadRateLimiter.ReserveN(time.Now(), int(r.Length))
+			now := time.Now()
+			res := c.t.cl.config.UploadRateLimiter.ReserveN(now, int(r.Length))
 			if !res.OK() {
 				panic(fmt.Sprintf("upload rate limiter burst size < %d", r.Length))
 			}
@@ -1297,6 +1308,19 @@ another:
 				c.setRetryUploadTimer(delay)
 				// Hard to say what to return here.
 				return true
+			}
+			// And the torrent's own upload limiter.
+			if tl := limiting(c.t.rateLimiters.up.Load()); tl != nil {
+				tres := tl.ReserveN(now, int(r.Length))
+				if !tres.OK() {
+					panic(fmt.Sprintf("torrent upload rate limiter burst size < %d", r.Length))
+				}
+				if d := tres.Delay(); d > 0 {
+					tres.Cancel()
+					res.Cancel()
+					c.setRetryUploadTimer(d)
+					return true
+				}
 			}
 			more := c.sendChunk(r, msg)
 			if !more {
@@ -1353,6 +1377,7 @@ func (c *PeerConn) sendChunk(r Request, msg func(pp.Message) bool) (more bool) {
 func (c *PeerConn) setTorrent(t *Torrent) {
 	panicif.NotNil(c.t)
 	c.t = t
+	c.limitedBy.Store(t)
 	c.initClosedCtx()
 	c.setPeerLoggers(t.logger, t.slogger())
 	c.reconcileHandshakeStats()

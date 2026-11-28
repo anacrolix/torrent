@@ -69,6 +69,9 @@ type Torrent struct {
 	connStats AllConnStats
 	counters  TorrentStatCounters
 
+	// The torrent's own rate limiters, checked as well as the client's. See SetRateLimiters.
+	rateLimiters torrentRateLimiters
+
 	cl     *Client
 	logger log.Logger
 

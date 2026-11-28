@@ -102,6 +102,10 @@ func ParseMagnetV2Uri(uri string) (m MagnetV2, err error) {
 			lazyAddParam(&m.Params, "xt", xt)
 		}
 	}
+	if !m.InfoHash.Ok && !m.V2InfoHash.Ok {
+		err = errors.New("missing infohash")
+		return
+	}
 	q.Del("xt")
 	m.DisplayName = popFirstValue(q, "dn").UnwrapOrZeroValue()
 	m.Trackers = q["tr"]
